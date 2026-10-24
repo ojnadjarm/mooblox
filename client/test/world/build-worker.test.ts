@@ -60,7 +60,15 @@ describe('build worker', () => {
     expect((await b).tree!.position.length).toBe(2 * 36 * 3);
   });
 
-  it('prepares the same district in the worker as inline', async () => {
+  it('sends models shared ahead only once: a later job carries just its district', () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const m = new WorkerPrep();
+    m.share(['kit/box'], lib);
+    void m.prep(input(2), lib);
+    expect(FakeWorker.last!.posted.map((p) => p.kind)).toEqual(['models', 'prep']);
+  });
+
+    it('prepares the same district in the worker as inline', async () => {
     vi.stubGlobal('Worker', FakeWorker);
     const m = new WorkerPrep();
     const a = m.prep(input(3), lib);

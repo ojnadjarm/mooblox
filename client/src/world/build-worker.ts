@@ -7,6 +7,8 @@ import { packGeometry, type PackedGeometry } from './geometry-pack';
 export interface DistrictPrepper {
   /** The district's merged meshes and solids tree; models it uses are read from `lib`. */
   prep(input: PrepInput, lib: ModelSource): Promise<Prepped>;
+  /** Sends models ahead (at boot): a job posted mid-play then carries only its own district. */
+  share(ids: readonly string[], lib: ModelSource): void;
 }
 
 /** Messages to the build worker: the models a job needs (each sent once), then the job itself. */
@@ -50,14 +52,7 @@ export class WorkerPrep implements DistrictPrepper {
 
   prep(input: PrepInput, lib: ModelSource): Promise<Prepped> {
     if (!this.ok) return Promise.reject(new Error('mooblox: build worker failed'));
-    const models: { id: string; width: number; height: number; geometry: PackedGeometry }[] = [];
-    for (const p of input.placements) {
-      if (this.sent.has(p.id)) continue;
-      this.sent.add(p.id);
-      const m: BakedModel = lib.get(p.id);
-      models.push({ id: p.id, width: m.width, height: m.height, geometry: packGeometry(m.geometry) });
-    }
-    if (models.length) this.post({ kind: 'models', models });
+    this.share(input.placements.map((p) => p.id), lib);
     const id = this.next++;
     const packed: PackedInput = {
       terrain: input.terrain.map((t) => ({ geometry: packGeometry(t.geometry), solid: t.solid, detail: t.detail })),
@@ -72,6 +67,17 @@ export class WorkerPrep implements DistrictPrepper {
       this.waiting.set(id, { resolve, reject });
       this.post({ kind: 'prep', id, input: packed });
     });
+  }
+
+  share(ids: readonly string[], lib: ModelSource): void {
+    const models: { id: string; width: number; height: number; geometry: PackedGeometry }[] = [];
+    for (const id of ids) {
+      if (this.sent.has(id)) continue;
+      this.sent.add(id);
+      const m: BakedModel = lib.get(id);
+      models.push({ id, width: m.width, height: m.height, geometry: packGeometry(m.geometry) });
+    }
+    if (models.length) this.post({ kind: 'models', models });
   }
 
   private post(m: WorkerRequest): void {

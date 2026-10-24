@@ -31,6 +31,7 @@ import { buildGlow, cullDistricts, DETAIL_DISTANCE, DistrictBuild, MINOR_DISTANC
 import { DistrictStreamer } from '../world/district-streamer';
 import { FrameBudget } from '../perf/frame-budget';
 import { GpuWarmup } from '../world/gpu-warmup';
+import { sharedPrep } from '../world/build-worker';
 import { Haze, installHaze, type HazeBand } from '../world/haze';
 import { islandGraph, IslandStreamer } from '../world/island-streamer';
 import { FADE_SLOTS, setFades, withFade } from '../world/island-fade';
@@ -152,6 +153,8 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   // One measured slice per frame for every background job: GPU pre-uploads, district builds, impostor captures.
   const budget = new FrameBudget({ target: FRAME_MS, min: 1, max: STREAM[tier].sliceMs, fill: 0.7 });
   const warmup = new GpuWarmup(stage.renderer);
+  // Every model goes to the build worker now, at boot: no district job pays for posting them mid-play.
+  sharedPrep()?.share(models.ids, models);
   const dress = (w: WorldData, l: WorldLayout) => {
     const group = new IslandBuilder(kit, look, tier === 'low', RIM_DETAIL[tier]).build(w, l);
     const purposes = new Map(w.sections.flatMap((sec) => sec.activities).map((act) => [act.id, act.purpose]));

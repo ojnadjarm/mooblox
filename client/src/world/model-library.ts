@@ -31,6 +31,11 @@ export class ModelLibrary {
     return lib;
   }
 
+  /** Every loaded model id. */
+  get ids(): string[] {
+    return [...this.models.keys()];
+  }
+
   get(id: string): BakedModel {
     const m = this.models.get(id);
     if (!m) {
