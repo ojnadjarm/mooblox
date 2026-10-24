@@ -1,5 +1,10 @@
+/** Read-only view of taken ground. */
+export interface GroundQuery {
+  hits(x: number, z: number, r: number): boolean;
+}
+
 /** Ground circles already taken, bucketed in a uniform grid so placement checks stay cheap on large courses. */
-export class Occupancy {
+export class Occupancy implements GroundQuery {
   private readonly cells = new Map<string, { x: number; z: number; r: number }[]>();
 
   constructor(private readonly cell = 4) {}

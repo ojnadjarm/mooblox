@@ -8,9 +8,7 @@ import { IslandLayout } from '../../src/world/island-layout';
 import type { Circle, WorldLayout } from '../../src/world/layout';
 import { CAMPUS } from '../../src/world/look';
 import { seededRandom } from '../../src/world/random';
-
-const PLAYER = 0.5;
-const CELL = 0.5;
+import { WalkGrid } from '../../src/world/walk-grid';
 
 const SHAPES: Record<string, WorldData> = {
   '1x2': shapeWorld(11, parseShape('1x2')),
@@ -37,42 +35,6 @@ const plain = (d: Dressing) => ({
   life: d.life, paths: d.paths, obstacles: d.obstacles, bridges: d.bridges,
 });
 const gap = (a: Circle, b: Circle) => Math.hypot(a.x - b.x, a.z - b.z) - a.radius - b.radius;
-
-/** Cells the player's centre can stand on: island discs and bridge decks, minus solid footprints. */
-function walkable(layout: WorldLayout, dressing: Dressing) {
-  const islands = [...layout.hubs, ...layout.zones];
-  const minX = Math.min(...islands.map((c) => c.x - c.radius)) - 2;
-  const minZ = Math.min(...islands.map((c) => c.z - c.radius)) - 2;
-  const w = Math.ceil((Math.max(...islands.map((c) => c.x + c.radius)) + 2 - minX) / CELL);
-  const h = Math.ceil((Math.max(...islands.map((c) => c.z + c.radius)) + 2 - minZ) / CELL);
-  const grid = new Uint8Array(w * h);
-  const paint = (x0: number, z0: number, x1: number, z1: number, test: (x: number, z: number) => boolean, value: number) => {
-    for (let j = Math.max(0, Math.floor((z0 - minZ) / CELL)); j <= Math.min(h - 1, Math.ceil((z1 - minZ) / CELL)); j++) {
-      for (let i = Math.max(0, Math.floor((x0 - minX) / CELL)); i <= Math.min(w - 1, Math.ceil((x1 - minX) / CELL)); i++) {
-        if (test(minX + i * CELL, minZ + j * CELL)) grid[j * w + i] = value;
-      }
-    }
-  };
-  for (const c of islands) {
-    const r = c.radius - PLAYER;
-    paint(c.x - r, c.z - r, c.x + r, c.z + r, (x, z) => Math.hypot(x - c.x, z - c.z) <= r, 1);
-  }
-  for (const b of dressing.bridges) {
-    const len = Math.hypot(b.bx - b.ax, b.bz - b.az);
-    const [ux, uz] = [(b.bx - b.ax) / len, (b.bz - b.az) / len];
-    const half = DECK_HALF - PLAYER;
-    paint(Math.min(b.ax, b.bx) - 2, Math.min(b.az, b.bz) - 2, Math.max(b.ax, b.bx) + 2, Math.max(b.az, b.bz) + 2, (x, z) => {
-      const t = (x - b.ax) * ux + (z - b.az) * uz;
-      return t >= -1 && t <= len + 1 && Math.abs((x - b.ax) * uz - (z - b.az) * ux) <= half;
-    }, 1);
-  }
-  for (const o of dressing.obstacles) {
-    const r = o.r + PLAYER;
-    paint(o.x - r, o.z - r, o.x + r, o.z + r, (x, z) => Math.hypot(x - o.x, z - o.z) < r, 0);
-  }
-  const cell = (x: number, z: number) => Math.round((z - minZ) / CELL) * w + Math.round((x - minX) / CELL);
-  return { grid, w, h, cell };
-}
 
 describe('campus layout and dressing for any course shape', () => {
   for (const [name, w] of Object.entries(SHAPES)) {
@@ -124,24 +86,10 @@ describe('campus layout and dressing for any course shape', () => {
       });
 
       it('lets the player walk from the spawn to every plot', () => {
-        const { grid, w: gw, h, cell } = walkable(layout, dressing);
-        const start = cell(layout.spawn.x, layout.spawn.z);
-        expect(grid[start]).toBe(1);
-        const seen = new Uint8Array(gw * h);
-        const queue = new Int32Array(gw * h);
-        let [head, tail] = [0, 0];
-        queue[tail++] = start;
-        seen[start] = 1;
-        while (head < tail) {
-          const c = queue[head++]!;
-          const x = c % gw;
-          for (const n of [x > 0 ? c - 1 : -1, x < gw - 1 ? c + 1 : -1, c - gw, c + gw]) {
-            if (n >= 0 && n < gw * h && grid[n] && !seen[n]) {
-              seen[n] = 1;
-              queue[tail++] = n;
-            }
-          }
-        }
+        const walk = new WalkGrid(layout, dressing);
+        expect(walk.grid[walk.cell(layout.spawn.x, layout.spawn.z)]).toBe(1);
+        const seen = walk.reached();
+        const cell = (x: number, z: number) => walk.cell(x, z);
         const unreached = layout.zones.flatMap((z) => z.plots).filter((p) => !seen[cell(p.x, p.z)]);
         expect(unreached.map((p) => p.activityId)).toEqual([]);
       });

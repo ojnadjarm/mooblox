@@ -6,7 +6,7 @@ import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
 import type { LookPalette } from './look';
 import FOOTPRINTS from './model-footprints.json';
-import { Occupancy } from './occupancy';
+import { Occupancy, type GroundQuery } from './occupancy';
 import { SegmentIndex } from './segment-index';
 import { seededRandom } from './random';
 import { recipe, type Recipe, type RecipeKind } from './recipes';
@@ -134,6 +134,8 @@ export interface Dressing {
   readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly top: number }[];
   /** The hub landmark the spawn camera frames, or null. */
   readonly focus: { readonly x: number; readonly z: number } | null;
+  /** Ground every placed model claimed (read-only), for later placement such as collectibles. */
+  readonly occupancy: GroundQuery;
 }
 
 interface Footprint {
@@ -295,6 +297,7 @@ class Designer {
     return {
       districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges,
       critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks,
+      occupancy: this.occ,
     };
   }
 
