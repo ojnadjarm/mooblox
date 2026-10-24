@@ -38,3 +38,17 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     provider exports it and deletes it per user context.
   - Tests: PHPUnit 11 (5 files), Behat `tests/behat/play.feature` (2 scenarios), mprivacy ok, mci quick
     6 ok 0 red. The headless frame check left one in-progress quiz attempt for `mooblox_student`.
+- Phase C (T1285-T1288), 2026-10-24, client core:
+  - `client/`: Vite 8 + TypeScript 7 strict + three 0.186.1 + vitest 5. `npm ci && npm run build` (tsc, then
+    vite) writes `moodle/local/mooblox/client/dist/mooblox.js` (committed; play.php loads it); `npm test` runs
+    vitest (7 files, 38 tests). Delete `client/node_modules` after work.
+  - `boot/main.ts` composition root: `readConfig` (validates `#mooblox-config`) → `AjaxGateway` → `CourseStore`,
+    plus `keepSessionAlive` (`core_session_touch` every 5 min).
+  - `domain/`: wire DTO (`dto.ts`), domain types and completion enums (`types.ts`), `toWorld`/`toDto` mapper.
+  - `moodle/`: `MoodleGateway` interface; `AjaxGateway` (one POST per call to `lib/ajax/service.php?sesskey&info`,
+    failures as `MoodleError` kinds network/http/session/exception/protocol); `FakeGateway` over
+    `client/test/fixtures/get_world_demo.json` (the captured reply, host replaced by `https://moodle.example`).
+  - `state/CourseStore`: notifies subscribers once per real change (JSON equality).
+  - `world/IslandLayout` (`LayoutPolicy`): hub (r 12 m) at the origin, one zone per section (section 0 included)
+    on a ring, plots per activity on a ring inside each zone, mulberry32 seeded by course id; 12 sections of 10
+    activities stay within 150 m.
