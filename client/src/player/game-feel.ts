@@ -15,6 +15,9 @@ export const Feel = {
   /** Landing squash length (s) and depth at a hard landing. */
   squashTime: 0.2,
   squashDepth: 0.22,
+  /** Take-off stretch length (s) and height. */
+  stretchTime: 0.2,
+  stretchHeight: 0.14,
   /** Fall speed (m/s) below which a landing gets no squash or dust. */
   softLanding: 4,
   /** Seconds between footstep puffs at run speed. */
@@ -66,6 +69,14 @@ export class JumpGate {
 export function squash(t: number, strength: number): { readonly xz: number; readonly y: number } {
   if (t >= Feel.squashTime || strength <= 0) return { xz: 1, y: 1 };
   const y = 1 - Feel.squashDepth * strength * Math.sin((Math.PI * t) / Feel.squashTime);
+  return { xz: 1 / Math.sqrt(y), y };
+}
+
+/** Avatar scale (xz, y) `t` seconds after a take-off: tall and thin at once, easing back, volume kept. */
+export function stretch(t: number): { readonly xz: number; readonly y: number } {
+  if (t >= Feel.stretchTime || t < 0) return { xz: 1, y: 1 };
+  const u = 1 - t / Feel.stretchTime;
+  const y = 1 + Feel.stretchHeight * u * u;
   return { xz: 1 / Math.sqrt(y), y };
 }
 

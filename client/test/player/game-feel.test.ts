@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accelerate, damp, Feel, JumpGate, landing, puffScale, squash, stepPuffs, zoom, type Puff } from '../../src/player/game-feel';
+import { accelerate, damp, Feel, JumpGate, landing, puffScale, squash, stepPuffs, stretch, zoom, type Puff } from '../../src/player/game-feel';
 
 const dt = 1 / 60;
 
@@ -114,5 +114,15 @@ describe('camera helpers', () => {
     let b = 0;
     for (let i = 0; i < 30; i++) b = damp(b, 1, 5, 1 / 30);
     expect(a).toBeCloseTo(b, 6);
+  });
+});
+
+describe('take-off stretch', () => {
+  it('starts tall and thin, keeps volume and eases back to rest', () => {
+    const start = stretch(0);
+    expect(start.y).toBeCloseTo(1 + Feel.stretchHeight, 5);
+    expect(start.xz * start.xz * start.y).toBeCloseTo(1, 5);
+    expect(stretch(Feel.stretchTime / 2).y).toBeLessThan(start.y);
+    expect(stretch(Feel.stretchTime)).toEqual({ xz: 1, y: 1 });
   });
 });

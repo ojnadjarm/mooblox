@@ -3,7 +3,7 @@ import type { Avatar } from './avatar';
 import type { Collider } from './collider';
 import { Physics, stepBody, type Body } from './controller';
 import { FixedStep } from './fixed-step';
-import { accelerate, Feel, JumpGate, landing, squash } from './game-feel';
+import { accelerate, Feel, JumpGate, landing, squash, stretch } from './game-feel';
 import type { FollowCamera } from './follow-camera';
 import type { InputSource } from './input';
 
@@ -28,6 +28,7 @@ export class Player {
   private readonly gate = new JumpGate();
   private jumpHeld = false;
   private sinceLand = Infinity;
+  private sinceJump = Infinity;
   private landStrength = 0;
   private stride = 0;
   private readonly tick = (): void => {
@@ -42,7 +43,10 @@ export class Player {
     const wasGround = b.onGround;
     const fall = -b.velocity.y;
     stepBody(b, st, Physics.step, this.collider);
-    if (st.jump) this.onFeet?.(b.position.x, b.position.y, b.position.z, 3, 0.4);
+    if (st.jump) {
+      this.sinceJump = 0;
+      this.onFeet?.(b.position.x, b.position.y, b.position.z, 3, 0.4);
+    }
     if (!wasGround && b.onGround) {
       this.landStrength = landing(fall);
       this.sinceLand = 0;
@@ -99,16 +103,20 @@ export class Player {
     const root = this.avatar.root;
     root.position.lerpVectors(this.prev, this.body.position, alpha);
     const moving = move.x * move.x + move.z * move.z > 0.01;
+    let turned = 0;
     if (moving) {
       const target = Math.atan2(move.x, move.z);
       const delta = Math.atan2(Math.sin(target - this.facing), Math.cos(target - this.facing));
-      this.facing += delta * Math.min(1, TURN * dt);
+      turned = delta * Math.min(1, TURN * dt);
+      this.facing += turned;
     }
     root.rotation.y = this.facing;
     this.sinceLand += dt;
-    const s = squash(this.sinceLand, this.landStrength);
+    this.sinceJump += dt;
+    const s = this.sinceJump < this.sinceLand ? stretch(this.sinceJump) : squash(this.sinceLand, this.landStrength);
     root.scale.set(s.xz, s.y, s.xz);
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
+    this.avatar.setMotion(speed, dt > 0 ? turned / dt : 0);
     const running = speed > Physics.walk + 0.5;
     this.avatar.play(!this.body.onGround ? 'jump' : speed > 0.4 ? (running ? 'run' : 'walk') : 'idle');
     this.stride += running && this.body.onGround ? dt : 0;

@@ -380,3 +380,10 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Gate (quiet machine): 73 pass, 3 fail (stress demo fps 27, worst 300 ms; stress 1x2 worst 233 ms). Low green on all shapes.
     Open: stress keeps one 230-430 ms frame when the deck safety net finishes the island across inline (fix: placement prep in
     the worker); on high, impostor captures cost single 50-280 ms frames (16.8-33 ms with `?far=silhouette`).
+- T1372, 2026-10-24, animation polish rounds (log `~/agent-work/research/2026-10-24/T1372/ROUNDS.md`, page `~/drop/T1372/index.html`):
+  - Round 1: `player/motion.ts` = procedural layer as data + one kernel (`motionState(seed)` Float64Array, `stepMotion`: no calls,
+    0 B per frame): per-kid clip phase and ±8% rate, stride rate from ground speed (0.55-1.3), idle glances (8 looks per kid, quick
+    turn then hold) and breathing, run lean 0.2 rad with head counter-tilt, bank into turns (max 0.16 rad). `Avatar` restores torso and
+    head before the mixer, then adds the layer (`Layered`); `setMotion(speed, turnRate)` (NaN = as authored; NPCs leave it).
+    `game-feel.ts` `stretch` (take-off, 0.2 s, +14%). 20 kids +0.031 ms/frame at 4x CPU; capture tool
+    `~/agent-work/research/2026-10-24/T1372/tools/anim-capture.mjs <outdir>` (cost, crowd + play webm, stills).
