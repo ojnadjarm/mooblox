@@ -13,6 +13,9 @@ import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
 import type { WorldLayout } from '../world/layout';
 import { MaterialKit } from '../world/material-kit';
+import { createPropRegistry } from '../world/props/catalog';
+import { PropsLayer } from '../world/props/props-layer';
+import { CanvasSignPainter } from '../world/props/sign-painter';
 import { PerfOverlay } from '../ui/perf-overlay';
 import { TouchControls } from '../ui/touch-controls';
 import { Stage } from '../world/stage';
@@ -24,6 +27,7 @@ export interface WorldView {
   readonly stage: Stage;
   readonly gate: FrameGate;
   readonly islands: Group;
+  readonly props: PropsLayer;
   readonly quality: QualityManager;
   /** Hands the camera from the overview to the caller. */
   stopOverview(): void;
@@ -44,6 +48,8 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   const layout = new IslandLayout().layout(world);
   const islands = new IslandBuilder(kit).build(world, layout, scatterDecor(layout, world.courseId));
   stage.add(islands);
+  const props = new PropsLayer(createPropRegistry(), { kit, signs: new CanvasSignPainter(() => gate.invalidate()) }).build(world, layout);
+  stage.add(props.group);
   let overview = true;
 
   const e = layout.extent;
@@ -79,6 +85,7 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
     stage,
     gate,
     islands,
+    props,
     quality,
     stopOverview: () => {
       overview = false;

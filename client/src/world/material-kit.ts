@@ -13,6 +13,7 @@ import {
   RepeatWrapping,
   type BufferGeometry,
   type Material,
+  type Texture,
 } from 'three';
 
 /** Rendering tier the kit builds its materials for. */
@@ -27,10 +28,18 @@ export class MaterialKit {
   /** Unlit gradient for the sky dome. */
   readonly sky: Material;
 
-  constructor(tier: MaterialTier = 'standard') {
+  constructor(private readonly tier: MaterialTier = 'standard') {
     this.plastic = plasticMaterial(tier, null);
     this.studs = plasticMaterial(tier, studNormalMap());
     this.sky = new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, depthWrite: false });
+  }
+
+  /** A material for one painted texture (signs), lit like the plastic. */
+  textured(map: Texture): Material {
+    if (this.tier === 'low') {
+      return new MeshLambertMaterial({ map });
+    }
+    return new MeshStandardMaterial({ map, roughness: 0.7, metalness: 0 });
   }
 
   dispose(): void {
@@ -44,11 +53,13 @@ export class MaterialKit {
 export function paint(geometry: BufferGeometry, hex: number): BufferGeometry {
   const c = new Color(hex);
   const count = geometry.getAttribute('position').count;
-  const colors = new Float32Array(count * 3);
+  const existing = geometry.getAttribute('color');
+  const attr = existing?.count === count && existing instanceof BufferAttribute ? existing : new BufferAttribute(new Float32Array(count * 3), 3);
   for (let i = 0; i < count; i++) {
-    colors.set([c.r, c.g, c.b], i * 3);
+    attr.setXYZ(i, c.r, c.g, c.b);
   }
-  geometry.setAttribute('color', new BufferAttribute(colors, 3));
+  attr.needsUpdate = true;
+  geometry.setAttribute('color', attr);
   return geometry;
 }
 

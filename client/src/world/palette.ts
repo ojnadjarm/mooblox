@@ -19,6 +19,9 @@ export const Palette = {
   orange: 0xff9a2e,
   purple: 0x8e5ad8,
   pink: 0xff7fb6,
+  green: 0x2fbf4a,
+  gold: 0xffc21a,
+  ink: 0x2b2f3a,
   skyTop: 0x4aa8ff,
   skyHorizon: 0xcdeeff,
 } as const;

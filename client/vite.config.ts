@@ -1,7 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
+const moodle = process.env['MOOBLOX_MOODLE'] ?? 'http://localhost:8052';
+
 export default defineConfig({
   base: './',
+  server: {
+    proxy: { '/theme': { target: moodle, changeOrigin: true } },
+  },
   build: {
     outDir: '../moodle/local/mooblox/client/dist',
     emptyOutDir: true,

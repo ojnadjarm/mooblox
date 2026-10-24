@@ -8,11 +8,12 @@ import { Palette } from '../world/palette';
 import { startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
+const FIXTURE_HOST = 'https://moodle.example';
 
 /** Dev composition root: the demo course from the captured fixture, no Moodle needed. */
 async function boot(): Promise<void> {
   const root = document.getElementById('mooblox-root')!;
-  const gateway = new FakeGateway(fixture);
+  const gateway = new FakeGateway(JSON.parse(JSON.stringify(fixture).replaceAll(FIXTURE_HOST, location.origin)));
   const view = startWorld(root, await gateway.getWorld(fixture.courseid));
   const probe: Record<string, unknown> = {};
   const params = new URLSearchParams(location.search);
