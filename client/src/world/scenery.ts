@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Color, Group, Matrix4, Mesh, Quaternion, Vector3, type Material, type Object3D } from 'three';
+import { Box3, BufferAttribute, BufferGeometry, Color, Group, Matrix4, Mesh, Quaternion, Vector3, type Material, type Object3D } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { District, Dressing, Placement } from './dressing';
 import type { ModelLibrary } from './model-library';
@@ -9,14 +9,6 @@ export const DETAIL_DISTANCE = { low: 20, medium: 70, high: 90, xhigh: 130 } as 
 /** Distance past which a district drops its minor dressing (grass tufts, pebbles, rich extras) per tier. */
 export const MINOR_DISTANCE = { low: 0, medium: 25, high: 40, xhigh: 70 } as const;
 
-/** Built dressing: one group per district (big shapes + a detail group), one glow mesh, and the solid triangles. */
-export interface SceneryBuild {
-  readonly group: Group;
-  /** World-space positions of everything solid (bridge decks and rails, buildings, trees, hedges, lamps, terraces). */
-  readonly collision: BufferGeometry;
-}
-
-/** Turns the designer's dressing into merged, vertex-coloured meshes over one shared material. */
 /** Which optional dressing a tier shows: `minor` (all but low) and `rich` (xhigh only); `detailShadows` lets detail cast shadows. */
 export interface DressingLevel {
   readonly minor: boolean;
@@ -26,67 +18,139 @@ export interface DressingLevel {
   readonly minorDistance?: number;
 }
 
-export function buildScenery(dressing: Dressing, lib: ModelLibrary, solid: Material, glow: Material, detailDistance: number, level: DressingLevel = { minor: true, rich: false }): SceneryBuild {
-  const group = new Group();
-  group.name = 'scenery';
-  const collision: BufferGeometry[] = [];
-  for (const d of dressing.districts) {
-    const parts = placed(d, lib, level);
+/** Placements turned into geometry per build slice (keeps one slice to a few milliseconds on slow CPUs). */
+const PARTS_PER_SLICE = 24;
+
+/**
+ * One district's dressing, built in slices (`step`) and freed again (`unload`): a group with the big shapes, a detail
+ * group and a minor group over the shared scenery material, plus the world-space solid triangles for collision.
+ */
+export class DistrictBuild<C = unknown> {
+  /** Always in the scene; empty until built. */
+  readonly group = new Group();
+  /** `collide` over the positions of everything solid (bridge decks and rails, buildings, trees, hedges, lamps, terraces). */
+  collider: C | null = null;
+  /** World box of the solids; empty until built. */
+  readonly bounds = new Box3();
+  private work: Generator<void, void> | null = null;
+  private built = false;
+
+  constructor(
+    readonly district: District,
+    private readonly lib: ModelLibrary,
+    private readonly material: Material,
+    detailDistance: number,
+    private readonly level: DressingLevel,
+    /** Turns the solid triangles into a collider (its own build slice). */
+    private readonly collide: (solids: BufferGeometry) => C,
+  ) {
+    const d = district.island;
+    this.group.name = 'district';
+    this.group.userData = { x: d.x, z: d.z, radius: d.radius, detail: detailDistance, minor: level.minorDistance ?? detailDistance };
+  }
+
+  get isBuilt(): boolean {
+    return this.built;
+  }
+
+  /** Runs the next slice; true once the district is complete. */
+  step(): boolean {
+    if (this.built) return true;
+    this.work ??= this.slices();
+    this.built = this.work.next().done === true;
+    if (this.built) this.work = null;
+    return this.built;
+  }
+
+  /** Builds every remaining slice now. */
+  finish(): void {
+    while (!this.step());
+  }
+
+  /** Frees the meshes and solids; the district can be built again later. */
+  unload(): void {
+    this.work = null;
+    this.built = false;
+    for (const child of [...this.group.children]) {
+      child.traverse((o) => (o as Mesh).geometry?.dispose());
+      child.removeFromParent();
+    }
+    this.collider = null;
+    this.bounds.makeEmpty();
+  }
+
+  private *slices(): Generator<void, void> {
+    const d = this.district;
+    const level = this.level;
+    const tag = (g: BufferGeometry, id: string) => (level.rich ? tagSurface(g, id) : g);
+    const parts: Part[] = d.terrain.map((t) => ({ g: tag(withSway(t.geometry, false, 1), ''), solid: t.solid, detail: t.detail, small: false }));
+    let n = 0;
+    for (const p of d.placements) {
+      if ((p.minor && !level.minor) || (p.rich && !level.rich)) continue;
+      parts.push({ g: tag(placeModel(p, this.lib), p.id), solid: p.solid, detail: p.detail, small: p.minor === true || p.rich === true });
+      if (++n % PARTS_PER_SLICE === 0) yield;
+    }
     const base = merge(parts.filter((p) => !p.small && !p.detail).map((p) => p.g));
+    yield;
     const detail = merge(parts.filter((p) => !p.small && p.detail).map((p) => p.g));
     const small = merge(parts.filter((p) => p.small).map((p) => p.g));
-    for (const p of parts) if (p.solid) collision.push(positionsOnly(p.g));
-    for (const b of d.blockers) collision.push(positionsOnly(b.index ? b.toNonIndexed() : b));
-    if (!base && !detail) continue;
-    // One group per district: the big shapes always, the detail group only within `detailDistance` (see `cullDistricts`).
-    const district = new Group();
-    district.name = 'district';
-    district.userData = { x: d.island.x, z: d.island.z, radius: d.island.radius, detail: detailDistance, minor: level.minorDistance ?? detailDistance };
-    if (base) district.add(mesh(base, solid));
+    yield;
+    const solid = parts.filter((p) => p.solid).map((p) => positionsOnly(p.g));
+    for (const b of d.blockers) solid.push(positionsOnly(b.index ? b.toNonIndexed() : b));
+    const solids = solid.length ? mergeGeometries(solid, false) : null;
+    // The big shapes always, the detail group only within `detailDistance`, the minor one within its range (see `cullDistricts`).
+    if (base) this.group.add(mesh(base, this.material));
     const near = new Group();
     near.name = 'detail';
     if (detail) {
-      const m = mesh(detail, solid);
+      const m = mesh(detail, this.material);
       m.castShadow = level.detailShadows !== false;
       near.add(m);
     }
-    district.add(near);
+    this.group.add(near);
     const minor = new Group();
     minor.name = 'minor';
     if (small) {
       // Minor and rich dressing is too small to need a shadow: one shadowless mesh.
-      const m = mesh(small, solid);
+      const m = mesh(small, this.material);
       m.castShadow = false;
       minor.add(m);
     }
-    district.add(minor);
-    district.traverse((o) => {
+    this.group.add(minor);
+    this.group.traverse((o) => {
       o.updateMatrix();
       o.matrixAutoUpdate = false;
     });
-    group.add(district);
+    if (solids) {
+      yield;
+      solids.computeBoundingBox();
+      this.bounds.copy(solids.boundingBox!);
+      this.collider = this.collide(solids);
+    }
   }
+}
+
+/** Every district's lamp glow as one mesh (small; built up front). */
+export function buildGlow(dressing: Dressing, glow: Material): Mesh | null {
   const glows = dressing.districts.flatMap((d) => d.glow.map((g) => withSway(g, false, 1)));
   const lamps = glows.length ? mergeGeometries(glows, false) : null;
-  if (lamps) {
-    const m = new Mesh(lamps, glow);
-    m.name = 'glow';
-    m.matrixAutoUpdate = false;
-    group.add(m);
-  }
-  const merged = mergeGeometries(collision, false);
-  if (!merged) throw new Error('mooblox: no solid scenery');
-  return { group, collision: merged };
+  if (!lamps) return null;
+  const m = new Mesh(lamps, glow);
+  m.name = 'glow';
+  m.matrixAutoUpdate = false;
+  return m;
 }
 
 /** Shows districts within `distance` of (x, z), their detail and minor dressing within each one's ranges; every district when `all`. */
 export function cullDistricts(districts: readonly Object3D[], x: number, z: number, distance: number, all: boolean): void {
-  for (const d of districts) {
+  for (let i = 0; i < districts.length; i++) {
+    const d = districts[i]!;
+    const n = d.children.length;
+    if (n < 2) continue;
     const u = d.userData as { x: number; z: number; radius: number; detail: number; minor: number };
     const dx = u.x - x;
     const dz = u.z - z;
     const edge = Math.sqrt(dx * dx + dz * dz) - u.radius;
-    const n = d.children.length;
     d.visible = all || edge < distance;
     d.children[n - 2]!.visible = edge < u.detail;
     d.children[n - 1]!.visible = edge < u.minor;
@@ -111,17 +175,6 @@ interface Part {
   readonly solid: boolean;
   readonly detail: boolean;
   readonly small: boolean;
-}
-
-function placed(d: District, lib: ModelLibrary, level: DressingLevel): Part[] {
-  // Surface classes feed only the rich tier's detail textures.
-  const tag = (g: BufferGeometry, id: string) => (level.rich ? tagSurface(g, id) : g);
-  const parts: Part[] = d.terrain.map((t) => ({ g: tag(withSway(t.geometry, false, 1), ''), solid: t.solid, detail: t.detail, small: false }));
-  for (const p of d.placements) {
-    if ((p.minor && !level.minor) || (p.rich && !level.rich)) continue;
-    parts.push({ g: tag(placeModel(p, lib), p.id), solid: p.solid, detail: p.detail, small: p.minor === true || p.rich === true });
-  }
-  return parts;
 }
 
 function placeModel(p: Placement, lib: ModelLibrary): BufferGeometry {

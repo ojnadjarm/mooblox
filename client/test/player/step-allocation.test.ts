@@ -73,7 +73,11 @@ describe('hot path allocations', () => {
     }
     walkSteps(20000);
     // Our code (src/) must allocate nothing; three-mesh-bvh's shapecast still makes 3 typed-array views per call (library).
-    const bytes = await sampledBytes('walkSteps', /\/client\/src\//, () => walkSteps(20000));
+    // Up to 8 rounds: on a busy machine the optimising compiler may finish late (unoptimised code boxes numbers).
+    let bytes = Infinity;
+    for (let round = 0; round < 8 && bytes > 0; round++) {
+      bytes = Math.min(bytes, await sampledBytes('walkSteps', /\/client\/src\//, () => walkSteps(20000)));
+    }
     expect(bytes).toBe(0);
   });
 

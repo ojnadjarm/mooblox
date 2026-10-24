@@ -1,0 +1,108 @@
+/** Something the streamer builds in slices near the player and frees far away: one district island. */
+export interface StreamUnit {
+  readonly x: number;
+  readonly z: number;
+  readonly radius: number;
+  readonly isBuilt: boolean;
+  /** Runs one slice of the build; true once complete. */
+  step(): boolean;
+  /** Builds every remaining slice now. */
+  finish(): void;
+  /** Frees the build. */
+  unload(): void;
+}
+
+/** How far the streamer keeps districts and how long one frame may build. */
+export interface StreamPolicy {
+  /** Milliseconds of building per frame. */
+  readonly sliceMs: number;
+  /** Units whose edge is within this distance get built (nearest first). */
+  readonly keep: number;
+  /** Built units whose edge is past this distance are freed (>= keep, the gap stops build/free churn). */
+  readonly drop: number;
+}
+
+/**
+ * District streaming: builds the units nearest the focus first, a few milliseconds per frame, and frees the ones that
+ * fell far behind. Gates, locks and props never wait for it: they are built from the layout data, not from these meshes.
+ */
+export class DistrictStreamer {
+  private changed = false;
+
+  constructor(
+    private readonly units: readonly StreamUnit[],
+    private readonly policy: StreamPolicy,
+    private readonly now: () => number = () => performance.now(),
+  ) {}
+
+  /** Units not yet built within the keep distance of the last focus. */
+  pending = 0;
+
+  /** Builds every unit within `distance` (edge) of (x, z) at once: the first playable area. */
+  buildNear(x: number, z: number, distance: number): void {
+    for (const u of this.units) {
+      if (!u.isBuilt && edge(u, x, z) <= distance) u.finish();
+    }
+  }
+
+  /**
+   * One frame of streaming around (x, z): frees far units, then builds the nearest unbuilt ones until the slice is spent.
+   * `all` keeps and builds everything (overview). Returns true when the scene changed.
+   */
+  pump(x: number, z: number, all = false): boolean {
+    const keep = all ? Infinity : this.policy.keep;
+    const drop = all ? Infinity : this.policy.drop;
+    this.changed = false;
+    for (const u of this.units) {
+      if (u.isBuilt && edge(u, x, z) > drop) {
+        u.unload();
+        this.changed = true;
+      }
+    }
+    let pending = 0;
+    let nearest = -1;
+    let best = Infinity;
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i]!;
+      const d = edge(u, x, z);
+      if (u.isBuilt || d > keep) continue;
+      pending++;
+      if (d < best) {
+        best = d;
+        nearest = i;
+      }
+    }
+    this.pending = pending;
+    if (nearest < 0) return this.changed;
+    const end = this.now() + this.policy.sliceMs;
+    // Keep working on the nearest unit; pick the next nearest once it is done, until the slice is spent.
+    while (nearest >= 0 && this.now() < end) {
+      if (this.units[nearest]!.step()) {
+        this.changed = true;
+        this.pending--;
+        nearest = this.nearestUnbuilt(x, z, keep);
+      }
+    }
+    return this.changed;
+  }
+
+  private nearestUnbuilt(x: number, z: number, keep: number): number {
+    let nearest = -1;
+    let best = Infinity;
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i]!;
+      const d = edge(u, x, z);
+      if (!u.isBuilt && d <= keep && d < best) {
+        best = d;
+        nearest = i;
+      }
+    }
+    return nearest;
+  }
+}
+
+function edge(u: StreamUnit, x: number, z: number): number {
+  const dx = u.x - x;
+  const dz = u.z - z;
+  return Math.sqrt(dx * dx + dz * dz) - u.radius;
+}

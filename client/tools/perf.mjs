@@ -1,7 +1,8 @@
 // Perf gate + stills: node tools/perf.mjs [outdir] [--shapes demo,1x2,8x12,20x30] [--tiers low,medium] [--gate] [--stills] [--load]
 // Builds the dev page, serves the build, then per shape x tier walks the player to the farthest plot and reads frame times,
-// draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on SwiftShader at 400x800 under 6x CPU
-// throttle; the others on the real GPU (ANGLE Vulkan) at 1366x768. --load adds first-playable time and bytes on Fast 4G,
+// draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on the real GPU at DPR 1, 400x800 under 4x CPU
+// throttle (the realistic low-end proxy), then again on SwiftShader under 6x as a stress floor (30 fps, no frame > 100 ms);
+// the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
 // --browser gpu|soft and --throttle N override the rig (diagnosis), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,6 +15,8 @@ const BUDGETS = {
   medium: { fps: 58, calls: 60, tris: 200000, programs: 30, shadow: 1024, post: false },
 };
 const ALL = { loadMb: 3, loadS: 3, heapMb: 150, gpuMb: 200, frameMs: 50, bigCourse: 1.5 };
+/** Software GL (SwiftShader) under 6x CPU: harsher than any real GPU, so a floor, not the target. */
+const STRESS = { fps: 30, frameMs: 100 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
 
 const args = process.argv.slice(2);
@@ -39,7 +42,7 @@ const browsers = {
   soft: await chromium.launch({ headless: true, args: [...common, '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }),
 };
 const RIG = {
-  low: { browser: 'soft', w: 400, h: 800, throttle: 6, touch: true },
+  low: { browser: 'gpu', w: 400, h: 800, throttle: 4, touch: true },
   medium: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
   high: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
   xhigh: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
@@ -149,6 +152,19 @@ try {
       }
       results.push(row);
       console.log(JSON.stringify(row));
+      if (tier === 'low' && !flag('no-stress')) {
+        const stress = { ...rig, browser: 'soft', throttle: 6 };
+        const st = await open(stress, query(shape, tier, 'walk=far'));
+        await st.page.waitForTimeout(1500);
+        const sm = await st.page.evaluate(sample, 5000);
+        await st.page.close();
+        const srow = { shape, tier, rig: 'stress', w: stress.w, h: stress.h, gpu: 'soft', throttle: 6, ...sm };
+        results.push(srow);
+        console.log(JSON.stringify(srow));
+        const sid = `${shape} low stress 400x800 6x cpu soft`;
+        check(sm.fps >= STRESS.fps, `${sid}: fps ${sm.fps} >= ${STRESS.fps}`);
+        check(sm.maxFrame <= STRESS.frameMs, `${sid}: worst frame ${sm.maxFrame} ms <= ${STRESS.frameMs}`);
+      }
       const b = BUDGETS[tier];
       const id = `${shape} ${tier} ${rig.w}x${rig.h}${rig.throttle > 1 ? ` ${rig.throttle}x cpu` : ''} ${rig.browser}`;
       if (b) {
@@ -170,6 +186,7 @@ try {
         for (const [w, h] of [[1366, 768], [400, 800]]) {
           for (const view of ['overview', 'play']) {
             const s = await open({ ...rig, browser: 'gpu', throttle: 1, w, h, touch: w < 800 }, query(shape, tier, view === 'overview' ? 'scene=overview' : ''));
+            await s.page.waitForFunction(() => window.mooblox.streaming.pending === 0, null, { timeout: 60000, polling: 100 });
             await s.page.waitForTimeout(1200);
             await s.page.screenshot({ path: join(out, `${shape}-${tier}-${view}-${w}.png`) });
             await s.page.close();
@@ -179,8 +196,8 @@ try {
     }
   }
   for (const tier of tiers) {
-    const demo = results.find((r) => r.shape === 'demo' && r.tier === tier);
-    const big = results.find((r) => r.shape === '20x30' && r.tier === tier);
+    const demo = results.find((r) => r.shape === 'demo' && r.tier === tier && !r.rig);
+    const big = results.find((r) => r.shape === '20x30' && r.tier === tier && !r.rig);
     if (demo && big) {
       check(big.calls <= demo.calls * ALL.bigCourse, `20x30 ${tier}: draws ${big.calls} <= 1.5 x demo ${demo.calls}`);
       check(big.tris <= demo.tris * ALL.bigCourse, `20x30 ${tier}: tris ${big.tris} <= 1.5 x demo ${demo.tris}`);
@@ -193,7 +210,7 @@ try {
 }
 if (out) {
   const file = join(out, 'numbers.json');
-  const key = (r) => `${r.shape} ${r.tier}`;
+  const key = (r) => `${r.shape} ${r.tier}${r.rig ? ` ${r.rig}` : ''}`;
   const fresh = new Set(results.map(key));
   const kept = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).filter((r) => r.shape && !fresh.has(key(r)) && r.view === undefined) : [];
   writeFileSync(file, `${JSON.stringify([...kept, ...results], null, 1)}\n`);

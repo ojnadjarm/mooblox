@@ -1,4 +1,4 @@
-import { Fog, Vector3, type BufferGeometry, type Group, type Mesh, type ShaderMaterial } from 'three';
+import { Box3, Fog, Group, Vector3, type Mesh, type Object3D, type ShaderMaterial } from 'three';
 import type { Activity, WorldData } from '../domain/types';
 import { ActivityInteraction } from '../interaction/activity-interaction';
 import type { OpenerRegistry } from '../interaction/opener';
@@ -26,7 +26,9 @@ import type { Plot, WorldLayout } from '../world/layout';
 import { designWorld, type Dressing } from '../world/dressing';
 import { CAMPUS } from '../world/look';
 import type { ModelLibrary } from '../world/model-library';
-import { buildScenery, cullDistricts, DETAIL_DISTANCE, MINOR_DISTANCE } from '../world/scenery';
+import { buildGlow, cullDistricts, DETAIL_DISTANCE, DistrictBuild, MINOR_DISTANCE } from '../world/scenery';
+import { DistrictStreamer } from '../world/district-streamer';
+import { CompositeCollider, type ColliderPart } from '../player/composite-collider';
 import { MaterialKit } from '../world/material-kit';
 import { createPropRegistry } from '../world/props/catalog';
 import { PropsLayer } from '../world/props/props-layer';
@@ -59,8 +61,10 @@ export interface WorldView {
   readonly quality: QualityManager;
   /** The designer's dressing of the current layout (paths, life spots, obstacles). */
   readonly dressing: Dressing;
-  /** World-space solid triangles of the dressing, for the player's collider. */
-  readonly solids: BufferGeometry;
+  /** Static world collision: islands plus every built district's solids (follows streaming and rebuilds). */
+  readonly collider: CompositeCollider;
+  /** Districts still to build near the camera (0 once the surroundings are complete). */
+  readonly streaming: { readonly pending: number };
   /** Shows a fresh course: locks, gates and completion; rebuilds the islands when sections or activities came or went. */
   apply(world: WorldData): void;
   /** Adds a listener for structural rebuilds; returns its remover. */
@@ -116,24 +120,49 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const registry = createPropRegistry();
   const signs = new CanvasSignPainter(() => gate.invalidate());
   const policy = new IslandLayout(look.size);
+  const level = { minor: tier !== 'low', rich: tier === 'xhigh', detailShadows: tier === 'high' || tier === 'xhigh', minorDistance: MINOR_DISTANCE[tier] };
+  const collider = new CompositeCollider();
   const dress = (w: WorldData, l: WorldLayout) => {
     const group = new IslandBuilder(kit, look, tier === 'low').build(w, l);
     const d = designWorld(l, w.courseId, look.palette);
-    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier], {
-      minor: tier !== 'low',
-      rich: tier === 'xhigh',
-      detailShadows: tier === 'high' || tier === 'xhigh',
-      minorDistance: MINOR_DISTANCE[tier],
-    });
-    group.add(scenery.group);
+    const scenery = new Group();
+    scenery.name = 'scenery';
+    const builds = d.districts.map((district) => new DistrictBuild(district, models, kit.scenery, DETAIL_DISTANCE[tier], level, (g) => new BvhCollider(g)));
+    for (const b of builds) scenery.add(b.group);
+    const glow = buildGlow(d, kit.glow);
+    if (glow) scenery.add(glow);
+    group.add(scenery);
     const material = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
     const water = material.isShaderMaterial ? material : null;
-    const districts = scenery.group.children.filter((o) => o.name === 'district');
-    return { group, dressing: d, solids: scenery.collision, water, districts };
+    const ground = group.children.filter((o) => o.name === 'land' || o.name === 'tops');
+    const islandsPart = part(BvhCollider.fromMeshes(ground), ground);
+    const units = builds.map((b) => ({
+      x: b.district.island.x,
+      z: b.district.island.z,
+      // Bridges and docks reach past the island rim: stream by the whole district, not the island circle.
+      radius: b.district.island.radius,
+      get isBuilt() {
+        return b.isBuilt;
+      },
+      step: () => b.step(),
+      finish: () => b.finish(),
+      unload: () => b.unload(),
+    }));
+    const streamer = new DistrictStreamer(units, STREAM[tier]);
+    const solids = (): void => {
+      const parts: ColliderPart[] = [islandsPart];
+      for (const b of builds) {
+        if (b.isBuilt && b.collider) parts.push({ collider: b.collider, bounds: b.bounds });
+      }
+      collider.set(parts);
+    };
+    return { group, dressing: d, water, districts: builds.map((b) => b.group), builds, streamer, solids };
   };
   let current = world;
   let layout = policy.layout(world);
   let built = dress(world, layout);
+  built.streamer.buildNear(layout.spawn.x, layout.spawn.z, FIRST_PLAYABLE);
+  built.solids();
   let islands = built.group;
   let props = new PropsLayer(registry, { kit, signs }).build(world, layout);
   let key = structureKey(world);
@@ -158,6 +187,10 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     clock += dt;
     const eye = stage.camera.position;
     props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
+    if (built.streamer.pump(eye.x, eye.z, overview)) {
+      built.solids();
+      gate.invalidate();
+    }
     cullDistricts(built.districts, eye.x, eye.z, settings.districtDistance, overview);
     kit.time.value = clock;
     if (built.water) built.water.uniforms['uTime']!.value = clock;
@@ -189,6 +222,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const rebuild = (next: WorldData): void => {
     const before = layout;
     islands.removeFromParent();
+    for (const b of built.builds) b.unload();
     islands.traverse((o) => (o as Mesh).geometry?.dispose());
     props.group.removeFromParent();
     for (const prop of props.all) {
@@ -197,6 +231,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     layout = policy.layout(next);
     e = layout.extent;
     built = dress(next, layout);
+    const p = stage.camera.position;
+    built.streamer.buildNear(p.x, p.z, FIRST_PLAYABLE);
+    built.solids();
     islands = built.group;
     props = new PropsLayer(registry, { kit, signs }).build(next, layout);
     stage.add(islands);
@@ -229,8 +266,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     get dressing() {
       return built.dressing;
     },
-    get solids() {
-      return built.solids;
+    collider,
+    get streaming() {
+      return built.streamer;
     },
     apply: (next) => {
       current = next;
@@ -263,6 +301,23 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
 const PROP_LOD = { low: { near: 20, far: 50 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 }, xhigh: { near: 70, far: 200 } } as const;
 const PROPS_ALWAYS = 40;
 
+/** Districts within this edge distance of the spawn are built before the first frame; the rest stream in. */
+const FIRST_PLAYABLE = 25;
+/** Per tier: build within `keep` m of the camera (edge), free past `drop`, at most `sliceMs` of building per frame. */
+const STREAM = {
+  low: { sliceMs: 4, keep: 70, drop: 100 },
+  medium: { sliceMs: 6, keep: 170, drop: 200 },
+  high: { sliceMs: 6, keep: 280, drop: 320 },
+  xhigh: { sliceMs: 8, keep: Infinity, drop: Infinity },
+} as const;
+
+/** A collider part covering `meshes`' world box. */
+function part(collider: BvhCollider, meshes: readonly Object3D[]): ColliderPart {
+  const bounds = new Box3();
+  for (const m of meshes) bounds.expandByObject(m);
+  return { collider, bounds };
+}
+
 const SPAWN_HEIGHT = 2;
 const SHADOW_RADIUS = 30;
 
@@ -275,8 +330,7 @@ export async function startPlayer(
 ): Promise<Player> {
   const avatar = await avatars.create(look);
   view.stage.add(avatar.root);
-  const solid = () => BvhCollider.fromMeshes(view.islands.children.filter((o) => o.name === 'land' || o.name === 'tops'), [view.solids]);
-  const collider = new FencedCollider(solid(), view.fence);
+  const collider = new FencedCollider(view.collider, view.fence);
   const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement);
   const spawn = new Vector3(view.layout.spawn.x, SPAWN_HEIGHT, view.layout.spawn.z);
   view.stopOverview();
@@ -284,7 +338,6 @@ export async function startPlayer(
   const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
   const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
   view.onRebuild((before, after) => {
-    collider.setInner(solid());
     const p = player.body.position;
     const shift = shiftFor(before, after, p.x, p.z);
     player.shift(shift.x, shift.z);
