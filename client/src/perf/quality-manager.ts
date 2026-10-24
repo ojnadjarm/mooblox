@@ -1,14 +1,20 @@
 import type { Stage } from '../world/stage';
-import { DynamicResolution, QUALITY, pixelRatio, type QualityTier } from './quality';
+import { DynamicResolution, QUALITY, lowerTier, pixelRatio, type QualityTier } from './quality';
 
-/** Applies a quality tier to the stage (pixel ratio, shadow) and runs dynamic resolution. */
+/** Where a tier step-down is remembered for the next visit. */
+export type TierMemory = (tier: QualityTier) => void;
+
+/** Applies a quality tier to the stage (pixel ratio, shadow, post), runs dynamic resolution and steps the tier down when frames stay slow. */
 export class QualityManager {
-  readonly dynamic = new DynamicResolution();
+  dynamic: DynamicResolution;
 
   constructor(
     private readonly stage: Stage,
     private current: QualityTier,
+    /** Null when the tier was asked for (`?quality=`): never stepped down. */
+    private readonly remember: TierMemory | null = null,
   ) {
+    this.dynamic = new DynamicResolution(QUALITY[current].minScale);
     this.apply();
   }
 
@@ -18,13 +24,20 @@ export class QualityManager {
 
   setTier(tier: QualityTier): void {
     this.current = tier;
-    this.dynamic.scale = 1;
+    this.dynamic = new DynamicResolution(QUALITY[tier].minScale);
     this.apply();
   }
 
-  /** Feeds one frame time in ms; re-applies the pixel ratio when dynamic resolution moves. */
+  /** Feeds one frame time in ms; re-applies the pixel ratio when dynamic resolution moves, drops a tier when it is starved. */
   frame(frameMs: number): void {
-    if (this.dynamic.sample(frameMs)) {
+    if (!this.dynamic.sample(frameMs) && !this.dynamic.starved) {
+      return;
+    }
+    const lower = this.dynamic.starved && this.remember ? lowerTier(this.current) : null;
+    if (lower) {
+      this.remember!(lower);
+      this.setTier(lower);
+    } else {
       this.apply();
     }
   }
@@ -40,5 +53,6 @@ export class QualityManager {
       shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
     }
     this.stage.sun.castShadow = q.shadows;
+    if (!q.post) this.stage.dropPost();
   }
 }

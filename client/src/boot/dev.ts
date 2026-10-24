@@ -58,7 +58,7 @@ async function boot(): Promise<void> {
   } else if (scene === 'props') {
     propLineup(view, probe);
   } else if (scene !== 'overview') {
-    const walk = Number(params.get('walk') ?? 0);
+    const walk = params.get('walk') === 'far' ? farthestPlot(view) : Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
     const look = params.has('avatar') ? decodeLook(params.get('avatar')!, avatars.bodies.map((b) => b.id)) : { skin: 'b', tint: Palette.red };
     const player = await startPlayer(view, avatars, look, [pilot]);
@@ -73,6 +73,13 @@ async function boot(): Promise<void> {
     }
   }
   probe['ready'] = true;
+}
+
+/** The activity whose plot lies farthest from the spawn (the longest autopilot walk). */
+function farthestPlot(view: WorldView): number {
+  const s = view.layout.spawn;
+  const plots = view.layout.zones.flatMap((z) => z.plots);
+  return plots.reduce((a, b) => (Math.hypot(b.x - s.x, b.z - s.z) > Math.hypot(a.x - s.x, a.z - s.z) ? b : a)).activityId;
 }
 
 /** Scripted input that walks the player over the bridge to an activity's plot. */

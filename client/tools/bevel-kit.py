@@ -1,5 +1,5 @@
 # Bevelled xhigh variants of every kit model, headless Blender 5:
-#   blender -b -P tools/bevel-kit.py -- public/assets/kit public/assets/kit-hd
+#   blender -b -P tools/bevel-kit.py -- kit-src public/assets/kit-hd
 # Per glb: merge by distance, bevel sharp edges (~1.5% of the model size, 2 segments), harden normals, export with the
 # colormap embedded. Models listed in SKIP stay base-only (the client falls back to kit/).
 import bpy, os, sys

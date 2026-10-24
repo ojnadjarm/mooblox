@@ -195,3 +195,4 @@ file,pack,author,license,source,sha256_16
 "cosmetics/pets.glb","Kenney Cube Pets 2.0","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/cube-pets","0b6315598ba508ef"
 "cosmetics/head.glb","Kenney Mini Characters","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/mini-characters","02a44556d6428a3e"
 "built:boxes","MOOBLOX box-built hats and trophy pedestals (client/src/rewards)","MOOBLOX contributors","GPL-3.0-or-later","client/src/rewards",""
+"kit.glb","Kenney Nature Kit + Fantasy Town Kit 2.0 + City Kit (Suburban) 2.0 + Pirate Kit (packed from kit-src/ by tools/pack-kit.mjs)","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets","84b571d72445a47f"

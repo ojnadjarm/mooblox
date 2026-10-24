@@ -1,13 +1,15 @@
-import { BufferAttribute, BufferGeometry, Color, Group, LOD, Matrix4, Mesh, Quaternion, Vector3, type Material } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Group, Matrix4, Mesh, Quaternion, Vector3, type Material, type Object3D } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { District, Dressing, Placement } from './dressing';
 import type { ModelLibrary } from './model-library';
 import { tagSurface } from './surfaces';
 
 /** Distance past which a district drops its detail (flowers, bushes, hedges, lamps, small props) per tier. */
-export const DETAIL_DISTANCE = { low: 45, medium: 70, high: 90, xhigh: 130 } as const;
+export const DETAIL_DISTANCE = { low: 30, medium: 70, high: 90, xhigh: 130 } as const;
+/** Distance past which a district drops its minor dressing (grass tufts, pebbles, rich extras) per tier. */
+export const MINOR_DISTANCE = { low: 0, medium: 25, high: 40, xhigh: 70 } as const;
 
-/** Built dressing: one LOD per district (near = everything, far = the big shapes), one glow mesh, and the solid triangles. */
+/** Built dressing: one group per district (big shapes + a detail group), one glow mesh, and the solid triangles. */
 export interface SceneryBuild {
   readonly group: Group;
   /** World-space positions of everything solid (bridge decks and rails, buildings, trees, hedges, lamps, terraces). */
@@ -15,10 +17,13 @@ export interface SceneryBuild {
 }
 
 /** Turns the designer's dressing into merged, vertex-coloured meshes over one shared material. */
-/** Which optional dressing a tier shows: `minor` (all but low) and `rich` (xhigh only). */
+/** Which optional dressing a tier shows: `minor` (all but low) and `rich` (xhigh only); `detailShadows` lets detail cast shadows. */
 export interface DressingLevel {
   readonly minor: boolean;
   readonly rich: boolean;
+  readonly detailShadows?: boolean;
+  /** Edge distance (metres) within which the minor dressing shows. */
+  readonly minorDistance?: number;
 }
 
 export function buildScenery(dressing: Dressing, lib: ModelLibrary, solid: Material, glow: Material, detailDistance: number, level: DressingLevel = { minor: true, rich: false }): SceneryBuild {
@@ -27,29 +32,39 @@ export function buildScenery(dressing: Dressing, lib: ModelLibrary, solid: Mater
   const collision: BufferGeometry[] = [];
   for (const d of dressing.districts) {
     const parts = placed(d, lib, level);
-    const near = merge(parts.filter((p) => !p.small).map((p) => p.g));
+    const base = merge(parts.filter((p) => !p.small && !p.detail).map((p) => p.g));
+    const detail = merge(parts.filter((p) => !p.small && p.detail).map((p) => p.g));
     const small = merge(parts.filter((p) => p.small).map((p) => p.g));
-    const far = merge(parts.filter((p) => !p.detail).map((p) => p.g));
     for (const p of parts) if (p.solid) collision.push(positionsOnly(p.g));
     for (const b of d.blockers) collision.push(positionsOnly(b.index ? b.toNonIndexed() : b));
-    if (!near) continue;
-    const lod = new LOD();
-    lod.name = 'district';
-    const close = new Group();
-    close.add(mesh(near, solid));
+    if (!base && !detail) continue;
+    // One group per district: the big shapes always, the detail group only within `detailDistance` (see `cullDistricts`).
+    const district = new Group();
+    district.name = 'district';
+    district.userData = { x: d.island.x, z: d.island.z, radius: d.island.radius, detail: detailDistance, minor: level.minorDistance ?? detailDistance };
+    if (base) district.add(mesh(base, solid));
+    const near = new Group();
+    near.name = 'detail';
+    if (detail) {
+      const m = mesh(detail, solid);
+      m.castShadow = level.detailShadows !== false;
+      near.add(m);
+    }
+    district.add(near);
+    const minor = new Group();
+    minor.name = 'minor';
     if (small) {
       // Minor and rich dressing is too small to need a shadow: one shadowless mesh.
       const m = mesh(small, solid);
       m.castShadow = false;
-      close.add(m);
+      minor.add(m);
     }
-    lod.addLevel(close, 0);
-    if (far) lod.addLevel(mesh(far, solid), detailDistance + d.island.radius);
-    lod.position.set(d.island.x, 0, d.island.z);
-    lod.updateMatrix();
-    lod.matrixAutoUpdate = false;
-    for (const level of lod.levels) level.object.position.set(-d.island.x, 0, -d.island.z);
-    group.add(lod);
+    district.add(minor);
+    district.traverse((o) => {
+      o.updateMatrix();
+      o.matrixAutoUpdate = false;
+    });
+    group.add(district);
   }
   const glows = dressing.districts.flatMap((d) => d.glow.map((g) => withSway(g, false, 1)));
   const lamps = glows.length ? mergeGeometries(glows, false) : null;
@@ -62,6 +77,18 @@ export function buildScenery(dressing: Dressing, lib: ModelLibrary, solid: Mater
   const merged = mergeGeometries(collision, false);
   if (!merged) throw new Error('mooblox: no solid scenery');
   return { group, collision: merged };
+}
+
+/** Shows districts within `distance` of (x, z), their detail and minor dressing within each one's ranges; every district when `all`. */
+export function cullDistricts(districts: readonly Object3D[], x: number, z: number, distance: number, all: boolean): void {
+  for (const d of districts) {
+    const u = d.userData as { x: number; z: number; radius: number; detail: number; minor: number };
+    const edge = Math.hypot(u.x - x, u.z - z) - u.radius;
+    const n = d.children.length;
+    d.visible = all || edge < distance;
+    d.children[n - 2]!.visible = edge < u.detail;
+    d.children[n - 1]!.visible = edge < u.minor;
+  }
 }
 
 /** Own-built coloured geometry prepared for the scenery material (things that move). */

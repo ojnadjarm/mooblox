@@ -1,30 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { DynamicResolution, pickTier, pixelRatio } from '../../src/perf/quality';
+import { DynamicResolution, lowerTier, pickTier, pixelRatio } from '../../src/perf/quality';
 
 describe('quality tiers', () => {
-  it('picks the starting tier', () => {
-    const base = { query: null, memoryGb: 8, cores: 8, coarse: false };
-    expect(pickTier(base)).toBe('high');
-    expect(pickTier({ ...base, coarse: true })).toBe('medium');
-    expect(pickTier({ ...base, memoryGb: 4 })).toBe('low');
-    expect(pickTier({ ...base, cores: 4 })).toBe('low');
-    expect(pickTier({ ...base, query: 'low' })).toBe('low');
-    expect(pickTier({ ...base, query: 'ultra' })).toBe('high');
+  const laptop = { query: null, memoryGb: 8, cores: 8, coarse: false, gpu: 'ANGLE (Intel, Vulkan 1.4 (Intel(R) Iris(R) Xe Graphics (ADL GT2)))' };
+
+  it('starts laptops medium, phones, tablets, Chromebooks and small devices low', () => {
+    expect(pickTier(laptop)).toBe('medium');
+    expect(pickTier({ ...laptop, gpu: '' })).toBe('medium');
+    expect(pickTier({ ...laptop, coarse: true })).toBe('low');
+    expect(pickTier({ ...laptop, memoryGb: 4 })).toBe('low');
+    expect(pickTier({ ...laptop, cores: 4 })).toBe('low');
+    expect(pickTier({ ...laptop, ua: 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) Chrome/120' })).toBe('low');
+    for (const gpu of ['Mali-G78', 'Adreno (TM) 740', 'PowerVR Rogue GE8320', 'Apple GPU', 'llvmpipe (LLVM 17.0.6, 256 bits)', 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)']) {
+      expect(pickTier({ ...laptop, gpu }), gpu).toBe('low');
+    }
   });
 
-  it('picks xhigh only for strong desktop GPUs, and ?quality= overrides it', () => {
-    const base = { query: null, memoryGb: 16, cores: 12, coarse: false };
+  it('starts strong desktop GPUs high, never xhigh unless asked', () => {
+    const desk = { query: null, memoryGb: 16, cores: 12, coarse: false };
     for (const gpu of ['ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0)', 'AMD Radeon RX 7800 XT', 'Apple M3 Max', 'ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics)']) {
-      expect(pickTier({ ...base, gpu }), gpu).toBe('xhigh');
+      expect(pickTier({ ...desk, gpu }), gpu).toBe('high');
     }
-    for (const gpu of ['ANGLE (Intel, Vulkan 1.4 (Intel(R) Iris(R) Xe Graphics (ADL GT2)))', 'Intel(R) UHD Graphics 620', 'Mali-G78', 'Adreno (TM) 740', 'llvmpipe (LLVM 17.0.6, 256 bits)', 'SwiftShader', 'Apple M2', '']) {
-      expect(pickTier({ ...base, gpu }), gpu).toBe('high');
-    }
-    const strong = { ...base, gpu: 'NVIDIA GeForce RTX 3080' };
-    expect(pickTier({ ...strong, coarse: true })).toBe('medium');
-    expect(pickTier({ ...strong, cores: 6 })).toBe('high');
-    expect(pickTier({ ...strong, query: 'high' })).toBe('high');
-    expect(pickTier({ ...base, gpu: 'Intel(R) Iris(R) Xe Graphics', query: 'xhigh' })).toBe('xhigh');
+    expect(pickTier({ ...desk, gpu: 'NVIDIA GeForce RTX 3080', cores: 6 })).toBe('medium');
+    expect(pickTier({ ...desk, gpu: 'Apple M2' })).toBe('medium');
+    expect(pickTier({ ...laptop, query: 'xhigh' })).toBe('xhigh');
+  });
+
+  it('lets ?quality= win over a stored step-down, and the stored tier over the probe', () => {
+    expect(pickTier({ ...laptop, stored: 'low' })).toBe('low');
+    expect(pickTier({ ...laptop, query: 'high', stored: 'low' })).toBe('high');
+    expect(pickTier({ ...laptop, query: 'ultra', stored: 'bogus' })).toBe('medium');
+  });
+
+  it('steps down one tier at a time', () => {
+    expect(lowerTier('xhigh')).toBe('high');
+    expect(lowerTier('medium')).toBe('low');
+    expect(lowerTier('low')).toBeNull();
   });
 
   it('clamps the pixel ratio per tier', () => {
@@ -37,25 +48,36 @@ describe('quality tiers', () => {
 });
 
 describe('DynamicResolution', () => {
-  it('drops scale at 20 fps, floors at 0.6, and recovers at 60 fps', () => {
-    const d = new DynamicResolution();
-    const feed = (ms: number, seconds: number) => {
-      for (let t = 0; t < seconds * 1000; t += ms) {
-        d.sample(ms);
-      }
-    };
-    feed(50, 1);
+  const feed = (d: DynamicResolution, ms: number, seconds: number) => {
+    for (let t = 0; t < seconds * 1000; t += ms) {
+      d.sample(ms);
+    }
+  };
+
+  it('drops the scale below 50 fps down to its floor, then reports starvation', () => {
+    const d = new DynamicResolution(0.6);
+    feed(d, 25, 1);
     expect(d.scale).toBeCloseTo(0.9);
-    feed(50, 10);
+    feed(d, 25, 3);
     expect(d.scale).toBeCloseTo(0.6);
-    feed(16, 3);
-    const recovered = d.scale;
-    expect(recovered).toBeGreaterThanOrEqual(0.7 - 1e-9);
-    feed(30, 2);
-    const steady = d.scale;
-    feed(30, 5);
-    expect(d.scale).toBe(steady);
-    feed(16, 30);
+    expect(d.starved).toBe(false);
+    feed(d, 25, 1);
+    expect(d.scale).toBeCloseTo(0.6);
+    expect(d.starved).toBe(true);
+  });
+
+  it('holds at 50-57 fps and recovers after three windows at vsync', () => {
+    const d = new DynamicResolution(0.5);
+    feed(d, 25, 3);
+    const low = d.scale;
+    feed(d, 18.5, 5);
+    expect(d.scale).toBe(low);
+    feed(d, 16.7, 2);
+    expect(d.scale).toBe(low);
+    feed(d, 16.7, 1.1);
+    expect(d.scale).toBeCloseTo(low + 0.05);
+    feed(d, 16.7, 60);
     expect(d.scale).toBe(1);
+    expect(d.starved).toBe(false);
   });
 });

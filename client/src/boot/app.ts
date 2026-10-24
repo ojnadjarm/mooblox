@@ -26,7 +26,7 @@ import type { WorldLayout } from '../world/layout';
 import { designWorld, type Dressing } from '../world/dressing';
 import { CAMPUS } from '../world/look';
 import type { ModelLibrary } from '../world/model-library';
-import { buildScenery, DETAIL_DISTANCE } from '../world/scenery';
+import { buildScenery, cullDistricts, DETAIL_DISTANCE, MINOR_DISTANCE } from '../world/scenery';
 import { MaterialKit } from '../world/material-kit';
 import { createPropRegistry } from '../world/props/catalog';
 import { PropsLayer } from '../world/props/props-layer';
@@ -79,9 +79,29 @@ export function bootTier(): QualityTier {
     const params = new URLSearchParams(location.search);
     const coarse = window.matchMedia('(pointer: coarse)').matches;
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    pickedTier = pickTier({ query: params.get('quality'), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse, gpu: gpuName() });
+    pickedTier = pickTier({ query: params.get('quality'), stored: storedTier(), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse, gpu: gpuName(), ua: navigator.userAgent });
   }
   return pickedTier;
+}
+
+const TIER_KEY = 'mooblox-tier';
+
+/** The tier an earlier visit stepped down to, if any. */
+function storedTier(): string | null {
+  try {
+    return localStorage.getItem(TIER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers a step-down for the next visit (ignored when storage is blocked). */
+function rememberTier(tier: QualityTier): void {
+  try {
+    localStorage.setItem(TIER_KEY, tier);
+  } catch {
+    // Private mode or blocked storage: the step-down lasts this visit only.
+  }
 }
 
 /** Builds the island scene for one course inside `root` (dressed with `models`) and starts the render loop. */
@@ -92,17 +112,24 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const settings = QUALITY[tier];
   const kit = new MaterialKit(settings.materials);
   const look = CAMPUS;
-  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: tier === 'high' || tier === 'xhigh', ao: tier === 'xhigh' }, look);
+  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: settings.post, ao: settings.ao }, look);
   const registry = createPropRegistry();
   const signs = new CanvasSignPainter(() => gate.invalidate());
   const policy = new IslandLayout(look.size);
   const dress = (w: WorldData, l: WorldLayout) => {
-    const group = new IslandBuilder(kit, look).build(w, l);
+    const group = new IslandBuilder(kit, look, tier === 'low').build(w, l);
     const d = designWorld(l, w.courseId, look.palette);
-    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier], { minor: tier !== 'low', rich: tier === 'xhigh' });
+    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier], {
+      minor: tier !== 'low',
+      rich: tier === 'xhigh',
+      detailShadows: tier === 'high' || tier === 'xhigh',
+      minorDistance: MINOR_DISTANCE[tier],
+    });
     group.add(scenery.group);
-    const water = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
-    return { group, dressing: d, solids: scenery.collision, water };
+    const material = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
+    const water = material.isShaderMaterial ? material : null;
+    const districts = scenery.group.children.filter((o) => o.name === 'district');
+    return { group, dressing: d, solids: scenery.collision, water, districts };
   };
   let current = world;
   let layout = policy.layout(world);
@@ -122,7 +149,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   let e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
 
-  const quality = new QualityManager(stage, tier);
+  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier);
   const overlay = params.get('perf') === '1' ? new PerfOverlay(root, stage.renderer, quality) : null;
   const steps = new Set<(dt: number) => void>();
   let clock = 0;
@@ -131,8 +158,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     clock += dt;
     const eye = stage.camera.position;
     props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
+    cullDistricts(built.districts, eye.x, eye.z, settings.districtDistance, overview);
     kit.time.value = clock;
-    built.water.uniforms['uTime']!.value = clock;
+    if (built.water) built.water.uniforms['uTime']!.value = clock;
     if (gates.frame(dt)) {
       gate.invalidate();
     }

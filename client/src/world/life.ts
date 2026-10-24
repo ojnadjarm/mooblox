@@ -70,7 +70,8 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
 
 function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly LifeSpot[], material: Material, teardown: (() => void)[]): Mover {
   const mesh = new InstancedMesh(geometry, material, spots.length);
-  mesh.castShadow = true;
+  // Water receives no shadow: only flags (over land) cast one.
+  mesh.castShadow = spots[0]?.kind === 'flag';
   mesh.frustumCulled = false;
   view.stage.add(mesh);
   teardown.push(() => {
@@ -113,7 +114,7 @@ function buoyGeometry(): BufferGeometry {
 function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teardown: (() => void)[]): Mover {
   const geometry = singleModel(lib, 'pirate/ship-small', 7);
   const mesh = new InstancedMesh(geometry, view.kit.scenery, sails.length);
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   mesh.frustumCulled = false;
   view.stage.add(mesh);
   teardown.push(() => {

@@ -1,5 +1,6 @@
 import { Box3, BufferAttribute, BufferGeometry, Color, Matrix4, Mesh, SRGBColorSpace, Vector2, type MeshStandardMaterial, type Texture } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 /** One CC0 model baked to a single vertex-coloured, non-indexed geometry standing on y = 0. */
 export interface BakedModel {
@@ -13,16 +14,18 @@ export class ModelLibrary {
   private readonly models = new Map<string, BakedModel>();
   private readonly pixels = new Map<Texture, { data: Uint8ClampedArray; w: number; h: number }>();
 
-  /** `hd` loads the bevelled `kit-hd/` variants (xhigh), falling back to `kit/` for models that have none. */
+  /** Loads `kit.glb` (one node per model, `tools/pack-kit.mjs`); `hd` loads the bevelled `kit-hd/` variants (xhigh) where there are some. */
   static async load(base: string, ids: readonly string[], hd = false): Promise<ModelLibrary> {
     const lib = new ModelLibrary();
-    const loader = new GLTFLoader();
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    const kit = (await loader.loadAsync(`${base}kit.glb`)).scene;
     await Promise.all(
       ids.map(async (id) => {
-        const gltf = hd
-          ? await loader.loadAsync(`${base}kit-hd/${id}.glb`).catch(() => loader.loadAsync(`${base}kit/${id}.glb`))
-          : await loader.loadAsync(`${base}kit/${id}.glb`);
-        lib.models.set(id, lib.bake(gltf.scene));
+        const bevelled = hd ? await loader.loadAsync(`${base}kit-hd/${id}.glb`).catch(() => null) : null;
+        const node = bevelled?.scene ?? kit.getObjectByName(id.replace('/', '__'));
+        if (!node) throw new Error(`mooblox: model ${id} is not in kit.glb`);
+        node.removeFromParent();
+        lib.models.set(id, lib.bake(node));
       }),
     );
     return lib;
@@ -43,7 +46,7 @@ export class ModelLibrary {
       const mesh = o as Mesh;
       if (!mesh.isMesh) return;
       const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as MeshStandardMaterial[];
-      const src = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+      const src = floats(mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone());
       src.applyMatrix4(mesh.matrixWorld as Matrix4);
       const pos = src.getAttribute('position');
       const uv = src.getAttribute('uv');
@@ -115,5 +118,18 @@ function mergeAll(parts: BufferGeometry[]): BufferGeometry {
   g.setAttribute('position', new BufferAttribute(pos, 3));
   g.setAttribute('color', new BufferAttribute(col, 3));
   g.computeVertexNormals();
+  return g;
+}
+
+/** Replaces quantized (meshopt) attributes with plain Float32 ones, so baked models merge with built geometry. */
+function floats(g: BufferGeometry): BufferGeometry {
+  for (const [name, attr] of Object.entries(g.attributes)) {
+    if (attr.array instanceof Float32Array && !('isInterleavedBufferAttribute' in attr)) continue;
+    const out = new Float32Array(attr.count * attr.itemSize);
+    for (let i = 0; i < attr.count; i++) {
+      for (let k = 0; k < attr.itemSize; k++) out[i * attr.itemSize + k] = attr.getComponent(i, k);
+    }
+    g.setAttribute(name, new BufferAttribute(out, attr.itemSize));
+  }
   return g;
 }

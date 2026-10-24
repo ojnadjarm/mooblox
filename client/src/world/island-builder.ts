@@ -19,7 +19,7 @@ import type { Circle, WorldLayout } from './layout';
 import { paint, type MaterialKit } from './material-kit';
 import { Palette, PurposeColor } from './palette';
 import { seededRandom } from './random';
-import { waterMaterial } from './water';
+import { bakedWaterGeometry, waterMaterial } from './water';
 
 /** World units per stud on baseplate tops. */
 export const STUD = 0.5;
@@ -38,6 +38,8 @@ export class IslandBuilder {
   constructor(
     private readonly kit: MaterialKit,
     private readonly look: Look,
+    /** Low tier: baked vertex-colour water instead of the per-pixel shader, coarser island rims. */
+    private readonly low = false,
   ) {
     this.p = look.palette;
   }
@@ -69,15 +71,19 @@ export class IslandBuilder {
     group.name = 'islands';
     group.add(this.mesh('land', this.land, this.kit.plastic, true));
     group.add(this.mesh('tops', this.tops, this.kit.studs, true));
-    const water = this.mesh('water', [this.water()], waterMaterial(this.look, [...layout.hubs, ...layout.zones]), false);
+    const circles = [...layout.hubs, ...layout.zones];
+    const water = this.low
+      ? this.mesh('water', [bakedWaterGeometry(this.look, circles, layout.extent, WATER_Y)], this.kit.glow, false)
+      : this.mesh('water', [this.water()], waterMaterial(this.look, circles), false);
     water.receiveShadow = false;
+    water.renderOrder = 1;
     group.add(water);
     group.add(this.mesh('clouds', this.clouds, this.kit.plastic, false));
     return group;
   }
 
   private island(c: Circle): void {
-    const seg = Math.max(32, Math.round(c.radius * 4));
+    const seg = Math.max(this.low ? 24 : 32, Math.round(c.radius * (this.low ? 1.5 : 4)));
     this.top(new CircleGeometry(c.radius, seg), this.p.grass, c.x, 0, c.z);
     this.add(this.land, new CylinderGeometry(c.radius, c.radius, 0.4, seg, 1, true), this.p.grassLight, c.x, -0.2, c.z);
     this.add(this.land, new CylinderGeometry(c.radius, c.radius * 0.93, 0.9, seg, 1, true), this.p.dirt, c.x, -0.85, c.z);

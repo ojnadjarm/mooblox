@@ -5,7 +5,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const base = new URL('../public/assets/kit/', import.meta.url).pathname;
+const base = new URL('../kit-src/', import.meta.url).pathname;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
 const out = {};
 for (const pack of readdirSync(base).sort()) {

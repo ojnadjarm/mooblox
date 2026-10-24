@@ -35,8 +35,9 @@ export class Stage {
   readonly camera = new PerspectiveCamera(55, 1, 0.1, 900);
   readonly sun: DirectionalLight;
   readonly hemi: HemisphereLight;
-  private readonly post: PostChain | null;
+  private post: PostChain | null;
   private readonly sunDir: { x: number; y: number; z: number };
+  private readonly vignetteStrength: number;
 
   constructor(
     readonly canvasHost: HTMLElement,
@@ -61,6 +62,8 @@ export class Stage {
     this.scene.fog = new Fog(look.fog.color, look.fog.near, look.fog.far);
     this.scene.add(this.hemi, this.sun, this.sun.target, skyDome(kit, look));
     this.post = options.post ? new PostChain(this.renderer, this.scene, this.camera, look, options.ao === true) : null;
+    this.vignetteStrength = look.post.vignette;
+    if (!this.post) vignette(this.renderer.domElement, look.post.vignette);
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(options.shadowMapSize, options.shadowMapSize);
@@ -102,6 +105,13 @@ export class Stage {
     this.post?.setSize(w, h, pixelRatio);
   }
 
+  /** Renders straight to the canvas from now on (a tier step-down); the grade's vignette moves to a CSS overlay. */
+  dropPost(): void {
+    if (!this.post) return;
+    this.post = null;
+    vignette(this.renderer.domElement, this.vignetteStrength);
+  }
+
   render(): void {
     this.renderer.info.reset();
     if (this.post) {
@@ -115,6 +125,21 @@ export class Stage {
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+/** The post grade's vignette as a free CSS overlay over the canvas (tiers without post). */
+function vignette(canvas: HTMLElement, strength: number): void {
+  if (strength <= 0 || canvas.parentElement?.querySelector('.mooblox-vignette')) return;
+  const v = document.createElement('div');
+  v.className = 'mooblox-vignette';
+  v.setAttribute('aria-hidden', 'true');
+  Object.assign(v.style, {
+    position: 'absolute',
+    inset: '0',
+    pointerEvents: 'none',
+    background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(20,10,0,${(strength * 0.9).toFixed(3)}) 100%)`,
+  });
+  canvas.after(v);
 }
 
 /** Unlit gradient dome, horizon to zenith. */
@@ -133,7 +158,8 @@ function skyDome(kit: MaterialKit, look: Look): Mesh {
   g.setAttribute('color', new BufferAttribute(colors, 3));
   const dome = new Mesh(g, kit.sky);
   dome.name = 'sky';
-  dome.renderOrder = -1;
+  // Drawn after every opaque part: depth test rejects the covered pixels before shading.
+  dome.renderOrder = 2;
   dome.frustumCulled = false;
   return dome;
 }
