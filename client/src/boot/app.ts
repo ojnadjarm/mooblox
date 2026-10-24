@@ -11,6 +11,7 @@ import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
 import type { WorldLayout } from '../world/layout';
 import { MaterialKit } from '../world/material-kit';
+import { TouchControls } from '../ui/touch-controls';
 import { Stage } from '../world/stage';
 
 /** The running world, handed to later wiring (player, UI) and to the dev page. */
@@ -90,7 +91,9 @@ export async function startPlayer(
   const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement);
   const spawn = new Vector3(view.layout.spawn.x, SPAWN_HEIGHT, view.layout.spawn.z);
   view.stopOverview();
-  const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), ...inputs]), camera);
+  const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
+  const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
   view.onFrame((dt) => {
     player.update(dt);
     view.stage.focusShadow(avatar.root.position.x, avatar.root.position.z, SHADOW_RADIUS);
