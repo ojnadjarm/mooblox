@@ -171,3 +171,17 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     [--random]`, `node tools/picker.mjs [dir]` (18 checks incl. 5 widths and 6x CPU fps), live `tools/moodle.mjs avatar` 6/6.
   - Numbers: 12 kids 12 draws / 3.6k tris, 20 kids 20 draws / 5.7k tris, ≤ 1.5k tris per kid (tested), preview 60 fps at
     400 px under 6x CPU throttle. vitest 29 files 166 tests, PHPUnit `character_test` 14 cases, mci quick 7 ok 0 red.
+- Gamification phase G2 (T1344-T1347), 2026-10-24, version 2026102409:
+  - Triggers: `db/hooks.php` `after_cm_completion_updated` (also fires on bulk updates, which skip the event) and
+    `db/events.php` (completion, user_graded, badge_awarded/revoked, course_completed) → `rewards\sync_queue::user()` →
+    deduped adhoc `task\sync_user` (courseid, userid). `rewards\course_switch::is_on()`: site `enabled`, site
+    `gamification` !== '0', course row `enabled` (no row / null = on); off → nothing queued.
+  - Cleanup: `course_deleted` / `user_deleted` → `rewards\cleanup` (unlocks outlive a deleted course);
+    `course_reset_ended` → adhoc `task\sync_course` (users with XP rows or completions). Nightly `task\reconcile`
+    (02:R): users in `user_lastaccess` within 7 days, `rewards\batch_sync` 200 per transaction. Class goals not yet (T1361).
+  - Privacy: ledger, xp, day, found in the course context, unlock in the user context, prefs `local_mooblox_avatar` +
+    `local_mooblox_look`; export per course under "MOOBLOX" (ledger with activity names). mprivacy ok.
+  - Backup: `backup/moodle2/{backup,restore}_local_mooblox_plugin.class.php`: settings always; with users found (keys
+    `gem:<cmid>`, `crystal:<sectionid>` remapped in `after_restore_course`, unmapped dropped) and days; ledger/XP rebuilt
+    by a queued `sync_course`.
+  - Tests: PHPUnit 69 (G2 adds sync_trigger 2, cleanup 3, privacy 2, backup 1), mci quick 7 ok 0 red.
