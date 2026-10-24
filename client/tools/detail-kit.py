@@ -3,7 +3,8 @@
 # Per object recipes (ART-BIBLE.md soft/crisp rules): wood tops split into planks with dark seams, crates and carts planked,
 # barrel staves seamed and the lid sunk in its rim, house doors in vertical boards, stall tables and sign boards in planks,
 # fence posts pointed, lamp posts with two collars, leaf clumps on broadleaf crowns and hedge tops, sunlit pine tiers,
-# moss pads and pebbles on rocks, blossom window boxes under house windows. Seams and sunk walls use a darker copy
+# moss pads and pebbles on rocks, blossom window boxes and shutter pairs at house windows, inner leaf fans on bushes, clumps on
+# planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks. Seams and sunk walls use a darker copy
 # of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
 import bpy, colorsys, math, os, sys
@@ -99,9 +100,9 @@ def paint(bm, faces, slot):
         f[flat] = 1
 
 
-def seams(bm, faces, size, slot, any_shape=False):
+def seams(bm, faces, size, slot, any_shape=False, short=False):
     """Insets each face by a seam, sinks it a little and paints the seam ring with the darker material slot."""
-    faces = [f for f in faces if f.is_valid and (any_shape or rect(f)) and min(e.calc_length() for e in f.edges) > 5 * WIDTH * size]
+    faces = [f for f in faces if f.is_valid and (any_shape or rect(f)) and (short or min(e.calc_length() for e in f.edges) > 5 * WIDTH * size)]
     if not faces:
         return
     res = bmesh.ops.inset_individual(bm, faces=faces, thickness=WIDTH * size, depth=-DEPTH * size, use_even_offset=True)
@@ -119,23 +120,27 @@ def boards(bm, region, d, n, size, slot):
     """Cuts a flat region into n boards across direction d, merges each board to one face and seams it (any outline)."""
     if not region or n < 2:
         return
+    ps = [v.co.dot(d) for f in region for v in f.verts]
+    lo, hi = min(ps), max(ps)
+    blocks(bm, region, [(d * (lo + (hi - lo) * k / n), d) for k in range(1, n)], size, slot)
+
+
+def blocks(bm, region, planes, size, slot, short=False):
+    """Cuts a flat region by planes (point, normal), merges each piece to one face and seams it (any outline)."""
     tag = bm.faces.layers.int.get('board')
     for f in bm.faces:
         f[tag] = 0
     for f in region:
         f[tag] = 1
     bmesh.ops.remove_doubles(bm, verts=list({v for f in region for v in f.verts}), dist=1e-5)
-    ps = [v.co.dot(d) for f in bm.faces if f[tag] for v in f.verts]
-    lo, hi = min(ps), max(ps)
-    cuts = [lo + (hi - lo) * k / n for k in range(1, n)]
-    for c in cuts:
+    for co, no in planes:
         faces = [f for f in bm.faces if f[tag]]
         geom = faces + list({e for f in faces for e in f.edges}) + list({v for f in faces for v in f.verts})
-        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=d * c, plane_no=d, dist=1e-6)
-    on_cut = lambda e: any(all(abs(v.co.dot(d) - c) < 1e-5 for v in e.verts) for c in cuts)
+        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=co, plane_no=no, dist=1e-6)
+    on_cut = lambda e: any(all(abs((v.co - co).dot(no)) < 1e-5 for v in e.verts) for co, no in planes)
     inner = [e for e in bm.edges if len(e.link_faces) == 2 and all(f[tag] for f in e.link_faces) and not on_cut(e)]
     bmesh.ops.dissolve_edges(bm, edges=inner, use_verts=True)
-    seams(bm, [f for f in bm.faces if f[tag]], size, slot, any_shape=True)
+    seams(bm, [f for f in bm.faces if f[tag]], size, slot, any_shape=True, short=short)
 
 
 def point(bm, faces, rise, slot):
@@ -211,7 +216,7 @@ def block(bm, lo_, hi_, n, mi, uv, luv):
             lo[uv].uv = luv
 
 
-def crown(bm, leaves, count, rel, mi, seed):
+def crown(bm, leaves, count, rel, mi, seed, uv=None, luv=None):
     """Leaf clusters bulging out of the upper crown, placed by casting at the crown from evenly spread directions."""
     if not leaves:
         return
@@ -226,7 +231,91 @@ def crown(bm, leaves, count, rel, mi, seed):
         d = Vector((math.cos(a) * math.sqrt(1 - z * z), math.sin(a) * math.sqrt(1 - z * z), z))
         hit = tree.ray_cast(c + d * reach * 2, -d)[0]
         if hit is not None:
-            dome(bm, hit - d * r * 0.25, d, r * (0.85 + 0.3 * ((k * 7) % 3) / 2), r * 0.55, mi, None, rot=k)
+            dome(bm, hit - d * r * 0.25, d, r * (0.85 + 0.3 * ((k * 7) % 3) / 2), r * 0.55, mi, uv, luv, rot=k)
+
+
+def coloured(mats, src, name, rgb):
+    """A plain copy of material src in a new linear colour (exported as its base colour factor); returns its slot."""
+    m = mats[src].copy()
+    m.name = name
+    next(n for n in m.node_tree.nodes if n.type == 'BSDF_PRINCIPLED').inputs['Base Color'].default_value = (*rgb, 1.0)
+    mats.append(m)
+    return len(mats) - 1
+
+
+def fan(bm, leaves, turns, mi):
+    """Inner leaf fans: copies of the blades turned and shrunk about the plant's foot, in the sunlit material (fuller, two-tone)."""
+    vs = list({v for f in leaves for v in f.verts})
+    kn = bm.loops.layers.float_vector.get('kn')
+    foot = Vector((sum(v.co.x for v in vs) / len(vs), sum(v.co.y for v in vs) / len(vs), min(v.co.z for v in vs)))
+    for k, (turn, scale) in enumerate(turns):
+        res = bmesh.ops.duplicate(bm, geom=leaves)
+        new = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+        m = Matrix.Translation(foot) @ Matrix.Rotation(turn, 4, 'Z') @ Matrix.Diagonal((scale, scale, scale * 1.08, 1)) @ Matrix.Translation(-foot)
+        bmesh.ops.transform(bm, matrix=m, verts=new)
+        rot = Matrix.Rotation(turn, 3, 'Z')
+        for f in [g for g in res['geom'] if isinstance(g, bmesh.types.BMFace)]:
+            f.material_index = mi
+            if kn is not None:
+                for lo in f.loops:
+                    lo[kn] = rot @ Vector(lo[kn])
+
+
+def ring_planes(c, n):
+    """n radial planes through c: 2n blocks round a ring."""
+    return [(c, Vector((-math.sin(math.pi * k / n), math.cos(math.pi * k / n), 0))) for k in range(n)]
+
+
+def components(faces):
+    """Edge-connected groups of faces."""
+    left, out = set(faces), []
+    while left:
+        stack, group = [left.pop()], []
+        while stack:
+            f = stack.pop()
+            group.append(f)
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g in left:
+                        left.remove(g)
+                        stack.append(g)
+        out.append(group)
+    return out
+
+
+def shutter_pair(bm, tree, g, wh, size, uv, luv):
+    """Crisp shutters both sides of a window frame (none when the wall cannot carry the pair), in the roof's green (repainted with it)."""
+    a0, a1, z0, z1 = g['box']
+    n, across, base = g['n'], g['across'], g['n'] * g['off']
+    tol = 0.004 * size
+
+    def offset(a, z):
+        h = tree.ray_cast(base + across * a + Vector((0, 0, z)) + n * size, -n)[0]
+        return None if h is None else n.dot(h)
+    zm, step = (z0 + z1) / 2, 0.02 * wh
+    zlo, zhi = z0 - 0.08 * wh, z1 + 0.08 * wh
+    pair = []
+    for side in (-1, 1):
+        edge = a0 if side < 0 else a1
+        seq = [offset(edge + side * j * step, zm) for j in range(60)]
+        if None in seq[:30]:
+            return 0
+        frame = max(seq[:30])
+        j = next((j for j in range(60) if seq[j] is not None and seq[j] > frame - tol), 60)
+        j = next((k for k in range(j, 60) if seq[k] is None or seq[k] < frame - tol), 60)
+        if j == 60 or seq[j] is None or frame - seq[j] > 0.5 * wh:
+            return 0
+        wall, near = seq[j], edge + side * j * step
+        sw = next((w for w in (0.5 * (a1 - a0), 0.4 * (a1 - a0), 0.3 * (a1 - a0)) if all(
+            (lambda o: o is not None and abs(o - wall) < tol)(offset(near + side * w, z)) for z in (zlo, zm, zhi))), None)
+        if sw is None or sw < 0.25 * wh:
+            return 0
+        pair.append((near, near + side * min(sw, 0.6 * wh), wall, frame))
+    for near, far, wall, frame in pair:
+        lo_ = across * min(near, far) + n * wall + Vector((0, 0, zlo))
+        hi_ = across * max(near, far) + n * (wall + 0.7 * (frame - wall)) + Vector((0, 0, zhi))
+        block(bm, lo_, hi_, n, 0, uv, luv)
+    return len(pair)
 
 
 def windows(bm, col, uv, top, size):
@@ -248,9 +337,10 @@ def windows(bm, col, uv, top, size):
         else:
             groups.append({'n': n, 'across': across, 'off': off, 'box': box})
     tree = BVHTree.FromBMesh(bm)
+    roof = next((f.loops[0][uv].uv.copy() for f in bm.faces if f.normal.z > 0.3 and (lambda c: c[1] > c[0] * 1.4 and c[1] > c[2] * 1.2)(col(f, uv))), None)
     pot = texel_uv(324, 260)
     blooms = [texel_uv(196, 132), texel_uv(68, 132), texel_uv(452, 132), texel_uv(196, 260)]
-    count = 0
+    count = shutters = 0
     for g in groups:
         a0, a1, z0, z1 = g['box']
         n, across, wh = g['n'], g['across'], g['box'][3] - g['box'][2]
@@ -275,8 +365,9 @@ def windows(bm, col, uv, top, size):
         for i in range(k):
             p = across * (mid - half + r * 0.9 + (2 * half - 1.8 * r) * i / max(1, k - 1)) + n * (w0 + out * 0.5) + Vector((0, 0, zt + r * 0.15))
             dome(bm, p - Vector((0, 0, r * 0.2)), Vector((0, 0, 1)), r * 1.05, r * 0.6, 0, uv, blooms[(i + count) % len(blooms)], sides=5, rot=i)
+        shutters += shutter_pair(bm, tree, g, wh, size, uv, roof) if roof else 0
         count += 1
-    print(f'  windows {count}')
+    print(f'  windows {count} shutters {shutters}')
 
 
 def rock(bm, size, mats, slot, seed):
@@ -343,6 +434,16 @@ def recipe(name):
         return 'hedge'
     if name.startswith('rock_'):
         return 'rock'
+    if name in ('plant_bushDetailed', 'plant_bushLarge', 'plant_bushSmall'):
+        return 'fan'
+    if name == 'planter':
+        return 'planter'
+    if name.startswith('pot_'):
+        return 'pot'
+    if name.startswith('flower_'):
+        return 'flower'
+    if name.startswith('fountain-round'):
+        return 'fountain'
     return None
 
 
@@ -475,6 +576,54 @@ def detail(o, kind):
                     dome(bm, hit - Vector((0, 0, 0.04 * w)), Vector((0, 0, 1)), 0.32 * w, 0.14 * w, green[0].material_index, uv, texel_uv(484, 264), rot=i)
     elif kind == 'rock':
         rock(bm, size, me.materials, slot, len(o.name))
+    elif kind == 'fan':
+        li = next((i for i, m in enumerate(me.materials) if m.name.startswith('grass')), 0)
+        me.materials.append(lighter(me.materials[li]))
+        sun = len(me.materials) - 1
+        leaves = [f for f in bm.faces if f.material_index == li]
+        fan(bm, leaves, [(0.55, 0.74)] if o.name.endswith('Detailed') else [(0.55, 0.8), (1.1, 0.58)], sun)
+    elif kind == 'planter':
+        greens = [f for f in bm.faces if (lambda c: c[1] > c[0] + 0.25 and c[1] > c[2] + 0.1)(col(f, uv))]
+        lit = [f for f in greens if f.normal.z > 0.9]
+        luv = lit[0].loops[0][uv].uv.copy() if lit else None
+        for k, shrub in enumerate(components(greens)):
+            crown(bm, shrub, 4, 0.42, shrub[0].material_index, k * 1.3, uv, luv)
+        rim = [f for f in bm.faces if f.normal.z > 0.9 and f.calc_center_median().z > 0.2 * top
+               and (lambda c: abs(c[0] - c[1]) < 0.08 and c[2] > c[0] + 0.03)(col(f, uv))]
+        d = max((Vector((1, 0, 0)), Vector((0, 1, 0))), key=lambda a: extent(rim, a)) if rim else None
+        boards(bm, rim, d, 4, size, slot)
+    elif kind == 'pot':
+        soil = [f for f in bm.faces if f.normal.z > 0.9 and me.materials[f.material_index].name.startswith('woodBarkDark')]
+        if soil:
+            vs = [v.co for f in soil for v in f.verts]
+            c = sum(vs, Vector()) / len(vs)
+            r = max(Vector((v.x - c.x, v.y - c.y)).length for v in vs)
+            leaf = coloured(me.materials, 0, 'leafs-pot', (0.09, 0.34, 0.06))
+            sun = coloured(me.materials, 0, 'leafs-pot-sun', (0.2, 0.5, 0.08))
+            up = Vector((0, 0, 1))
+            for k in range(5):
+                a = k * 2 * math.pi / 5 + 0.3
+                out = Vector((math.cos(a), math.sin(a), 0))
+                dome(bm, c + out * r * 0.5 - up * 0.01, out * 0.7 + up, r * 0.45, r * 0.65, leaf, uv, rot=k)
+            dome(bm, c, up, r * 0.55, r * 0.7, sun, uv)
+    elif kind == 'flower':
+        head = [f for f in bm.faces if f.normal.z > 0.9 and not me.materials[f.material_index].name.startswith('grass')]
+        if head:
+            zt = max(f.calc_center_median().z for f in head)
+            vs = [v.co for f in head if f.calc_center_median().z > zt - 0.005 for v in f.verts]
+            c = sum(vs, Vector()) / len(vs)
+            r = max(Vector((v.x - c.x, v.y - c.y)).length for v in vs)
+            yellow = any('Yellow' in m.name for m in me.materials)
+            heart = coloured(me.materials, 0, 'flower-heart', (0.42, 0.16, 0.03) if yellow else (1.0, 0.62, 0.05))
+            dome(bm, c - Vector((0, 0, r * 0.1)), Vector((0, 0, 1)), r * 0.6, r * 0.4, heart, uv, sides=5)
+    elif kind == 'fountain' and top > 0.05:
+        vs = [v.co for v in bm.verts]
+        c = Vector((sum(v.x for v in vs) / len(vs), sum(v.y for v in vs) / len(vs), 0))
+        far = [f for f in bm.faces if f.normal.z > 0.95 and f.calc_center_median().z > 0.5 * top
+               and all(Vector((v.co.x - c.x, v.co.y - c.y)).length > 0.3 * size for v in f.verts)]
+        rim = max(plane_groups(far, size), key=lambda g: sum(f.calc_area() for f in g), default=[])
+        if rim:
+            blocks(bm, rim, ring_planes(c, 8), size * 0.5, slot, short=True)
     bm.to_mesh(me)
     bm.free()
     if keep:
