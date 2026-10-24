@@ -11,12 +11,11 @@ const DRAG_SPEED = 0.008;
 const PITCH_MIN = 0.12;
 const PITCH_MAX = 0.85;
 const LOOK_AHEAD_RATE = 3;
-/** Collision: samples along the sight line, the clearance kept from walls, and how fast it eases back out. */
+/** Collision: samples along the sight line, the clearance kept from walls, how fast it eases back out, the closest it comes. */
 const PROBES = 10;
 const CLEARANCE = 0.3;
-const PULL_IN = 14;
 const EASE_OUT = 2.5;
-const NEAREST = 4.5;
+const NEAREST = 1.2;
 /** Seconds between sight-line probes (10 a second is plenty for an eased camera). */
 const PROBE_EVERY = 0.1;
 
@@ -84,10 +83,18 @@ export class FollowCamera {
       this.clear = this.clearDistance(this.distance);
     }
     const clear = this.clear;
-    this.reach = snap ? clear : damp(this.reach, clear, clear < this.reach ? PULL_IN : EASE_OUT, dt);
+    this.reach = snap || clear < this.reach ? clear : damp(this.reach, clear, EASE_OUT, dt);
     const d = this.reach;
-    this.goal.set(this.look.x + Math.sin(this.yaw) * d, target.y + this.pitch * d, this.look.z + Math.cos(this.yaw) * d);
-    this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp(-FOLLOW * dt));
+    // On the probed sight line, so a pulled-in camera rises towards the look point instead of dropping below what was probed.
+    const y = this.look.y + ((this.pitch * this.distance - LOOK_HEIGHT) * d) / this.distance;
+    this.goal.set(this.look.x + Math.sin(this.yaw) * d, y, this.look.z + Math.cos(this.yaw) * d);
+    const cam = this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp(-FOLLOW * dt));
+    // The eased camera lags its goal; it never trails further out than the clear reach.
+    const out = Math.hypot(cam.x - this.look.x, cam.z - this.look.z);
+    if (out > d) {
+      const k = d / out;
+      cam.set(this.look.x + (cam.x - this.look.x) * k, this.look.y + (cam.y - this.look.y) * k, this.look.z + (cam.z - this.look.z) * k);
+    }
     this.camera.lookAt(this.look);
   }
 
