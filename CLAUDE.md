@@ -256,6 +256,10 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     30/70 m, streaming keep/drop 125/150 m, rims 2.5 segments per metre; island land casts no shadow (all tiers).
   - `node tools/art-stills.mjs <dir> [--shapes demo,8x12] [--prefix after] [--video]`: overview 1366 + play 1366 (high),
     play 400 (low) JPEGs and a 12 s `walk.webm`. Round 1 gate 8 over budget (HEAD 17); medium draws/tris pass on all shapes.
+  - Round 2: `world/recipes.ts` (art data: treeClump, gardenBed, rockGroup, readingNook; tested) stamped by the designer
+    (`clusters`, `stamp`: one footprint per cluster, trunk-sized obstacles) instead of uniform scatter; raised 1 m lawns
+    (`lawnTerraces`, `raisedLawn`: faceted banded sides, stone steps, a cluster on top) where an island has room; shore rock
+    groups + one cove (sand bulge, reeds, lilies); path lamps in pairs. Gate 76 pass / 8 fail (same 8 as round 1).
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

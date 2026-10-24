@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import type { Landmark } from './landmarks/landmarks';
+import { bakeAo, bands, box, prism } from './landmarks/shapes';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
@@ -8,6 +9,7 @@ import FOOTPRINTS from './model-footprints.json';
 import { Occupancy } from './occupancy';
 import { SegmentIndex } from './segment-index';
 import { seededRandom } from './random';
+import { recipe, type Recipe, type RecipeKind } from './recipes';
 
 export const WATER_Y = -3;
 /** Height of the bridge deck's walking surface. */
@@ -148,7 +150,6 @@ const FLOWERS = ['nature/flower_redA', 'nature/flower_yellowA', 'nature/flower_p
 const TUFTS = ['nature/grass_large', 'nature/grass_leafs', 'nature/grass_leafsLarge', 'nature/plant_flatTall', 'nature/plant_flatShort', 'nature/plant_bushSmall'];
 const CROPS = ['nature/crop_pumpkin', 'nature/crop_carrot', 'nature/crop_melon', 'nature/crops_cornStageC', 'nature/crops_wheatStageB', 'nature/crops_leafsStageB'];
 const SHORE_ROCKS = ['nature/rock_largeA', 'nature/rock_largeC', 'nature/rock_smallA', 'nature/rock_smallC'];
-/** Cheerful repaint colours for house roofs, playground kit and awnings. */
 /** Roof colours round the hub (teal, coral, sunflower). */
 const HUB_ROOFS = [0xf07a5f, 0x2fa39a, 0xf6c445];
 const ROCKS = ['nature/rock_largeA', 'nature/rock_largeB', 'nature/rock_largeC', 'nature/rock_tallA', 'nature/rock_tallB'];
@@ -572,12 +573,12 @@ class Designer {
       if (len < LAMP_STEP) continue;
       const nx = (s.bz - s.az) / len;
       const nz = -(s.bx - s.ax) / len;
-      for (let t = 2.5, k = 0; t < len - 1; t += LAMP_STEP, k++) {
-        const side = k % 2 ? 1.7 : -1.7;
-        const x = s.ax + ((s.bx - s.ax) * t) / len + nx * side;
-        const zz = s.az + ((s.bz - s.az) * t) / len + nz * side;
-        if (this.onPlot(x, zz, 0.8)) continue;
-        this.lamp(x, zz, 2.6);
+      for (let t = 2.5; t < len - 1; t += LAMP_STEP * 2) {
+        for (const side of [-1.7, 1.7]) {
+          const x = s.ax + ((s.bx - s.ax) * t) / len + nx * side;
+          const zz = s.az + ((s.bz - s.az) * t) / len + nz * side;
+          if (!this.onPlot(x, zz, 0.8)) this.lamp(x, zz, 2.6);
+        }
       }
     }
   }
@@ -587,17 +588,89 @@ class Designer {
     this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, x, h * 0.875, z, 0));
   }
 
-  /** Trees, bushes, flower beds and rocks over an island, as many as its area holds. */
+  /** Curated clusters over an island (art bible section 6): raised lawns, tree clumps, beds, rock groups, nooks; calm lawn between. */
   private fillIsland(c: Circle, inner: number): void {
     const k = (c.radius * c.radius) / HUB_AREA;
-    this.fill(c, inner, Math.round(18 * k), 3.2, 1.4, (x, z, s) => this.tree(x, z, s));
-    this.fill(c, inner, Math.round(40 * k), 1.2, 0.8, (x, z) => this.bush(x, z));
-    this.fill(c, inner, Math.round(30 * k), 1, 0.6, (x, z) => this.flowerBed(x, z));
-    this.fill(c, inner, Math.round(10 * k), 1.4, 0.8, (x, z) => this.model(this.pick(ROCKS), x, 0, z, this.random() * 6, 0.6 + this.random() * 0.6, { detail: true, tint: ROCK_TINT }));
-    this.fill(c, inner, Math.round(70 * k), 0.5, 0.2, (x, z) => this.model(this.pick(TUFTS), x, 0, z, this.random() * 6, 0.35 + this.random() * 0.3, { sway: true, detail: true, minor: true, tint: LEAF_TINT }));
-    this.fill(c, inner, Math.round(90 * k), 0.4, 0.1, (x, z) => this.model(this.pick(this.random() < 0.6 ? TUFTS : FLOWERS), x, 0, z, this.random() * 6, 0.3 + this.random() * 0.25, { sway: true, detail: true, rich: true }));
-    this.groundPatches(c, Math.round(16 * k));
+    this.lawnTerraces(c, inner, k < 1.3 ? 1 : 2);
+    this.clusters(c, inner, 'treeClump', Math.max(2, Math.round(5 * k)));
+    this.clusters(c, inner, 'gardenBed', Math.max(1, Math.round(3 * k)));
+    this.clusters(c, inner, 'rockGroup', Math.max(1, Math.round(2.5 * k)));
+    this.clusters(c, inner, 'readingNook', Math.max(1, Math.round(1.5 * k)));
+    this.fill(c, Math.max(inner, c.radius * 0.7), Math.round(5 * k), 3.2, 1.4, (x, z, s) => this.tree(x, z, s));
     this.pets(c);
+  }
+
+  /** Up to `count` clusters of one recipe on free lawn, each facing the island centre. */
+  private clusters(c: Circle, inner: number, kind: RecipeKind, count: number): void {
+    const outer = c.radius - 2.4;
+    for (let i = 0, placed = 0; i < count * 15 && placed < count; i++) {
+      const rec = recipe(kind, this.random);
+      const a = this.random() * 2 * Math.PI;
+      const r = Math.sqrt(inner * inner + this.random() * (outer * outer - inner * inner));
+      const x = c.x + Math.cos(a) * r;
+      const z = c.z + Math.sin(a) * r;
+      if (!this.free(x, z, 2 * rec.radius - 2, 0.2)) continue;
+      this.stamp(rec, x, 0, z, Math.atan2(c.x - x, c.z - z), true);
+      placed++;
+    }
+  }
+
+  /** Stamps a recipe at (x, y, z) facing `face`: its grounding patch and items; the cluster claims one footprint, its solids trunk-sized obstacles. */
+  private stamp(rec: Recipe, x: number, y: number, z: number, face: number, patch: boolean): void {
+    const cs = Math.cos(face);
+    const sn = Math.sin(face);
+    if (patch && rec.patch) {
+      this.terrain(new CylinderGeometry(rec.patch.r, rec.patch.r, 0.02, 10).scale(1.25, 1, 1), rec.patch.colour, x, y + 0.006, z, face, false, true);
+      for (let i = 0; i < 5; i++) {
+        const a = this.random() * 2 * Math.PI;
+        this.model(this.pick(TUFTS), x + Math.cos(a) * rec.patch.r * 1.1, y, z + Math.sin(a) * rec.patch.r * 1.1, this.random() * 6, 0.35 + this.random() * 0.2, { sway: true, detail: true, rich: true, tint: LEAF_TINT });
+      }
+    }
+    for (const it of rec.items) {
+      const ix = x + it.dx * cs + it.dz * sn;
+      const iz = z - it.dx * sn + it.dz * cs;
+      if (it.solid && y < 1) {
+        const r = Math.min(0.5, this.reach(it.id, it.height));
+        if (this.occ.hits(ix, iz, r)) continue;
+        this.occ.add(ix, iz, r);
+        this.obstacles.push({ x: ix, z: iz, r });
+      }
+      this.model(it.id, ix, y, iz, it.yaw === undefined ? this.random() * 6 : face + it.yaw, it.height, { ...it, ground: true });
+      if (it.light) this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, ix, y + it.height * 0.875, iz, 0));
+    }
+    this.reserve(x, z, rec.radius);
+  }
+
+  /** Raised lawns about 1 m high (art bible section 4), each with stone steps towards the centre and a cluster on top. */
+  private lawnTerraces(c: Circle, inner: number, count: number): void {
+    const outer = c.radius - 5;
+    for (let i = 0, placed = 0; i < count * 40 && placed < count && outer > inner; i++) {
+      const r = 3 + this.random() * 0.8;
+      const a = this.random() * 2 * Math.PI;
+      const d = Math.sqrt(inner * inner + this.random() * (outer * outer - inner * inner));
+      const x = c.x + Math.cos(a) * d;
+      const z = c.z + Math.sin(a) * d;
+      if (!this.free(x, z, 2 * r + 1.2, 0.2)) continue;
+      const h = 1 + this.random() * 0.25;
+      const face = Math.atan2(c.x - x, c.z - z);
+      this.raisedLawn(x, z, r, h, face);
+      this.stamp(recipe(this.pick(['readingNook', 'gardenBed', 'rockGroup'] as const), this.random), x, h, z, face + Math.PI, false);
+      placed++;
+    }
+  }
+
+  /** A faceted lawn platform with banded cliff sides and a short stone stair facing `face`. */
+  private raisedLawn(x: number, z: number, r: number, h: number, face: number): void {
+    this.reserve(x, z, r + 1.4);
+    this.obstacles.push({ x, z, r: r + 0.35 });
+    const side = bands(prism(r, r + 0.35, h, 11, this.p.grass, 0, 0, 0, false, 2), [[h * 0.45, this.p.cliffLow], [h - 0.02, this.p.cliffHigh]]);
+    this.district.terrain.push({ geometry: bakeAo(side, 0, 0.45, 0.3).rotateY(this.random() * 6).translate(x, 0, z), solid: true, detail: false });
+    const n = Math.ceil(h / 0.25) - 1;
+    for (let k = 1; k <= n; k++) {
+      const depth = 0.45 * (n - k + 1) + 0.3;
+      const step = box(1.8, (h * k) / (n + 1), depth, k % 2 ? this.p.trim : this.p.trimShade, 0, 0, r - 0.3 + depth / 2);
+      this.district.terrain.push({ geometry: step.rotateY(face).translate(x, 0, z), solid: true, detail: false });
+    }
   }
 
   private fill(c: Circle, inner: number, tries: number, gap: number, clearPath: number, make: (x: number, z: number, s: number) => void): void {
@@ -617,19 +690,6 @@ class Designer {
   private tree(x: number, z: number, s: number): void {
     const [id, h] = this.pick(TREES);
     this.model(id, x, 0, z, this.random() * 6, h * (0.8 + s * 0.3), { sway: true, solid: true, ...(id.startsWith('nature/') ? { tint: LEAF_TINT } : {}) });
-  }
-
-  private bush(x: number, z: number): void {
-    const [id, h] = this.pick(BUSHES);
-    this.model(id, x, 0, z, this.random() * 6, h * (0.8 + this.random() * 0.5), { sway: true, detail: true, ...(id.startsWith('nature/plant') ? { tint: LEAF_TINT } : {}) });
-  }
-
-  private flowerBed(x: number, z: number): void {
-    const id = this.pick(FLOWERS);
-    for (let i = 0; i < 5; i++) {
-      this.model(i === 2 ? this.pick(FLOWERS) : id, x + (this.random() - 0.5) * 1.2, 0, z + (this.random() - 0.5) * 1.2, this.random() * 6, 0.45 + this.random() * 0.2, { sway: true, detail: true, ...(i > 2 ? { minor: true } : {}) });
-    }
-    if (this.random() < 0.3) this.critters.push({ kind: 'butterfly', x, y: 0.9, z, r: 1.4 });
   }
 
   private addPath(s: Segment): void {
@@ -858,42 +918,17 @@ class Designer {
     return true;
   }
 
-  /** Flat lighter, darker and meadow patches so no large plain lawn remains. */
-  private groundPatches(c: Circle, count: number): void {
-    const colours = [this.p.grassLight, 0x6aae4c, 0x9ccc5c, 0x88c46a, 0xb5d77a];
-    for (let i = 0; i < count; i++) {
-      const a = this.random() * 2 * Math.PI;
-      const r = Math.sqrt(this.random()) * (c.radius - 2.5);
-      const x = c.x + Math.cos(a) * r;
-      const z = c.z + Math.sin(a) * r;
-      if (this.onPlot(x, z, 2.5)) continue;
-      const size = 1.2 + this.random() * 2.2;
-      const g = new CylinderGeometry(size, size, 0.02, 9);
-      g.scale(1 + this.random() * 0.7, 1, 1);
-      this.terrain(g, this.pick(colours), x, 0.004 + (i % 4) * 0.002, z, this.random() * 6, false, true);
-    }
-  }
-
-  /** Rocks, reeds and lily pads along the waterline, ducks off the shore, a buoy or two. */
+  /** Shore dressing in groups (art bible section 6): rock groups and one sheltered reed-and-lily cove on a sand crescent; a duck and a buoy offshore. */
   private shore(c: Circle): void {
-    const n = Math.round((2 * Math.PI * c.radius) / 2.4);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * 2 * Math.PI + this.random() * 0.1;
-      const kind = this.random();
-      const out = c.radius + 0.4 + this.random() * 1.2;
-      const x = c.x + Math.cos(a) * out;
-      const z = c.z + Math.sin(a) * out;
-      if (this.nearBridge(x, z, DECK_HALF + 2.5) || this.occ.hits(x, z, 0.6)) continue;
-      if (kind < 0.45) this.model(this.pick(SHORE_ROCKS), x, WATER_Y - 0.25, z, this.random() * 6, 0.6 + this.random() * 0.7, { detail: true, tint: ROCK_TINT });
-      else if (kind < 0.8) {
-        for (let k = 0; k < 3; k++) {
-          this.model('nature/grass_leafsLarge', x + (this.random() - 0.5), WATER_Y - 0.05, z + (this.random() - 0.5), this.random() * 6, 0.9 + this.random() * 0.4, { sway: true, detail: true, minor: true, tint: 0x9bc46c });
-        }
-      } else {
-        const lx = c.x + Math.cos(a) * (out + 1.5);
-        const lz = c.z + Math.sin(a) * (out + 1.5);
-        this.model(this.random() < 0.5 ? 'nature/lily_large' : 'nature/lily_small', lx, WATER_Y + 0.03, lz, this.random() * 6, 0, { width: 0.9, detail: true, minor: true });
-      }
+    const groups = 2 + Math.floor(this.random() * 3);
+    const start = this.random() * 2 * Math.PI;
+    for (let g = 0; g <= groups; g++) {
+      const a = start + (g / (groups + 1)) * 2 * Math.PI + (this.random() - 0.5) * 0.4;
+      const x = c.x + Math.cos(a) * (c.radius + 1);
+      const z = c.z + Math.sin(a) * (c.radius + 1);
+      if (this.nearBridge(x, z, DECK_HALF + (g === groups ? 6 : 3)) || this.occ.hits(x, z, 0.8)) continue;
+      if (g === groups) this.cove(c, a);
+      else this.shoreRocks(c, a);
     }
     for (let tries = 0; tries < 12; tries++) {
       const a = this.random() * 2 * Math.PI;
@@ -912,6 +947,36 @@ class Designer {
       this.life.push({ kind: 'buoy', id: 'buoy', x, y: WATER_Y, z, yaw: 0, height: 1 });
       this.reserve(x, z, 1);
       break;
+    }
+  }
+
+  /** Three or four rocks in a short arc at the waterline, the biggest in the middle. */
+  private shoreRocks(c: Circle, a: number): void {
+    const n = 3 + Math.floor(this.random() * 2);
+    for (let k = 0; k < n; k++) {
+      const t = k - (n - 1) / 2;
+      const aa = a + (t * 1.5) / c.radius;
+      const out = c.radius + 0.5 + this.random() * 0.8;
+      const big = Math.abs(t) < 0.6;
+      this.model(this.pick(big ? ROCKS : SHORE_ROCKS), c.x + Math.cos(aa) * out, WATER_Y - 0.25, c.z + Math.sin(aa) * out, this.random() * 6, big ? 1.4 + this.random() * 0.4 : 0.6 + this.random() * 0.4, { detail: true, tint: ROCK_TINT });
+    }
+  }
+
+  /** A sand crescent at the waterline with reeds along it and lily pads off it. */
+  private cove(c: Circle, a: number): void {
+    const half = 4 / c.radius;
+    // CylinderGeometry measures theta from +z towards +x, so the arc round angle `a` (from +x) starts at pi/2 - a - half.
+    const sand = new CylinderGeometry(c.radius + 0.9, c.radius + 3, 0.3, 14, 1, false, Math.PI / 2 - a - half, 2 * half);
+    this.terrain(sand, this.p.sand, c.x, WATER_Y + 0.12, c.z, 0, false, false);
+    for (let k = 0; k < 6; k++) {
+      const aa = a + (k / 5 - 0.5) * half * 1.6;
+      const out = c.radius + 1.6 + this.random() * 1.2;
+      this.model('nature/grass_large', c.x + Math.cos(aa) * out, WATER_Y + 0.2, c.z + Math.sin(aa) * out, this.random() * 6, 0.7 + this.random() * 0.3, { sway: true, detail: true, minor: true, tint: 0x9bc46c });
+    }
+    for (let k = 0; k < 4; k++) {
+      const aa = a + (this.random() - 0.5) * half * 1.4;
+      const out = c.radius + 4.2 + this.random() * 1.2;
+      this.model(k % 2 ? 'nature/lily_large' : 'nature/lily_small', c.x + Math.cos(aa) * out, WATER_Y + 0.03, c.z + Math.sin(aa) * out, this.random() * 6, 0, { width: 0.9, detail: true, minor: true });
     }
   }
 
