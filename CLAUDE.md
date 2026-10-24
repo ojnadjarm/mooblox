@@ -135,3 +135,21 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     - Numbers (1366, Iris Xe headless, `~/drop/T1309/numbers.json`): demo high 72 draws, 131k visible tris,
       30 programs, 47-50 fps; low 60 fps on all 4 shapes; xhigh demo 135-299 draws, 36 programs, 20-29 fps on
       this laptop. vitest 27 files 150 tests; walk 41/44, open 13/13, bump 8/8, live gates 8/8. Bundle 240 KB gz.
+- Gamification phase G1 (T1338-T1343), 2026-10-24, version 2026102407 (plan: `~/agent-work/research/2026-10-24/T1337/PLAN.md`):
+  - `ARCHITECTURE.md` §Rewards: 7 tables, 9 `classes/rewards/` classes, data flow, SOLID, motivation rules (gentle
+    learning weeks replace "no streaks"); kids' safety now lists the 5 user tables and `local_mooblox_look`.
+  - `db/install.xml` + `db/upgrade.php`: `local_mooblox_course|ledger|xp|day|unlock|found|goal` (upgrade from 2026102406
+    checked with `mfixture with` + `mupgrade` + `admin/cli/check_database_schema.php`).
+  - `rewards\catalog` (12 hats, 9 outfits, 6 pets, 3 trophy styles; `level_reward()`: a pet every 5 levels, else a hat or
+    outfit, crc32-seeded by course + level from the not-owned pool) mirrored by `client/src/rewards/catalog.ts`
+    (art key + LICENSES.csv row; `test/rewards/catalog.test.ts` compares both lists). Art: Kenney Cube Pets +
+    Mini Characters (CC0) via `node tools/intake-cosmetics.mjs ../.research/assets-raw` (unzip `kenney-cube-pets.zip`
+    and `kenney-mini-characters.zip` there first) → `public/assets/cosmetics/{pets,head}.glb` (227 KB); 10 hats and
+    3 pedestals are box-built (row `built:boxes`), outfits are palettes on the Kenney skin.
+  - `rewards\facts` (value object), `xp_rules` (pure; auto 10, view 5, manual 3 or 0, pass +10, grade 50/80/100 %
+    +5/+10/+15 as one band row, badge 25, course 50; `version()` hash), `level_curve` (25·n·(n+1)),
+    `fact_source` + `moodle_fact_source` (4 queries with warm modinfo; hidden grades skipped; course badges only),
+    `reconciler::sync()` (one transaction: ledger diff, cache with peaklevel, day rows in the user's timezone, one
+    unlock per new peak level; returns the change count, 0 on a re-run).
+  - Tests: PHPUnit 47 (rewards 20: 15-set provider, fact source on a generated course, reconciler idempotence and
+    untick), vitest 29 files 166 tests, mci quick 7 ok 0 red. Nothing wired to events or the client yet (T1344+).
