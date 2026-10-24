@@ -1,4 +1,4 @@
-import { Box3, Fog, Group, Vector3, type Mesh, type Object3D, type ShaderMaterial } from 'three';
+import { Box3, Fog, Group, Mesh, Vector3, type Object3D, type ShaderMaterial } from 'three';
 import type { Activity, WorldData } from '../domain/types';
 import { ActivityInteraction } from '../interaction/activity-interaction';
 import type { OpenerRegistry } from '../interaction/opener';
@@ -24,11 +24,16 @@ import { structureKey, shiftFor } from '../world/rebuild';
 import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
 import type { Plot, WorldLayout } from '../world/layout';
-import { designWorld, type Dressing } from '../world/dressing';
+import { DECK_Y, designWorld, type Dressing } from '../world/dressing';
 import { CAMPUS } from '../world/look';
 import type { ModelLibrary } from '../world/model-library';
 import { buildGlow, cullDistricts, DETAIL_DISTANCE, DistrictBuild, MINOR_DISTANCE } from '../world/scenery';
 import { DistrictStreamer } from '../world/district-streamer';
+import { Haze, installHaze, type HazeBand } from '../world/haze';
+import { islandGraph, IslandStreamer } from '../world/island-streamer';
+import { FADE_SLOTS, setFades, withFade } from '../world/island-fade';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { deckGeometry, farMode, groundGeometry, Impostors, Silhouettes, silhouetteGeometry, type FarMode, type FarView } from '../world/far-view';
 import { CompositeCollider, type ColliderPart } from '../player/composite-collider';
 import { MaterialKit } from '../world/material-kit';
 import { createPropRegistry } from '../world/props/catalog';
@@ -72,6 +77,14 @@ export interface WorldView {
   onRebuild(listener: RebuildListener): () => void;
   /** Hands the camera from the overview to the caller. */
   stopOverview(): void;
+  /** The point the island streamer and the haze follow (the player); the camera until set. */
+  follow(target: { readonly x: number; readonly z: number }): void;
+  /** How the islands past the live one are shown (`?far=`). */
+  readonly far: FarMode;
+  /** Index (hubs, then zones) of the island the player is on. */
+  readonly island: number;
+  /** Whether a point can be seen through the haze (always in the overview): life and effects skip the rest. */
+  sees(x: number, z: number): boolean;
   /** Adds a per-frame step that runs before the render; returns its remover. */
   onFrame(step: (dt: number) => void): () => void;
   /** A burst of gold sparkles at a point (pick-ups, completions). */
@@ -117,7 +130,14 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const params = new URLSearchParams(location.search);
   const tier = bootTier();
   const settings = QUALITY[tier];
+  installHaze();
   const kit = new MaterialKit(settings.materials);
+  withFade(kit.scenery, false);
+  withFade(kit.sceneryInstanced, false);
+  const far = farMode(params.get('far'));
+  // Fakes (silhouettes, bridge decks) hide where a real island draws: plastic with the inverted island fade.
+  const fake = kit.plastic.clone();
+  withFade(fake, true);
   const look = CAMPUS;
   const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: settings.post, ao: settings.ao }, look);
   const registry = createPropRegistry();
@@ -134,12 +154,13 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     const builds = d.districts.map((district) => new DistrictBuild(district, models, kit.scenery, DETAIL_DISTANCE[tier], level, (g) => new BvhCollider(g)));
     for (const b of builds) scenery.add(b.group);
     const glow = buildGlow(d, kit.glow);
-    if (glow) scenery.add(glow);
+    scenery.add(glow);
     group.add(scenery);
     const material = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
     const water = material.isShaderMaterial ? material : null;
-    const ground = group.children.filter((o) => o.name === 'land' || o.name === 'tops');
-    const islandsPart = part(BvhCollider.fromMeshes(ground), ground);
+    const landMeshes = group.children.filter((o) => o.name === 'land' || o.name === 'tops');
+    const islandsPart = part(BvhCollider.fromMeshes(landMeshes), landMeshes);
+    const landParts = group.getObjectByName('island-land')!.children;
     const units = builds.map((b) => ({
       x: b.district.island.x,
       z: b.district.island.z,
@@ -152,7 +173,42 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       finish: () => b.finish(),
       unload: () => b.unload(),
     }));
-    const streamer = new DistrictStreamer(units, STREAM[tier]);
+    const graph = islandGraph(l);
+    const islandStream = new IslandStreamer(graph.islands, graph.bridges, { ...ISLAND, neighbours: far === 'full' });
+    const streamer = new DistrictStreamer(units, { sliceMs: STREAM[tier].sliceMs, keep: ISLAND.preload, drop: ISLAND.preload + 10 }, undefined, islandStream.metric);
+    const landmarkOf = (c: { x: number; z: number; radius: number }) =>
+      d.landmarks.find((m) => Math.hypot(m.x - c.x, m.z - c.z) < c.radius) ?? null;
+    let farView: FarView | null = null;
+    if (far === 'silhouette') {
+      farView = new Silhouettes(fake, (i) => {
+        const lm = landmarkOf(graph.islands[i]!);
+        return silhouetteGeometry(d.districts[i]!, models, lm ? { ...lm, colour: look.palette.trim, cap: LANDMARK_CAP } : null);
+      });
+    } else if (far === 'impostor') {
+      farView = new Impostors(graph.islands, {
+        renderer: stage.renderer,
+        scene: stage.scene,
+        districts: builds.map((b) => b.group),
+        build: (i) => builds[i]!.step(),
+        release: (i) => {
+          if (islandStream.metric(units[i]!, i, 0, 0) === Infinity) builds[i]!.unload();
+        },
+        keep: [group, scenery],
+      }, l.spawn);
+    }
+    if (farView) group.add(farView.mesh);
+    const decks = deckGeometry(d.bridges, look.palette.wood, look.palette.woodDark, DECK_Y);
+    const discs = groundGeometry(graph.islands, look.palette.grass, look.palette.dirt);
+    const ground = far === 'full' ? null : mergeGeometries([decks, discs].filter((g): g is NonNullable<typeof g> => g !== null), false);
+    let farGround: Mesh | null = null;
+    if (ground) {
+      const m = new Mesh(ground, fake);
+      farGround = m;
+      m.name = 'far-ground';
+      m.matrixAutoUpdate = false;
+      m.receiveShadow = true;
+      group.add(m);
+    }
     const solids = (): void => {
       const parts: ColliderPart[] = [islandsPart];
       for (const b of builds) {
@@ -160,12 +216,13 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       }
       collider.set(parts);
     };
-    return { group, dressing: d, water, districts: builds.map((b) => b.group), builds, streamer, solids };
+    return { group, dressing: d, water, districts: builds.map((b) => b.group), builds, streamer, solids, islands: islandStream, farView, alpha: new Float32Array(builds.length), landMeshes, landParts, farGround, propIsland: propIslands(l), glows: glow.children };
   };
   let current = world;
   let layout = policy.layout(world);
   let built = dress(world, layout);
-  built.streamer.buildNear(layout.spawn.x, layout.spawn.z, FIRST_PLAYABLE);
+  built.islands.update(layout.spawn.x, layout.spawn.z);
+  built.streamer.finishWanted(layout.spawn.x, layout.spawn.z);
   built.solids();
   let islands = built.group;
   let props = new PropsLayer(registry, { kit, signs }).build(world, layout);
@@ -178,6 +235,14 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   stage.add(gates.group);
   const rebuilt = new Set<RebuildListener>();
   let overview = true;
+  let focus: { readonly x: number; readonly z: number } | null = null;
+  const haze = new Haze(stage.scene.fog as Fog, BAND[far]);
+  let propList = props.all;
+  let wasOverview = true;
+  const fades: { x: number; z: number; radius: number; alpha: number }[] = [];
+  const ring: number[] = [];
+  let lastX = 0;
+  let lastZ = 0;
 
   let e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
@@ -194,17 +259,104 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     sparkles.update(dt);
     const eye = stage.camera.position;
     props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
-    if (built.streamer.pump(eye.x, eye.z, overview)) {
+    const f = focus ?? eye;
+    if (islandFrame(f.x, f.z, dt)) gate.invalidate();
+    if (built.streamer.pump(f.x, f.z, overview)) {
       built.solids();
       gate.invalidate();
     }
     cullDistricts(built.districts, eye.x, eye.z, settings.districtDistance, overview, settings.sceneryTris);
+    fadeIslands(dt);
+    if (!overview) cullToHaze();
     kit.time.value = clock;
     if (built.water) built.water.uniforms['uTime']!.value = clock;
     if (gates.frame(dt)) {
       gate.invalidate();
     }
   });
+  /** Current island, haze target and the far ring; returns true while something still moves. */
+  const islandFrame = (x: number, z: number, dt: number): boolean => {
+    const s = built.islands;
+    if (overview) {
+      haze.band = { near: e * 0.6, far: e * 2.2 };
+      haze.target(0, 0, e, true);
+      wasOverview = true;
+      if (built.farView) built.farView.mesh.visible = false;
+      return haze.update(dt);
+    }
+    const changed = s.update(x, z);
+    const step = Math.hypot(x - lastX, z - lastZ);
+    lastX = x;
+    lastZ = z;
+    // Walking in, the island finishes streaming under the haze and the fade; a teleport gets it at once.
+    const jumped = wasOverview || (changed && step > TELEPORT);
+    if (jumped) {
+      // A teleport or the first frame after the overview: no glide, the island is there at once.
+      built.streamer.finishWanted(x, z);
+      built.solids();
+      built.alpha.fill(0);
+      built.alpha[s.current] = 1;
+    }
+    haze.band = BAND[far];
+    const here = s.islands[s.current]!;
+    const cross = s.crossing(x, z);
+    if (cross) {
+      const there = s.islands[cross.across]!;
+      const t = cross.t;
+      haze.target(here.x + (there.x - here.x) * t, here.z + (there.z - here.z) * t, here.radius + (there.radius - here.radius) * t, jumped);
+    } else {
+      haze.target(here.x, here.z, here.radius, jumped);
+    }
+    wasOverview = false;
+    const moving = haze.update(dt);
+    const view = built.farView;
+    if (view) {
+      ring.length = 0;
+      const hidden = haze.hidden;
+      for (let i = 0; i < s.islands.length; i++) {
+        const c = s.islands[i]!;
+        if (Math.hypot(c.x - haze.x, c.z - haze.z) - c.radius < hidden) ring.push(i);
+      }
+      view.setRing(ring);
+      view.mesh.visible = ring.length > 0;
+      if (view.step()) return true;
+    }
+    return moving;
+  };
+  /** Live islands fade in through the dither (their fake fades out where they stand); the rest are hidden. */
+  const fadeIslands = (dt: number): void => {
+    fades.length = 0;
+    for (const m of built.landMeshes) m.visible = overview;
+    if (built.farGround) built.farGround.visible = !overview;
+    if (overview) {
+      for (const g of built.landParts) g.visible = false;
+      for (const g of built.glows) g.visible = true;
+      setFades(fades);
+      return;
+    }
+    const s = built.islands;
+    for (let i = 0; i < built.landParts.length; i++) built.landParts[i]!.visible = s.live(i);
+    for (let i = 0; i < built.glows.length; i++) built.glows[i]!.visible = s.live(i);
+    for (let i = 0; i < built.districts.length; i++) {
+      const d = built.districts[i]!;
+      const live = s.live(i) && built.builds[i]!.isBuilt;
+      built.alpha[i] = live ? Math.min(1, built.alpha[i]! + dt / FADE_SECONDS) : 0;
+      d.visible = live;
+      if (live && fades.length < FADE_SLOTS) {
+        const c = s.islands[i]!;
+        fades.push({ x: c.x, z: c.z, radius: c.radius + FADE_MARGIN, alpha: built.alpha[i]! });
+      }
+      if (live && built.alpha[i]! < 1) gate.invalidate();
+    }
+    setFades(fades);
+  };
+  /** Props stand on their island: drawn only while it is live (the fakes carry no props). */
+  const cullToHaze = (): void => {
+    for (const prop of propList) {
+      const island = built.propIsland.get(prop.activityId);
+      if (island !== undefined && !built.islands.live(island)) prop.root.visible = false;
+    }
+  };
   const gate = new FrameGate((dt) => {
     for (const step of steps) {
       step(dt);
@@ -239,10 +391,14 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     e = layout.extent;
     built = dress(next, layout);
     const p = stage.camera.position;
-    built.streamer.buildNear(p.x, p.z, FIRST_PLAYABLE);
+    const at = focus ?? p;
+    built.islands.update(at.x, at.z);
+    built.streamer.finishWanted(at.x, at.z);
     built.solids();
+    wasOverview = true;
     islands = built.group;
     props = new PropsLayer(registry, { kit, signs }).build(next, layout);
+    propList = props.all;
     stage.add(islands);
     stage.add(props.group);
     gates.build(next, layout);
@@ -297,6 +453,20 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     stopOverview: () => {
       overview = false;
     },
+    follow: (target) => {
+      focus = target;
+    },
+    far,
+    sees: (x, z) => {
+      if (overview) return true;
+      const dx = x - haze.x;
+      const dz = z - haze.z;
+      const r = haze.hidden + 2;
+      return dx * dx + dz * dz < r * r;
+    },
+    get island() {
+      return built.islands.current;
+    },
     onFrame: (step) => {
       steps.add(step);
       return () => steps.delete(step);
@@ -314,15 +484,33 @@ const PROPS_ALWAYS = 40;
 /** Island rim segments per metre of radius per tier. */
 const RIM_DETAIL = { low: 1.5, medium: 2.5, high: 4, xhigh: 4 } as const;
 
-/** Districts within this edge distance of the spawn are built before the first frame; the rest stream in. */
-const FIRST_PLAYABLE = 25;
-/** Per tier: build within `keep` m of the camera (edge), free past `drop`, at most `sliceMs` of building per frame. */
+/** One island at a time: build the island across a bridge within `preload` m of its deck, draw it within `show` m. */
+const ISLAND = { preload: 20, show: 2.5, shore: 2 } as const;
+/** A focus move longer than this (m) in one frame is a teleport. */
+const TELEPORT = 6;
+/** Haze band past the bubble edge per far view: tight when nothing stands in, wide enough to see the fakes otherwise. */
+const BAND: Record<FarMode, HazeBand> = { fog: { near: 1, far: 9 }, full: { near: 10, far: 48 }, silhouette: { near: 10, far: 48 }, impostor: { near: 10, far: 48 } };
+/** Seconds an island takes to dither in from its fake; metres its fade circle reaches past the rim (bridges outside it show at once over their fake deck). */
+const FADE_SECONDS = 0.5;
+const FADE_MARGIN = 0.5;
+/** Cap colour of a silhouette landmark: the bible's teal (hub roofs). */
+const LANDMARK_CAP = 0x2fa39a;
+/** Per tier: at most `sliceMs` of building per frame (`keep`/`drop` are the edge-distance policy of the T1367 streamer). */
 const STREAM = {
   low: { sliceMs: 4, keep: 70, drop: 100 },
   medium: { sliceMs: 6, keep: 125, drop: 150 },
   high: { sliceMs: 6, keep: 280, drop: 320 },
   xhigh: { sliceMs: 8, keep: Infinity, drop: Infinity },
 } as const;
+
+/** Island index (hubs, then zones) of every activity's plot. */
+function propIslands(layout: WorldLayout): Map<number, number> {
+  const out = new Map<number, number>();
+  layout.zones.forEach((z, i) => {
+    for (const p of z.plots) out.set(p.activityId, layout.hubs.length + i);
+  });
+  return out;
+}
 
 /** A collider part covering `meshes`' world box. */
 function part(collider: BvhCollider, meshes: readonly Object3D[]): ColliderPart {
@@ -350,6 +538,7 @@ export async function startPlayer(
   const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
   const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
+  view.follow(player.body.position);
   const focus = view.dressing.focus;
   // The first view frames the hub landmark down its avenue.
   if (focus) player.teleport(spawn.x, spawn.z, Math.atan2(focus.x - spawn.x, focus.z - spawn.z));

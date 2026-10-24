@@ -84,8 +84,11 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
   });
   const m = new Object3D();
   return (t) => {
+    let n = 0;
     for (let i = 0; i < spots.length; i++) {
       const s = spots[i]!;
+      // Only what the player can see past the haze is posed and drawn (instances packed at the front).
+      if (!view.sees(s.x, s.z)) continue;
       const phase = s.x * 0.37 + s.z * 0.11;
       m.position.set(s.x, s.y, s.z);
       m.scale.setScalar(s.height);
@@ -97,8 +100,9 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
         m.rotation.set(Math.sin(t * 1.1 + phase) * 0.06, s.yaw + t * (s.kind === 'buoy' ? 0.2 : 0), Math.sin(t * 0.9 + phase) * 0.06);
       }
       m.updateMatrix();
-      mesh.setMatrixAt(i, m.matrix);
+      mesh.setMatrixAt(n++, m.matrix);
     }
+    mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
   };
 }
@@ -179,8 +183,10 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
   });
   const m = new Object3D();
   return (t) => {
+    let n = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i]!;
+      if (!view.sees(c.x, c.z)) continue;
       for (let k = 0; k < per; k++) {
         const phase = i * 1.7 + k * 0.9;
         const speed = kind === 'duck' ? 0.25 : 0.35;
@@ -191,9 +197,10 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
         m.rotation.set(0, -a, 0);
         m.scale.setScalar(kind === 'duck' && k > 0 ? 0.7 : 1);
         m.updateMatrix();
-        mesh.setMatrixAt(i * per + k, m.matrix);
+        mesh.setMatrixAt(n++, m.matrix);
       }
     }
+    mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
   };
 }
@@ -218,8 +225,10 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
   });
   const m = new Object3D();
   return (t) => {
+    let n = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i]!;
+      if (!view.sees(c.x, c.z)) continue;
       for (let k = 0; k < per; k++) {
         const p = i * 2.3 + k * 3.1;
         const a = t * (0.6 + k * 0.2) + p;
@@ -227,9 +236,10 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
         m.rotation.set(0, -a, 0);
         m.scale.set(Math.abs(Math.sin(t * 14 + p)) * 0.9 + 0.1, 1, 1);
         m.updateMatrix();
-        mesh.setMatrixAt(i * per + k, m.matrix);
+        mesh.setMatrixAt(n++, m.matrix);
       }
     }
+    mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
   };
 }

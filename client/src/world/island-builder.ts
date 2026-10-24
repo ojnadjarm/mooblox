@@ -36,6 +36,10 @@ export class IslandBuilder {
   private land: BufferGeometry[] = [];
   private tops: BufferGeometry[] = [];
   private clouds: BufferGeometry[] = [];
+  /** Island index (hubs, then zones) of each land and tops part, for the per-island meshes. */
+  private landOwner: number[] = [];
+  private topsOwner: number[] = [];
+  private owner = 0;
   private readonly p: LookPalette;
 
   constructor(
@@ -53,24 +57,30 @@ export class IslandBuilder {
     this.land = [];
     this.tops = [];
     this.clouds = [];
+    this.landOwner = [];
+    this.topsOwner = [];
     const purposes = new Map(world.sections.flatMap((s) => s.activities).map((a) => [a.id, a.purpose]));
 
-    for (const hub of layout.hubs) {
+    layout.hubs.forEach((hub, i) => {
+      this.owner = i;
       this.island(hub);
-    }
+    });
+    this.owner = 0;
     this.plaza();
-    for (const zone of layout.zones) {
+    layout.zones.forEach((zone, i) => {
+      this.owner = layout.hubs.length + i;
       this.island(zone);
       for (const p of zone.plots) {
         const color = PurposeColor[purposes.get(p.activityId) ?? 'other'] ?? Palette.pink;
         this.box(PAD, PAD_H, PAD, this.p.trim, p.x, PAD_H / 2, p.z, p.facing);
         this.top(new PlaneGeometry(PAD - 0.3, PAD - 0.3), color, p.x, PAD_H + 0.01, p.z, p.facing);
       }
-    }
+    });
     this.cloudBank(world.courseId, layout.extent);
 
     const group = new Group();
     group.name = 'islands';
+    group.add(this.perIsland(layout.hubs.length + layout.zones.length));
     // The lawn and rims are flat or face the unshadowed water: they receive the sun's shadow but never need to cast one.
     group.add(this.mesh('land', this.land, this.kit.plastic, false));
     group.add(this.mesh('tops', this.tops, this.kit.studs, true));
@@ -83,6 +93,34 @@ export class IslandBuilder {
     group.add(water);
     group.add(this.mesh('clouds', this.clouds, this.kit.plastic, false));
     return group;
+  }
+
+  /**
+   * The same land and tops split per island (one group each, island order): play draws only the live islands; the merged
+   * meshes stay for the overview and the collider.
+   */
+  private perIsland(count: number): Group {
+    const parts = new Group();
+    parts.name = 'island-land';
+    for (let i = 0; i < count; i++) {
+      const g = new Group();
+      g.name = 'land-part';
+      const land = this.land.filter((_, k) => this.landOwner[k] === i);
+      const tops = this.tops.filter((_, k) => this.topsOwner[k] === i);
+      for (const [name, list, material, cast] of [['land', land, this.kit.plastic, false], ['tops', tops, this.kit.studs, true]] as const) {
+        const merged = list.length ? mergeGeometries(list, false) : null;
+        if (!merged) continue;
+        const m = new Mesh(merged, material);
+        m.name = name;
+        m.castShadow = cast;
+        m.receiveShadow = true;
+        m.matrixAutoUpdate = false;
+        g.add(m);
+      }
+      g.visible = false;
+      parts.add(g);
+    }
+    return parts;
   }
 
   /** The spawn plaza: radial terracotta paving in a cream trim ring, a cream ring round a round, stepped blue spawn pad. */
@@ -125,6 +163,7 @@ export class IslandBuilder {
     }
     g.setAttribute('color', new BufferAttribute(colors, 3));
     this.land.push(g);
+    this.landOwner.push(this.owner);
   }
 
   private cloudBank(seed: number, extent: number): void {
@@ -164,6 +203,7 @@ export class IslandBuilder {
       uv.setXY(i, pos.getX(i) / STUD, pos.getZ(i) / STUD);
     }
     this.tops.push(paint(g, color));
+    this.topsOwner.push(this.owner);
   }
 
   private add(
@@ -179,6 +219,7 @@ export class IslandBuilder {
     const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), yaw);
     g.applyMatrix4(new Matrix4().compose(new Vector3(x, y, z), q, scale));
     into.push(paint(g, color));
+    if (into === this.land) this.landOwner.push(this.owner);
   }
 
   private mesh(name: string, parts: BufferGeometry[], material: Material, cast: boolean): Mesh {

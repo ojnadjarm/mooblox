@@ -132,15 +132,23 @@ export class DistrictBuild<C = unknown> {
   }
 }
 
-/** Every district's lamp glow as one mesh (small; built up front). */
-export function buildGlow(dressing: Dressing, glow: Material): Mesh | null {
-  const glows = dressing.districts.flatMap((d) => d.glow.map((g) => withSway(g, false, 1)));
-  const lamps = glows.length ? mergeGeometries(glows, false) : null;
-  if (!lamps) return null;
-  const m = new Mesh(lamps, glow);
-  m.name = 'glow';
-  m.matrixAutoUpdate = false;
-  return m;
+/** Each district's lamp glow as one small mesh (built up front, island order; empty groups where a district has none). */
+export function buildGlow(dressing: Dressing, glow: Material): Group {
+  const group = new Group();
+  group.name = 'glow';
+  for (const d of dressing.districts) {
+    const glows = d.glow.map((g) => withSway(g, false, 1));
+    const lamps = glows.length ? mergeGeometries(glows, false) : null;
+    const holder = new Group();
+    if (lamps) {
+      const m = new Mesh(lamps, glow);
+      m.name = 'glow';
+      m.matrixAutoUpdate = false;
+      holder.add(m);
+    }
+    group.add(holder);
+  }
+  return group;
 }
 
 let edges = new Float64Array(64);

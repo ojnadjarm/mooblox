@@ -313,3 +313,21 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     (9, 37, 12, 15 checks); stills `~/drop/T1276/T1357..T1362/`. Extras from the spawn (collectibles + hall + monument):
     low 5 draws / 2.5k tris / 2 programs, medium 5 / 2.6k / 2, high 7 / 4.8k / 2, xhigh 10 / 5.2k / 2 (fireworks +1 program
     while they fly). vitest 48 files 295 tests, PHPUnit 82, mci quick 7 ok 0 red. Bundle 280 KB gz (+12.6 KB).
+- T1368, 2026-10-24, one mini island at a time (research + architecture `~/agent-work/research/2026-10-24/T1368/TRICKS.md`,
+  compare `~/drop/T1368/index.html`, options `~/drop/T1368/options.html`):
+  - `world/island-streamer.ts` `IslandStreamer` (pure): `islandGraph` (hubs then zones = district order; a bridge per zone to its
+    anchor, plus plaza links). Current island = the circle (+2 m) the player stands in, kept on bridges and in the water; the
+    island across a bridge builds within 20 m of its deck and draws within 2.5 m; `crossing()`; `metric` feeds `DistrictStreamer`
+    (new `StreamMetric` strategy, default edge distance; `finishWanted` for teleports and the first frame).
+  - `world/haze.ts`: `installHaze()` patches three's fog chunks: fog by horizontal distance from one shared centre (per pixel);
+    `Haze` eases centre/radius (0.45 s) to the current island, along the bridge by crossing progress. Overview opens it to the extent.
+  - `world/island-fade.ts`: screen-door cross-fade (`FADE` slots x, z, r, alpha) on `kit.scenery`/`sceneryInstanced`; fakes use
+    the inverse. `world/far-view.ts` (`?far=`): `fog`, `full` (all bridge neighbours real), `silhouette` (default: biggest solids as
+    boxes, houses with roofs, trees as cones, landmark tower; ring merged into one mesh, 2 new per frame), `impostor` (each island
+    built in background slices, captured once into a 2048x1024 atlas, camera-facing cards); `deckGeometry` + `groundGeometry` =
+    fake decks and lawn discs for every island (one `far-ground` mesh).
+  - `IslandBuilder` keeps the merged land/tops (overview, collider) and adds per-island `island-land` groups (drawn while live);
+    `buildGlow` is per district; props draw only on live islands; life instancing (flags, boats, buoys, animals, butterflies)
+    packs only what `view.sees()` through the haze. `WorldView.follow(target)`, `far`, `island`, `sees`.
+  - Tools: `node tools/near-island.mjs <dir> [--modes ..] [--shapes ..]` (options at one camera, `options.json` + JPEGs);
+    `tools/perf.mjs --query k=v` appends to every page query.

@@ -12,6 +12,12 @@ export interface StreamUnit {
   unload(): void;
 }
 
+/** How far unit `index` is from the focus at (x, z), in the units `keep` and `drop` use; Infinity = not wanted. */
+export type StreamMetric = (unit: StreamUnit, index: number, x: number, z: number) => number;
+
+/** Default metric: distance from the focus to the unit's edge. */
+export const edgeMetric: StreamMetric = (u, _i, x, z) => edge(u, x, z);
+
 /** How far the streamer keeps districts and how long one frame may build. */
 export interface StreamPolicy {
   /** Milliseconds of building per frame. */
@@ -33,6 +39,8 @@ export class DistrictStreamer {
     private readonly units: readonly StreamUnit[],
     private readonly policy: StreamPolicy,
     private readonly now: () => number = () => performance.now(),
+    /** Which units are near: edge distance by default, the island streamer's live set for one island at a time. */
+    private readonly metric: StreamMetric = edgeMetric,
   ) {}
 
   /** Units not yet built within the keep distance of the last focus. */
@@ -53,8 +61,9 @@ export class DistrictStreamer {
     const keep = all ? Infinity : this.policy.keep;
     const drop = all ? Infinity : this.policy.drop;
     this.changed = false;
-    for (const u of this.units) {
-      if (u.isBuilt && edge(u, x, z) > drop) {
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i]!;
+      if (u.isBuilt && !all && this.metric(u, i, x, z) > drop) {
         u.unload();
         this.changed = true;
       }
@@ -64,7 +73,7 @@ export class DistrictStreamer {
     let best = Infinity;
     for (let i = 0; i < this.units.length; i++) {
       const u = this.units[i]!;
-      const d = edge(u, x, z);
+      const d = all ? edge(u, x, z) : this.metric(u, i, x, z);
       if (u.isBuilt || d > keep) continue;
       pending++;
       if (d < best) {
@@ -80,18 +89,26 @@ export class DistrictStreamer {
       if (this.units[nearest]!.step()) {
         this.changed = true;
         this.pending--;
-        nearest = this.nearestUnbuilt(x, z, keep);
+        nearest = this.nearestUnbuilt(x, z, keep, all);
       }
     }
     return this.changed;
   }
 
-  private nearestUnbuilt(x: number, z: number, keep: number): number {
+  /** Builds every wanted unit now (a teleport or a new current island must not wait for the slices). */
+  finishWanted(x: number, z: number, upTo = 0): void {
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i]!;
+      if (!u.isBuilt && this.metric(u, i, x, z) <= upTo) u.finish();
+    }
+  }
+
+  private nearestUnbuilt(x: number, z: number, keep: number, all: boolean): number {
     let nearest = -1;
     let best = Infinity;
     for (let i = 0; i < this.units.length; i++) {
       const u = this.units[i]!;
-      const d = edge(u, x, z);
+      const d = all ? edge(u, x, z) : this.metric(u, i, x, z);
       if (!u.isBuilt && d <= keep && d < best) {
         best = d;
         nearest = i;

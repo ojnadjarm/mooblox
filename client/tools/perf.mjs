@@ -3,7 +3,7 @@
 // draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on the real GPU at DPR 1, 400x800 under 4x CPU
 // throttle (the realistic low-end proxy), then again on SwiftShader under 6x as a stress floor (30 fps, no frame > 100 ms);
 // the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
-// --browser gpu|soft and --throttle N override the rig (diagnosis), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
+// --browser gpu|soft and --throttle N override the rig (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,7 +48,8 @@ const RIG = {
   xhigh: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
 };
 
-const query = (shape, tier, extra) => `${shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}&`}quality=${tier}&${extra}`;
+const more = opt('query', [''])[0];
+const query = (shape, tier, extra) => `${shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}&`}quality=${tier}&${extra}${more ? `&${more}` : ''}`;
 
 async function open(rig, q, network) {
   const page = await browsers[rig.browser].newPage({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch });
