@@ -19,6 +19,8 @@ import { decodeLook, encodeLook } from '../player/look';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { ScriptedTutor } from '../tutor/scripted-tutor';
+import { preloadAssets } from './asset-preload';
+import { BOOT_MODELS } from './boot-assets';
 import { conceptShot } from './dev-shots';
 import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
 
@@ -28,6 +30,7 @@ const FIXTURE_HOST = 'https://moodle.example';
 /** Dev composition root: the demo course from the captured fixture, no Moodle needed. */
 async function boot(): Promise<void> {
   const root = document.getElementById('mooblox-root')!;
+  const preloaded = preloadAssets(ASSETS, BOOT_MODELS);
   const params = new URLSearchParams(location.search);
   const dto = JSON.parse(JSON.stringify(fixture).replaceAll(FIXTURE_HOST, location.origin)) as WorldDto;
   const manual = Number(params.get('manual') ?? 0);
@@ -46,6 +49,7 @@ async function boot(): Promise<void> {
   const shape = params.get('shape');
   store.set(shape ? shapeWorld(Number(params.get('course') ?? 7), parseShape(shape)) : await gateway.getWorld(fixture.courseid));
   const xhigh = bootTier() === 'xhigh';
+  await preloaded;
   const models = await ModelLibrary.load(ASSETS, modelIds());
   const view = startWorld(root, store.world!, models);
   if (xhigh) void view.kit.loadDetail(ASSETS);

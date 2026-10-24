@@ -8,6 +8,8 @@ import { decodeLook, encodeLook } from '../player/look';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { DEFAULT_TUTOR_STRINGS, ScriptedTutor } from '../tutor/scripted-tutor';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
+import { preloadAssets } from './asset-preload';
+import { BOOT_MODELS } from './boot-assets';
 import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld } from './app';
 import { readConfig } from './config';
 import { startRewards } from './rewards';
@@ -25,14 +27,16 @@ async function boot(): Promise<void> {
   if (!root) {
     throw new Error('missing #mooblox-root');
   }
+  const assets = new URL(/* @vite-ignore */ './assets/', import.meta.url).href;
+  const preloaded = preloadAssets(assets, BOOT_MODELS);
   const config = readConfig(document.getElementById('mooblox-config')?.textContent);
   const gateway = new AjaxGateway(config);
   const store = new CourseStore();
   keepSessionAlive(gateway, SESSION_TOUCH_MS, (e) => console.error('mooblox: session touch failed', e));
   store.set(await gateway.getWorld(config.courseid));
   root.dataset['courseid'] = String(config.courseid);
-  const assets = new URL(/* @vite-ignore */ './assets/', import.meta.url).href;
   const xhigh = bootTier() === 'xhigh';
+  await preloaded;
   const models = await ModelLibrary.load(assets, modelIds());
   const view = startWorld(root, store.world!, models, { ...DEFAULT_GATE_STRINGS, ...config.strings });
   if (xhigh) void view.kit.loadDetail(assets);

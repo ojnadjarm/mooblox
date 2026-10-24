@@ -16,6 +16,8 @@ import { CourseStore } from '../state/course-store';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { modelIds } from '../world/dressing';
 import { ModelLibrary } from '../world/model-library';
+import { preloadAssets } from './asset-preload';
+import { BOOT_MODELS } from './boot-assets';
 import { startActivities, startAvatarPicker, startPlayer, startWorld, type WorldView } from './app';
 import { startRewards } from './rewards';
 
@@ -105,6 +107,7 @@ const levelOf = (xp: number): number => Math.floor((Math.sqrt(1 + (4 * xp) / 25)
 /** Dev page for the rewards UI: the demo course and the captured rewards, no Moodle needed. */
 async function boot(): Promise<void> {
   const root = document.getElementById('mooblox-root')!;
+  const preloaded = preloadAssets(ASSETS, BOOT_MODELS);
   const params = new URLSearchParams(location.search);
   const dto = JSON.parse(JSON.stringify(fixture).replaceAll(FIXTURE_HOST, location.origin)) as WorldDto;
   const rewards = structuredClone(rewardsFixture) as RewardsDto;
@@ -121,6 +124,7 @@ async function boot(): Promise<void> {
   const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp), params.get('collect') === 'all', devGoal(params.get('goal')));
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));
+  await preloaded;
   const models = await ModelLibrary.load(ASSETS, modelIds());
   const view = startWorld(root, store.world!, models);
   const avatars = await AvatarKit.load(ASSETS);
