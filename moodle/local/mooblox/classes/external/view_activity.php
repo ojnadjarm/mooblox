@@ -28,6 +28,7 @@ use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
+use local_mooblox\local\access;
 
 /**
  * Marks an activity as viewed by dispatching to its module's own view function.
@@ -68,10 +69,7 @@ class view_activity extends external_api {
         [$course, $cm] = get_course_and_cm_from_cmid($params['cmid']);
         $context = \context_course::instance($course->id);
         self::validate_context($context);
-        require_capability('local/mooblox:play', $context);
-        if (!get_config('local_mooblox', 'enabled')) {
-            throw new \moodle_exception('disabled', 'local_mooblox');
-        }
+        access::require_play($context);
         if (!isset(self::VIEW_FUNCTIONS[$cm->modname])) {
             throw new \moodle_exception('notviewable', 'local_mooblox');
         }

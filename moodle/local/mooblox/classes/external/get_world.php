@@ -29,6 +29,7 @@ use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
+use local_mooblox\local\access;
 use local_mooblox\local\world_builder;
 
 /**
@@ -66,10 +67,7 @@ class get_world extends external_api {
         $course = get_course($params['courseid']);
         $context = \context_course::instance($course->id);
         self::validate_context($context);
-        require_capability('local/mooblox:play', $context);
-        if (!get_config('local_mooblox', 'enabled')) {
-            throw new \moodle_exception('disabled', 'local_mooblox');
-        }
+        access::require_play($context);
 
         return world_builder::build($course, $USER);
     }
