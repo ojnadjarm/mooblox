@@ -1,6 +1,6 @@
 # MOOBLOX: project notes
 
-Personal open-source repo (GPL-3), no remote. Moodle plugin `local_mooblox` in `moodle/local/mooblox`,
+Personal open-source repo (GPL-3), remote origin (GitHub, private); commit per ticket `T<n>: <what>` and push. Moodle plugin `local_mooblox` in `moodle/local/mooblox`,
 world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
 `~/agent-work/research/2026-10-24/T1276/PLAN.md`.
 
@@ -19,5 +19,22 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Fixture: `.research/testdata/setup.php` (run from the 5.2 root with `mphp`) builds course
     `mooblox_demo` (id 30 on 5.2): label (s0), page (s1), mp4 resource + YouTube url (s2), 3-question
     true/false quiz (s3), completion on, student `mooblox_student` (Mia). `testing-instructions.md` beside it.
-  - No commits yet: the repo has no HEAD, so `mci quick` phpcs-delta is red in place; run it on a copy
-    outside git until the first commit.
+- Phase B (T1280-T1284), 2026-10-24, version 2026102405:
+  - `local_mooblox_get_world(courseid)` (ajax + mobile service) over `local\world_builder`: course name, first
+    name, sections (id, number, name, available, availableinfo) and per visible cm id, modname, name, url,
+    purpose, icon, available, availableinfo, completion (0/1/2), state, isautomatic, dates. Captured demo
+    JSON (course 30, student): `.research/testdata/get_world_demo.json`.
+  - `local_mooblox_view_activity(cmid)` (ajax, write): allow-list book/page/resource/url to `mod_*_view_*`
+    via `call_external_function`; anything else throws `notviewable`.
+  - `local\access::require_play()` (cap + site switch) guards play.php and both functions.
+  - `play.php?id=<course>`: embedded layout, `templates/play.mustache` = `#mooblox-root`, JSON in
+    `#mooblox-config` {wwwroot, courseid, sesskey, firstname, avatar, rev}, and
+    `<script type="module" src="client/dist/mooblox.js?rev=">`: the client build must emit that file.
+    Sets `$SESSION->local_mooblox_play`. Course tab "MOOBLOX" after "Course" via `secondary_extend`.
+  - Framed pages: `local\embed_detector` (Sec-Fetch-Dest iframe + session flag) + `before_http_headers`
+    switch to the embedded layout and add body class `local-mooblox-framed`. Browsers send Sec-Fetch-Dest
+    only to https or localhost: test on `http://localhost:8052`, not the tailnet http host.
+  - Avatar preference `local_mooblox_avatar` (PARAM_ALPHANUMEXT, own user only) in lib.php; privacy
+    provider exports it and deletes it per user context.
+  - Tests: PHPUnit 11 (5 files), Behat `tests/behat/play.feature` (2 scenarios), mprivacy ok, mci quick
+    6 ok 0 red. The headless frame check left one in-progress quiz attempt for `mooblox_student`.
