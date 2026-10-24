@@ -399,6 +399,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Gate (quiet machine): 73 pass, 3 fail (stress demo fps 27, worst 300 ms; stress 1x2 worst 233 ms). Low green on all shapes.
     Open: stress keeps one 230-430 ms frame when the deck safety net finishes the island across inline (fix: placement prep in
     the worker); on high, impostor captures cost single 50-280 ms frames (16.8-33 ms with `?far=silhouette`).
+- T1371, 2026-10-24/25, smooth crossings rounds (log `~/agent-work/research/2026-10-24/T1371/ROUNDS.md`, data `~/agent-work/evidence/T1371/`):
+  - Neighbour islands are built on landing and stay resident; placement prep runs in the build worker (`district-prep.ts`), models go
+    to the worker once at boot (one `models` message). Impostor captures are sliced (2 chunks per frame) from light capture builds
+    (no solids, no minor dressing); software GL defaults to silhouettes (captures cost SwiftShader 100+ ms).
+  - Props: `updateMatrixWorld` only on visible children. Dynamic resolution ignores the slowest 5% of each window (no resize on a
+    hitch). Stage asks for `PCFShadowMap` (r186 drops PCFSoft at the first shadow render and relinks); post tiers compile every
+    material (hidden too) at boot for the post target and the captures' canvas state: 0 program links after ready on high.
+  - Name signs are lazy (`CanvasSignPainter(changed, lazy)`, `want`/`release`/`forget`, `step(budget)`): a canvas exists only within
+    near+15 m of showing, freed past near+30 m (600 signs were 337 MB). The colour grade runs inside the output pass (`gradedOutput`).
+  - Perf tools: stress pages start after 45 s idle (back-to-back SwiftShader runs hit the host power limit: 200 ms stalls).
+  - Gate 76/0. Crossing worst ms demo/1x2/8x12/20x30: stress 100/183/350/350 -> 83/50/50/50; low, medium 16.8 all; high 20x30 16.8-33
+    (GPU-bound on Iris Xe: GPU med 12-14, p90 15-18 ms). Memory 20x30 medium 781 -> 390 MB, low 690 -> 366 MB.
 - T1372, 2026-10-24, animation polish rounds (log `~/agent-work/research/2026-10-24/T1372/ROUNDS.md`, page `~/drop/T1372/index.html`):
   - Round 1: `player/motion.ts` = procedural layer as data + one kernel (`motionState(seed)` Float64Array, `stepMotion`: no calls,
     0 B per frame): per-kid clip phase and ±8% rate, stride rate from ground speed (0.55-1.3), idle glances (8 looks per kid, quick
