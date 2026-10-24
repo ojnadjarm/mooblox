@@ -132,3 +132,6 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
       public/assets/kit public/assets/kit-hd`, then `python3 tools/hd-licences.py public/assets`), `detail/` = 2
       packed ambientCG CC0 detail atlases (`tools/pack-detail.py`), `world/surfaces.ts` classes per vertex, GTAO,
       4096 shadows. Assets test: 3 MB base budget, separate 12 MB xhigh budget.
+    - Numbers (1366, Iris Xe headless, `~/drop/T1309/numbers.json`): demo high 72 draws, 131k visible tris,
+      30 programs, 47-50 fps; low 60 fps on all 4 shapes; xhigh demo 135-299 draws, 36 programs, 20-29 fps on
+      this laptop. vitest 27 files 150 tests; walk 41/44, open 13/13, bump 8/8, live gates 8/8. Bundle 240 KB gz.
