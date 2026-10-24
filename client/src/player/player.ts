@@ -14,7 +14,7 @@ export class Player {
   readonly body: Body;
   private readonly prev = new Vector3();
   private readonly fixed = new FixedStep(Physics.step);
-  private facing = 0;
+  private facing = Math.PI;
 
   constructor(
     readonly avatar: Avatar,

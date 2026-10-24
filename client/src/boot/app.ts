@@ -1,6 +1,8 @@
 import { Vector3, type Group } from 'three';
 import type { WorldData } from '../domain/types';
 import { FrameGate } from '../perf/frame-gate';
+import { QUALITY, pickTier } from '../perf/quality';
+import { QualityManager } from '../perf/quality-manager';
 import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
 import { BvhCollider } from '../player/collider';
 import { FollowCamera } from '../player/follow-camera';
@@ -11,6 +13,7 @@ import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
 import type { WorldLayout } from '../world/layout';
 import { MaterialKit } from '../world/material-kit';
+import { PerfOverlay } from '../ui/perf-overlay';
 import { TouchControls } from '../ui/touch-controls';
 import { Stage } from '../world/stage';
 
@@ -21,6 +24,7 @@ export interface WorldView {
   readonly stage: Stage;
   readonly gate: FrameGate;
   readonly islands: Group;
+  readonly quality: QualityManager;
   /** Hands the camera from the overview to the caller. */
   stopOverview(): void;
   /** Adds a per-frame step that runs before the render; returns its remover. */
@@ -30,8 +34,13 @@ export interface WorldView {
 /** Builds the island scene for one course inside `root` and starts the render loop. */
 export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   Object.assign(root.style, { position: 'fixed', inset: '0', overflow: 'hidden', touchAction: 'none' });
-  const kit = new MaterialKit('standard');
-  const stage = new Stage(root, kit, { antialias: true, shadowMapSize: 2048 });
+  const params = new URLSearchParams(location.search);
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  const tier = pickTier({ query: params.get('quality'), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse });
+  const settings = QUALITY[tier];
+  const kit = new MaterialKit(settings.materials);
+  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize });
   const layout = new IslandLayout().layout(world);
   const islands = new IslandBuilder(kit).build(world, layout, scatterDecor(layout, world.courseId));
   stage.add(islands);
@@ -40,15 +49,21 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   const e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
 
+  const quality = new QualityManager(stage, tier);
+  const overlay = params.get('perf') === '1' ? new PerfOverlay(root, stage.renderer, quality) : null;
   const steps = new Set<(dt: number) => void>();
   const gate = new FrameGate((dt) => {
     for (const step of steps) {
       step(dt);
     }
     stage.render();
+    if (dt > 0) {
+      quality.frame(dt * 1000);
+    }
+    overlay?.frame();
   });
   const resize = (): void => {
-    stage.resize(Math.min(window.devicePixelRatio || 1, 2));
+    quality.apply();
     if (overview) {
       frameOverview(stage, e);
     }
@@ -64,6 +79,7 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
     stage,
     gate,
     islands,
+    quality,
     stopOverview: () => {
       overview = false;
     },
