@@ -135,6 +135,9 @@ Landmarks are bespoke models (Blender or composed kit pieces with their own face
   (2 umbrellas + towels + lifebuoy); garden bed (raised planter + flowers in 2 colours + low hedge).
 - **Flowers only in beds or along edges**, in 2-3 colours per bed, never sprinkled across lawns.
 - **Lamps in pairs** along avenues, at bridge heads and at plaza entries.
+- **The spawn plaza is framed, not open lawn** (hub concept): a ring of raised planters just outside the paving (terracotta
+  kerb, cream cap rim, puffy clipped hedge blocks, flowers between), cut into runs with walk-through gaps, open at every
+  entry, cream square posts at each run end, a lamp pair at each entry, benches inside facing the spawn pad.
 - **Shore**: coves with sand, foam rings around rocks and islands, a turquoise-to-cobalt gradient, a dock per island at most,
   reeds and lilies only in sheltered coves.
 - **Life** sits where the story is: kids at hangouts and on paths, gulls over docks, ducks in coves, butterflies over beds.

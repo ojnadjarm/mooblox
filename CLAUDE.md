@@ -305,6 +305,12 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     science (glass greenhouse, round-nosed rocket), stadium (canopy, gate), arts (bulging striped tent, valance), harbour
     (lighthouse gallery and dome, keeper's house); <= 3k tris each, merged into the district mesh (draws unchanged: overview 90,
     play 47, play-400 19). Gate 76 pass / 0 fail; low 60 fps all 4 shapes; demo low 24 draws, 47.5k tris.
+  - Round 9 (framed spawn plaza, hub concept): `world/landmarks/plaza-frame.ts` (art data: `frameArcs` = ring minus entry
+    openings cut into runs with walk-through gaps; `planterRun` = terracotta kerb, cream cap, soil, puffy 4-sided hedge blocks,
+    flowers, cream end posts, one merged geometry; `runFootprint` cover for occupancy, `apart` for obstacles). `Designer.hub`
+    -> `plazaFrame` (`FRAME` r 7.1-8.25, h 0.48; open 2.5 m each side of every walk and the tower avenue; lamp pair per entry
+    replaces the gap lamps) and `plazaBenches` after the monument (benches inside the ring, `wall` 0.5). Spawn hub only (further
+    plazas unchanged). Play 1366 47 -> 49 draws, low play-400 19 -> 20, demo low 46.7k tris; gate 76 pass / 0 fail.
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

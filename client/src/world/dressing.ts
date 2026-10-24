@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import type { Landmark } from './landmarks/landmarks';
+import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { bakeAo, bands, box, prism } from './landmarks/shapes';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
@@ -27,6 +28,11 @@ const HEDGE_STEP = 1.5;
 const HEDGE_RUN = 6;
 const HEDGE_CYCLE = 9;
 const HUB_AREA = 22 * 22;
+/** Spawn plaza frame: planter ring just outside the paving, openings (half width), runs and walk-through gaps along the rim (m). */
+const FRAME: FrameRing = { r0: PLAZA + 0.1, r1: PLAZA + 1.25, h: 0.48 };
+const FRAME_OPEN = 2.5;
+const FRAME_RUN = 4.6;
+const FRAME_GAP = 1.8;
 
 export interface Segment {
   readonly ax: number;
@@ -262,6 +268,7 @@ class Designer {
   private focus: { x: number; z: number } | null = null;
   private hall: HallSite | null = null;
   private monument: HallSite | null = null;
+  private frame: FrameArc[] = [];
   private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
   private readonly random: () => number;
   private district!: District;
@@ -297,6 +304,7 @@ class Designer {
       if (i === 0) {
         this.hall = this.hallSite(hub);
         this.monument = this.monumentSite(hub);
+        this.plazaBenches(hub);
       }
       this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8);
       this.shore(hub);
@@ -411,10 +419,7 @@ class Designer {
     const uz = Math.sin(back);
     this.avenue(hub, ux, uz, PLAZA, lr - 3.6, this.p.path[1] ?? this.p.stone, 2.4);
     this.walks.push({ ax: hub.x, az: hub.z, bx: hub.x + ux * (lr - 3.6), bz: hub.z + uz * (lr - 3.6) });
-    for (const side of [-1, 1]) {
-      const t = PLAZA + 1.2;
-      this.lamp(hub.x + ux * t + uz * side * 1.9, hub.z + uz * t - ux * side * 1.9, 2.8);
-    }
+    this.plazaFrame(hub, [...bearings, back]);
     gaps(bearings).forEach(([a, width], i) => {
       if (Math.abs(wrap(a - back)) < 0.8 || width * (hub.radius - 4.4) < 16) return;
       const x = Math.cos(a) * (hub.radius - 4.4);
@@ -422,19 +427,40 @@ class Designer {
       const [id, h] = SIDE[i % SIDE.length]!;
       this.building(id, h, x, z, Math.atan2(-x, -z), HUB_ROOFS[i % HUB_ROOFS.length]);
     });
-    for (const [a, width] of gaps(bearings)) {
-      const x = Math.cos(a) * (PLAZA + 1.3);
-      const z = Math.sin(a) * (PLAZA + 1.3);
-      if (Math.abs(wrap(a - back)) > 0.3) this.lamp(x, z, 2.8);
-      for (const side of [-1, 1]) {
-        const b = a + side * Math.min(0.3, width / 4);
-        const bx = Math.cos(b) * (PLAZA + 1.9);
-        const bz = Math.sin(b) * (PLAZA + 1.9);
-        if (this.nearBridge(bx, bz, DECK_HALF + 1.3)) continue;
-        if (this.model('town/stall-bench', bx, 0, bz, Math.atan2(-bx, -bz), 0.55, { solid: true })) this.hangouts.push({ kind: 'sit', x: bx * 0.86, z: bz * 0.86, face: Math.atan2(bx, bz) });
+    this.dock(hub, true);
+  }
+
+  /** The spawn plaza's frame (art bible: hub concept): raised hedge planters round the rim, open with a lamp pair at every entry. */
+  private plazaFrame(hub: Circle, entries: readonly number[]): void {
+    const mid = (FRAME.r0 + FRAME.r1) / 2;
+    this.frame = frameArcs(entries, FRAME_OPEN / mid, FRAME_RUN / mid, FRAME_GAP / mid);
+    const random = seededRandom(0x91a2a);
+    for (const arc of this.frame) {
+      const g = planterRun(arc, FRAME, this.p, random).translate(hub.x, 0, hub.z);
+      this.district.terrain.push({ geometry: g, solid: true, detail: false });
+      for (const f of runFootprint(arc, FRAME)) this.reserve(hub.x + f.x, hub.z + f.z, f.r);
+      for (const f of runFootprint(arc, FRAME, true)) this.obstacles.push({ x: hub.x + f.x, z: hub.z + f.z, r: f.r });
+    }
+    for (const a of entries) {
+      const ux = Math.cos(a);
+      const uz = Math.sin(a);
+      for (const side of [-1, 1]) this.lamp(hub.x + ux * (FRAME.r1 + 0.3) + uz * side * 1.9, hub.z + uz * (FRAME.r1 + 0.3) - ux * side * 1.9, 2.8);
+    }
+  }
+
+  /** Benches inside the frame, one at the middle of each long planter run, facing the spawn pad. */
+  private plazaBenches(hub: Circle): void {
+    const r = FRAME.r0 - 0.65;
+    for (const arc of this.frame) {
+      if ((arc.a1 - arc.a0) * r < 2.4) continue;
+      const a = (arc.a0 + arc.a1) / 2;
+      const bx = hub.x + Math.cos(a) * r;
+      const bz = hub.z + Math.sin(a) * r;
+      const k = (r - 1.2) / r;
+      if (this.model('town/stall-bench', bx, 0, bz, Math.atan2(hub.x - bx, hub.z - bz), 0.55, { solid: true, wall: 0.5 })) {
+        this.hangouts.push({ kind: 'sit', x: hub.x + (bx - hub.x) * k, z: hub.z + (bz - hub.z) * k, face: Math.atan2(bx - hub.x, bz - hub.z) });
       }
     }
-    this.dock(hub, true);
   }
 
   /**
