@@ -30,7 +30,7 @@ async function boot(): Promise<void> {
     const walk = Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
     const player = await startPlayer(view, ASSETS, { skin: 'b', tint: Palette.red }, [pilot]);
-    const interaction = startActivities(view, player, createOpenerRegistry());
+    const interaction = startActivities(view, player, createOpenerRegistry(gateway));
     Object.assign(window, { mooblox: { ...view, probe, player, interaction } });
     if (walk) {
       pilot.drive(view, player, walk, probe);

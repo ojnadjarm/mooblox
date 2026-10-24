@@ -21,7 +21,8 @@ async function boot(): Promise<void> {
   root.dataset['courseid'] = String(config.courseid);
   const view = startWorld(root, store.world!);
   const player = await startPlayer(view, new URL(/* @vite-ignore */ './assets/', import.meta.url).href, { skin: config.avatar || 'a', tint: null });
-  startActivities(view, player, createOpenerRegistry(), () => store.world!);
+  const interaction = startActivities(view, player, createOpenerRegistry(gateway), () => store.world!);
+  Object.assign(window, { mooblox: { ...view, player, interaction, store } });
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));
