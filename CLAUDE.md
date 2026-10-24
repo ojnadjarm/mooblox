@@ -393,3 +393,10 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     head before the mixer, then adds the layer (`Layered`); `setMotion(speed, turnRate)` (NaN = as authored; NPCs leave it).
     `game-feel.ts` `stretch` (take-off, 0.2 s, +14%). 20 kids +0.031 ms/frame at 4x CPU; capture tool
     `~/agent-work/research/2026-10-24/T1372/tools/anim-capture.mjs <outdir>` (cost, crowd + play webm, stills).
+  - Round 2: `FollowCamera` goal rides the probed sight line (it used to sit below it), pulls in at once and clamps the lagging
+    camera to the clear reach, nearest 2.2 m, ignores thin occluders (a parallel line 1.2 m to either side clear all the way),
+    pushes itself 0.25 m out of anything every frame. `player/layered.ts` (Layered, shared). `player/pet-motion.ts` = pet layer
+    as data + one kernel (`petMotionState`, inputs in slots incl. `P.dt`, `stepPetMotion(m)`): lean/brake spring, bank, landing
+    squash, idle looks (owner, ahead, sniff), tail wag + turn swing, penguin wing flaps; `PetModel` layers `body`, `tail`,
+    `wing-*` nodes, `setMotion(speed, yaw, y, toOwner)` from `PetFollower`. `motion.ts` push spring (accel 0.004 rad per m/s²,
+    max 0.2). Heap tests bound bytes per update (< 1 B). Tools: `T1372/tools/{pet-capture,tree-replay,tree-probe,cam-probe}.mjs`.
