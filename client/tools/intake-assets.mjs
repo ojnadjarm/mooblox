@@ -56,7 +56,7 @@ try {
     } else {
       run('dedup', inputs[0], merged);
     }
-    run('prune', merged, merged);
+    run('prune', merged, merged, '--keep-attributes', 'true');
     run('meshopt', merged, join(out, p.out));
     rows.push([p.out, p.pack, p.author, CC0, p.source, sha(join(out, p.out))]);
     if (p.skins) {

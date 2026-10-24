@@ -13,6 +13,8 @@ export interface WorldView {
   readonly layout: WorldLayout;
   readonly stage: Stage;
   readonly gate: FrameGate;
+  /** Adds a per-frame step that runs before the render; returns its remover. */
+  onFrame(step: (dt: number) => void): () => void;
 }
 
 /** Builds the island scene for one course inside `root` and starts the render loop. */
@@ -26,7 +28,13 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   const e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
 
-  const gate = new FrameGate(() => stage.render());
+  const steps = new Set<(dt: number) => void>();
+  const gate = new FrameGate((dt) => {
+    for (const step of steps) {
+      step(dt);
+    }
+    stage.render();
+  });
   const resize = (): void => {
     stage.resize(Math.min(window.devicePixelRatio || 1, 2));
     frameOverview(stage, e);
@@ -36,7 +44,16 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   resize();
   gate.start();
   requestAnimationFrame(() => requestAnimationFrame(() => (root.dataset['ready'] = '1')));
-  return { world, layout, stage, gate };
+  return {
+    world,
+    layout,
+    stage,
+    gate,
+    onFrame: (step) => {
+      steps.add(step);
+      return () => steps.delete(step);
+    },
+  };
 }
 
 /** Overview camera that keeps the whole island in view, pulling back on portrait screens. */
