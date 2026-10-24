@@ -1,5 +1,5 @@
-import type { ModuleDto, SectionDto, WorldDto } from './dto';
-import type { Activity, Section, WorldData } from './types';
+import type { MediaDto, ModuleDto, SectionDto, WorldDto } from './dto';
+import type { Activity, Media, Section, WorldData } from './types';
 
 /** Maps the get_world reply to domain objects. */
 export function toWorld(dto: WorldDto): WorldData {
@@ -52,7 +52,15 @@ function toActivity(dto: ModuleDto, sectionId: number): Activity {
     availableInfo: dto.availableinfo,
     completion: { tracking: dto.completion, state: dto.state, automatic: dto.isautomatic },
     dates: dto.dates.map((d) => ({ label: d.label, timestamp: d.timestamp })),
+    media: toMedia(dto.media),
   };
+}
+
+function toMedia(dto: MediaDto | undefined): Media | null {
+  if (dto?.type !== 'file' && dto?.type !== 'link') {
+    return null;
+  }
+  return { type: dto.type, mimetype: dto.mimetype, src: dto.src };
 }
 
 function toModuleDto(a: Activity): ModuleDto {
@@ -69,5 +77,6 @@ function toModuleDto(a: Activity): ModuleDto {
     state: a.completion.state,
     isautomatic: a.completion.automatic,
     dates: a.dates.map((d) => ({ label: d.label, timestamp: d.timestamp })),
+    media: a.media ? { ...a.media } : { type: '', mimetype: '', src: '' },
   };
 }

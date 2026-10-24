@@ -36,6 +36,9 @@ use core_completion\cm_completion_details;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class world_builder {
+    /** @var array Media of a module that plays nothing. */
+    private const NO_MEDIA = ['type' => '', 'mimetype' => '', 'src' => ''];
+
     /**
      * Returns the course, its sections and the activities the user can see.
      *
@@ -112,6 +115,40 @@ class world_builder {
             'state' => $details ? $details->get_overall_completion() : COMPLETION_INCOMPLETE,
             'isautomatic' => $details ? $details->is_automatic() : false,
             'dates' => $dates,
+            'media' => $cm->uservisible ? self::media($cm) : self::NO_MEDIA,
         ];
+    }
+
+    /**
+     * Returns what a module plays inside the world: a resource's main file or a URL's target.
+     *
+     * @param \cm_info $cm course module
+     * @return array
+     */
+    private static function media(\cm_info $cm): array {
+        global $DB;
+        if ($cm->modname === 'url') {
+            $src = (string) $DB->get_field('url', 'externalurl', ['id' => $cm->instance]);
+            return ['type' => 'link', 'mimetype' => '', 'src' => $src];
+        }
+        if ($cm->modname !== 'resource') {
+            return self::NO_MEDIA;
+        }
+        $context = \context_module::instance($cm->id);
+        $files = get_file_storage()->get_area_files($context->id, 'mod_resource', 'content', 0, 'sortorder DESC, id ASC', false);
+        $file = reset($files);
+        if (!$file) {
+            return self::NO_MEDIA;
+        }
+        $revision = (int) $DB->get_field('resource', 'revision', ['id' => $cm->instance]);
+        $url = \moodle_url::make_pluginfile_url(
+            $context->id,
+            'mod_resource',
+            'content',
+            $revision,
+            $file->get_filepath(),
+            $file->get_filename()
+        );
+        return ['type' => 'file', 'mimetype' => $file->get_mimetype(), 'src' => $url->out(false)];
     }
 }

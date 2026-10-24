@@ -4,6 +4,12 @@ export interface DateDto {
   timestamp: number;
 }
 
+export interface MediaDto {
+  type: string;
+  mimetype: string;
+  src: string;
+}
+
 export interface ModuleDto {
   id: number;
   modname: string;
@@ -17,6 +23,7 @@ export interface ModuleDto {
   state: number;
   isautomatic: boolean;
   dates: DateDto[];
+  media: MediaDto;
 }
 
 export interface SectionDto {

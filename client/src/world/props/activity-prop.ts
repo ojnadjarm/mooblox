@@ -13,7 +13,7 @@ export const PAD_TOP = 0.3;
 export interface PropShape {
   readonly body: Parts;
   readonly sign: { readonly x: number; readonly y: number; readonly z: number; readonly w: number; readonly h: number };
-  readonly flag: { readonly x: number; readonly z: number; readonly height: number };
+  readonly flag: { readonly x: number; readonly z: number; readonly height: number } | null;
   readonly lock: { readonly x: number; readonly y: number; readonly z: number };
 }
 
@@ -27,6 +27,7 @@ export class ActivityProp implements Prop {
   private readonly flag: Mesh;
   private readonly lock: Mesh;
   private readonly materials: Material[] = [];
+  private readonly hasFlag: boolean;
   private current: PropState = { locked: false, done: null };
 
   constructor(
@@ -40,9 +41,13 @@ export class ActivityProp implements Prop {
     this.root.name = `prop-${a.id}`;
     this.root.position.set(plot.x, PAD_TOP, plot.z);
     this.root.rotation.y = plot.facing;
-    const { flag, sign, lock } = shape;
-    shape.body.cylinder(0.07, flag.height, Palette.white, flag.x, flag.height / 2, flag.z, 8);
-    shape.body.box(0.22, 0.22, 0.22, Palette.gold, flag.x, flag.height + 0.08, flag.z);
+    const { sign, lock } = shape;
+    const flag = shape.flag ?? { x: 0, z: 0, height: 0 };
+    this.hasFlag = shape.flag !== null;
+    if (this.hasFlag) {
+      shape.body.cylinder(0.07, flag.height, Palette.white, flag.x, flag.height / 2, flag.z, 8);
+      shape.body.box(0.22, 0.22, 0.22, Palette.gold, flag.x, flag.height + 0.08, flag.z);
+    }
     this.root.add(shape.body.mesh('prop-body', ctx.kit.plastic));
 
     const signMaterial = ctx.kit.textured(ctx.signs.paint(a));
@@ -72,7 +77,7 @@ export class ActivityProp implements Prop {
   update(a: Activity): void {
     const tracked = a.completion.tracking !== CompletionTracking.None;
     this.current = { locked: !a.available, done: tracked ? isDone(a.completion) : null };
-    this.flag.visible = tracked && a.available;
+    this.flag.visible = this.hasFlag && tracked && a.available;
     paint(this.flag.geometry, this.current.done ? Palette.green : Palette.white);
     this.lock.visible = this.current.locked;
   }

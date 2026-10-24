@@ -83,6 +83,32 @@ final class get_world_test extends \advanced_testcase {
     }
 
     /**
+     * A video resource reports its file and a URL its target; other modules report no media.
+     */
+    public function test_execute_returns_media(): void {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $student = $generator->create_and_enrol($course, 'student');
+        $this->setAdminUser();
+        $video = $generator->create_module('resource', ['course' => $course->id, 'defaultfilename' => 'clip.mp4']);
+        $youtube = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ';
+        $link = $generator->create_module('url', ['course' => $course->id, 'externalurl' => $youtube]);
+        $generator->create_module('page', ['course' => $course->id]);
+        $this->setUser($student);
+
+        $result = external_api::clean_returnvalue(get_world::execute_returns(), get_world::execute($course->id));
+
+        $media = array_column(array_merge(...array_column($result['sections'], 'modules')), 'media', 'id');
+        $this->assertSame('file', $media[$video->cmid]['type']);
+        $this->assertSame('video/mp4', $media[$video->cmid]['mimetype']);
+        $this->assertStringContainsString('/mod_resource/content/', $media[$video->cmid]['src']);
+        $this->assertStringEndsWith('/clip.mp4', $media[$video->cmid]['src']);
+        $this->assertSame(['type' => 'link', 'mimetype' => '', 'src' => $youtube], $media[$link->cmid]);
+        $this->assertCount(1, array_filter($media, fn($m) => $m['type'] === ''));
+    }
+
+    /**
      * A user without the play capability is refused.
      */
     public function test_execute_requires_play_capability(): void {

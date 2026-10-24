@@ -5,6 +5,8 @@ import type { AvatarState } from '../player/clips';
 import { NO_INPUT, type InputSource, type InputState } from '../player/input';
 import type { Player } from '../player/player';
 import { Palette } from '../world/palette';
+import { createPropRegistry } from '../world/props/catalog';
+import { CanvasSignPainter } from '../world/props/sign-painter';
 import { startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
@@ -21,6 +23,8 @@ async function boot(): Promise<void> {
   const scene = params.get('scene');
   if (scene === 'avatars') {
     await avatarLineup(view, probe);
+  } else if (scene === 'props') {
+    propLineup(view, probe);
   } else if (scene !== 'overview') {
     const walk = Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
@@ -104,6 +108,26 @@ async function avatarLineup(view: WorldView, probe: Record<string, unknown>): Pr
   view.stage.camera.position.set(-1.2, 2.6, 6.4);
   view.stage.camera.lookAt(0, 1.5, -1);
   view.stage.focusShadow(0, -1, 12);
+}
+
+/** The book stand, cinema and arena gate side by side on the plaza, plus a locked door. */
+function propLineup(view: WorldView, probe: Record<string, unknown>): void {
+  const registry = createPropRegistry();
+  const all = view.world.sections.flatMap((s) => s.activities);
+  const picks = [41, 42, 44].map((id) => all.find((a) => a.id === id)!);
+  picks.push({ ...picks[0]!, id: 99, modname: 'assign', name: 'Locked door', purpose: 'assessment', available: false });
+  const ctx = { kit: view.kit, signs: new CanvasSignPainter(() => view.gate.invalidate()) };
+  probe['props'] = picks.map((a, i) => {
+    const factory = registry.resolve(a);
+    const prop = factory.create(a, { x: (i - 1.5) * 4.2, z: -2.2, radius: 2.5, facing: 0, activityId: a.id, sectionId: a.sectionId }, ctx);
+    prop.root.position.y = 0.02;
+    view.stage.add(prop.root);
+    return `${a.modname}:${factory.key}:${prop.state.locked ? 'locked' : 'open'}`;
+  });
+  view.stopOverview();
+  view.stage.camera.position.set(0, 3.6, 6.8);
+  view.stage.camera.lookAt(0, 2.2, -2);
+  view.stage.focusShadow(0, -2, 14);
 }
 
 boot().catch((e: unknown) => console.error('mooblox: dev boot failed', e));

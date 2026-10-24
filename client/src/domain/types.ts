@@ -24,6 +24,13 @@ export interface ActivityDate {
   readonly timestamp: number;
 }
 
+/** What a module plays: a resource's main file or a URL's target. */
+export interface Media {
+  readonly type: 'file' | 'link';
+  readonly mimetype: string;
+  readonly src: string;
+}
+
 export interface Activity {
   readonly id: number;
   readonly sectionId: number;
@@ -36,6 +43,7 @@ export interface Activity {
   readonly availableInfo: string;
   readonly completion: Completion;
   readonly dates: readonly ActivityDate[];
+  readonly media: Media | null;
 }
 
 export interface Section {

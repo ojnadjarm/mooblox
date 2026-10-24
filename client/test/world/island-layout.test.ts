@@ -11,7 +11,7 @@ const policy = new IslandLayout();
 function activity(id: number, sectionId: number): Activity {
   return {
     id, sectionId, modname: 'page', name: `A${id}`, url: '', purpose: 'content', iconUrl: '', available: true,
-    availableInfo: '', dates: [],
+    availableInfo: '', dates: [], media: null,
     completion: { tracking: CompletionTracking.None, state: CompletionState.Incomplete, automatic: false },
   };
 }

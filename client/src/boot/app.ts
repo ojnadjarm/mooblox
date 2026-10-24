@@ -28,6 +28,7 @@ export interface WorldView {
   readonly gate: FrameGate;
   readonly islands: Group;
   readonly props: PropsLayer;
+  readonly kit: MaterialKit;
   readonly quality: QualityManager;
   /** Hands the camera from the overview to the caller. */
   stopOverview(): void;
@@ -86,6 +87,7 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
     gate,
     islands,
     props,
+    kit,
     quality,
     stopOverview: () => {
       overview = false;

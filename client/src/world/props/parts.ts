@@ -32,7 +32,8 @@ export class Parts {
   }
 
   mesh(name: string, material: Material): Mesh {
-    const merged = mergeGeometries(this.list, false);
+    const mixed = this.list.some((g) => !g.index);
+    const merged = mergeGeometries(mixed ? this.list.map((g) => (g.index ? g.toNonIndexed() : g)) : this.list, false);
     for (const g of this.list) {
       g.dispose();
     }

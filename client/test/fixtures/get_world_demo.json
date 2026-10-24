@@ -1,113 +1,138 @@
 {
-    "courseid": 30,
-    "coursename": "MOOBLOX demo",
-    "firstname": "Mia",
-    "sections": [
-        {
-            "id": 33,
-            "number": 0,
-            "name": "General",
-            "available": true,
-            "availableinfo": "",
-            "modules": [
-                {
-                    "id": 40,
-                    "modname": "label",
-                    "name": "Welcome sign",
-                    "url": "",
-                    "purpose": "content",
-                    "icon": "https://moodle.example/theme/image.php/boost/label/1792833254/monologo?filtericon=1",
-                    "available": true,
-                    "availableinfo": "",
-                    "completion": 0,
-                    "state": 0,
-                    "isautomatic": false,
-                    "dates": []
-                }
-            ]
-        },
-        {
-            "id": 34,
-            "number": 1,
-            "name": "Reading corner",
-            "available": true,
-            "availableinfo": "",
-            "modules": [
-                {
-                    "id": 41,
-                    "modname": "page",
-                    "name": "How volcanoes work",
-                    "url": "https://moodle.example/mod/page/view.php?id=41",
-                    "purpose": "content",
-                    "icon": "https://moodle.example/theme/image.php/boost/page/1792833254/monologo?filtericon=1",
-                    "available": true,
-                    "availableinfo": "",
-                    "completion": 2,
-                    "state": 0,
-                    "isautomatic": true,
-                    "dates": []
-                }
-            ]
-        },
-        {
-            "id": 35,
-            "number": 2,
-            "name": "Cinema",
-            "available": true,
-            "availableinfo": "",
-            "modules": [
-                {
-                    "id": 42,
-                    "modname": "resource",
-                    "name": "Moodle logo video",
-                    "url": "https://moodle.example/mod/resource/view.php?id=42",
-                    "purpose": "content",
-                    "icon": "https://moodle.example/theme/image.php/boost/core/1792833254/f/video?filtericon=1",
-                    "available": true,
-                    "availableinfo": "",
-                    "completion": 2,
-                    "state": 0,
-                    "isautomatic": true,
-                    "dates": []
-                },
-                {
-                    "id": 43,
-                    "modname": "url",
-                    "name": "Big Buck Bunny",
-                    "url": "https://moodle.example/mod/url/view.php?id=43",
-                    "purpose": "content",
-                    "icon": "https://moodle.example/theme/image.php/boost/url/1792833254/monologo?filtericon=1",
-                    "available": true,
-                    "availableinfo": "",
-                    "completion": 2,
-                    "state": 0,
-                    "isautomatic": true,
-                    "dates": []
-                }
-            ]
-        },
-        {
-            "id": 36,
-            "number": 3,
-            "name": "Arena",
-            "available": true,
-            "availableinfo": "",
-            "modules": [
-                {
-                    "id": 44,
-                    "modname": "quiz",
-                    "name": "Volcano quiz",
-                    "url": "https://moodle.example/mod/quiz/view.php?id=44",
-                    "purpose": "assessment",
-                    "icon": "https://moodle.example/theme/image.php/boost/quiz/1792833254/monologo?filtericon=1",
-                    "available": true,
-                    "availableinfo": "",
-                    "completion": 2,
-                    "state": 0,
-                    "isautomatic": true,
-                    "dates": []
-                }
-            ]
-        }
-    ]
+ "courseid": 30,
+ "coursename": "MOOBLOX demo",
+ "firstname": "Mia",
+ "sections": [
+  {
+   "id": 33,
+   "number": 0,
+   "name": "General",
+   "available": true,
+   "availableinfo": "",
+   "modules": [
+    {
+     "id": 40,
+     "modname": "label",
+     "name": "Welcome sign",
+     "url": "",
+     "purpose": "content",
+     "icon": "https://moodle.example/theme/image.php/boost/label/1792836505/monologo?filtericon=1",
+     "available": true,
+     "availableinfo": "",
+     "completion": 0,
+     "state": 0,
+     "isautomatic": false,
+     "dates": [],
+     "media": {
+      "type": "",
+      "mimetype": "",
+      "src": ""
+     }
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "number": 1,
+   "name": "Reading corner",
+   "available": true,
+   "availableinfo": "",
+   "modules": [
+    {
+     "id": 41,
+     "modname": "page",
+     "name": "How volcanoes work",
+     "url": "https://moodle.example/mod/page/view.php?id=41",
+     "purpose": "content",
+     "icon": "https://moodle.example/theme/image.php/boost/page/1792836505/monologo?filtericon=1",
+     "available": true,
+     "availableinfo": "",
+     "completion": 2,
+     "state": 0,
+     "isautomatic": true,
+     "dates": [],
+     "media": {
+      "type": "",
+      "mimetype": "",
+      "src": ""
+     }
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "number": 2,
+   "name": "Cinema",
+   "available": true,
+   "availableinfo": "",
+   "modules": [
+    {
+     "id": 42,
+     "modname": "resource",
+     "name": "Moodle logo video",
+     "url": "https://moodle.example/mod/resource/view.php?id=42",
+     "purpose": "content",
+     "icon": "https://moodle.example/theme/image.php/boost/core/1792836505/f/video?filtericon=1",
+     "available": true,
+     "availableinfo": "",
+     "completion": 2,
+     "state": 0,
+     "isautomatic": true,
+     "dates": [],
+     "media": {
+      "type": "file",
+      "mimetype": "video/mp4",
+      "src": "https://moodle.example/pluginfile.php/155/mod_resource/content/0/moodle-logo.mp4"
+     }
+    },
+    {
+     "id": 43,
+     "modname": "url",
+     "name": "Big Buck Bunny",
+     "url": "https://moodle.example/mod/url/view.php?id=43",
+     "purpose": "content",
+     "icon": "https://moodle.example/theme/image.php/boost/url/1792836505/monologo?filtericon=1",
+     "available": true,
+     "availableinfo": "",
+     "completion": 2,
+     "state": 0,
+     "isautomatic": true,
+     "dates": [],
+     "media": {
+      "type": "link",
+      "mimetype": "",
+      "src": "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+     }
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "number": 3,
+   "name": "Arena",
+   "available": true,
+   "availableinfo": "",
+   "modules": [
+    {
+     "id": 44,
+     "modname": "quiz",
+     "name": "Volcano quiz",
+     "url": "https://moodle.example/mod/quiz/view.php?id=44",
+     "purpose": "assessment",
+     "icon": "https://moodle.example/theme/image.php/boost/quiz/1792836505/monologo?filtericon=1",
+     "available": true,
+     "availableinfo": "",
+     "completion": 2,
+     "state": 0,
+     "isautomatic": true,
+     "dates": [],
+     "media": {
+      "type": "",
+      "mimetype": "",
+      "src": ""
+     }
+    }
+   ]
+  }
+ ]
 }

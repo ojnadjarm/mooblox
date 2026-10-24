@@ -95,6 +95,11 @@ class get_world extends external_api {
             'state' => new external_value(PARAM_INT, 'Overall completion state'),
             'isautomatic' => new external_value(PARAM_BOOL, 'Whether completion is automatic'),
             'dates' => $dates,
+            'media' => new external_single_structure([
+                'type' => new external_value(PARAM_ALPHA, 'Media kind: file, link or empty'),
+                'mimetype' => new external_value(PARAM_RAW, 'File mime type, empty for links'),
+                'src' => new external_value(PARAM_URL, 'File or link URL, empty when none'),
+            ]),
         ]);
         $section = new external_single_structure([
             'id' => new external_value(PARAM_INT, 'Section id'),
