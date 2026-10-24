@@ -7,6 +7,10 @@ import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
 import type { AvatarState } from '../player/clips';
 import { NO_INPUT, type InputSource, type InputState } from '../player/input';
 import type { Player } from '../player/player';
+import { parseShape, shapeWorld } from '../domain/course-shape';
+import { modelIds } from '../world/dressing';
+import { startLife } from '../world/life';
+import { ModelLibrary } from '../world/model-library';
 import { Palette } from '../world/palette';
 import { createPropRegistry } from '../world/props/catalog';
 import { CanvasSignPainter } from '../world/props/sign-painter';
@@ -38,8 +42,12 @@ async function boot(): Promise<void> {
   }
   const gateway = new FakeGateway(dto);
   const store = new CourseStore();
-  store.set(await gateway.getWorld(fixture.courseid));
-  const view = startWorld(root, store.world!);
+  const shape = params.get('shape');
+  store.set(shape ? shapeWorld(Number(params.get('course') ?? 7), parseShape(shape)) : await gateway.getWorld(fixture.courseid));
+  const models = await ModelLibrary.load(ASSETS, modelIds());
+  const view = startWorld(root, store.world!, models);
+  const avatars = await AvatarKit.load(ASSETS);
+  await startLife(view, models, view.quality.tier === 'low' || params.has('nokids') ? null : avatars);
   const probe: Record<string, unknown> = {};
   Object.assign(window, { mooblox: { ...view, probe } });
   const scene = params.get('scene');
@@ -50,7 +58,6 @@ async function boot(): Promise<void> {
   } else if (scene !== 'overview') {
     const walk = Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
-    const avatars = await AvatarKit.load(ASSETS);
     const look = params.has('avatar') ? decodeLook(params.get('avatar')!, avatars.bodies.map((b) => b.id)) : { skin: 'b', tint: Palette.red };
     const player = await startPlayer(view, avatars, look, [pilot]);
     const course = { store, gateway };
@@ -80,7 +87,10 @@ class Autopilot implements InputSource {
     if (!zone || !plot) {
       throw new Error(`no plot for cm ${cmid}`);
     }
+    const a = zone.anchor;
+    const d = Math.hypot(zone.x - a.x, zone.z - a.z);
     const waypoints = [
+      { x: a.x + ((zone.x - a.x) / d) * (a.radius - 2), z: a.z + ((zone.z - a.z) / d) * (a.radius - 2), r: 1.5 },
       { x: zone.x, z: zone.z, r: 1.5 },
       { x: plot.x, z: plot.z, r: plot.radius - 1 },
     ];

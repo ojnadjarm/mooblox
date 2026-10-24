@@ -37,6 +37,19 @@ export class PropsLayer {
     return [...this.props.values()];
   }
 
+  /**
+   * Distance LOD for large courses: past `near` a prop drops its sign, flag and padlock, past `far` it is hidden and its
+   * coloured pad stands in. Courses with up to `keep` props always show everything.
+   */
+  cull(x: number, z: number, near: number, far: number, keep: number): void {
+    const all = this.props.size <= keep;
+    for (const prop of this.props.values()) {
+      const d = Math.hypot(prop.root.position.x - x, prop.root.position.z - z);
+      prop.root.visible = all || d < far;
+      prop.detail.visible = all || d < near;
+    }
+  }
+
   /** Re-reads availability and completion of every prop from a fresh world. */
   update(world: WorldData): void {
     const activities = activityMap(world);

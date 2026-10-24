@@ -10,6 +10,9 @@ import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { startActivities, startAvatarPicker, startGuide, startPlayer, startWorld } from './app';
 import { readConfig } from './config';
 import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
+import { modelIds } from '../world/dressing';
+import { startLife } from '../world/life';
+import { ModelLibrary } from '../world/model-library';
 
 const SESSION_TOUCH_MS = 5 * 60 * 1000;
 const AVATAR_PREFERENCE = 'local_mooblox_avatar';
@@ -26,8 +29,11 @@ async function boot(): Promise<void> {
   keepSessionAlive(gateway, SESSION_TOUCH_MS, (e) => console.error('mooblox: session touch failed', e));
   store.set(await gateway.getWorld(config.courseid));
   root.dataset['courseid'] = String(config.courseid);
-  const view = startWorld(root, store.world!, { ...DEFAULT_GATE_STRINGS, ...config.strings });
-  const avatars = await AvatarKit.load(new URL(/* @vite-ignore */ './assets/', import.meta.url).href);
+  const assets = new URL(/* @vite-ignore */ './assets/', import.meta.url).href;
+  const models = await ModelLibrary.load(assets, modelIds());
+  const view = startWorld(root, store.world!, models, { ...DEFAULT_GATE_STRINGS, ...config.strings });
+  const avatars = await AvatarKit.load(assets);
+  await startLife(view, models, view.quality.tier === 'low' ? null : avatars);
   const look = decodeLook(config.avatar, avatars.bodies.map((b) => b.id));
   const player = await startPlayer(view, avatars, look);
   const course = { store, gateway };

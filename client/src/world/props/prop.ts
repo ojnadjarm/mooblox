@@ -14,6 +14,8 @@ export interface Prop {
   readonly activityId: number;
   readonly key: string;
   readonly root: Object3D;
+  /** The near-only parts (name sign, completion flag, padlock), hidden at a distance. */
+  readonly detail: Object3D;
   readonly state: PropState;
   /** Re-reads availability and completion from the activity. */
   update(a: Activity): void;

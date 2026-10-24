@@ -1,7 +1,6 @@
 import {
   BoxGeometry,
   CircleGeometry,
-  ConeGeometry,
   CylinderGeometry,
   Group,
   Matrix4,
@@ -15,50 +14,54 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { WorldData } from '../domain/types';
-import type { DecorSpot } from './decor';
+import type { Look, LookPalette } from './look';
 import type { Circle, WorldLayout } from './layout';
 import { paint, type MaterialKit } from './material-kit';
 import { Palette, PurposeColor } from './palette';
 import { seededRandom } from './random';
+import { waterMaterial } from './water';
 
 /** World units per stud on baseplate tops. */
 export const STUD = 0.5;
-const WATER_Y = -1;
+const WATER_Y = -3;
 const PLAZA = 7;
 const PAD = 3.6;
 const PAD_H = 0.3;
-const BRIDGE_W = 3;
-const PLANK = 0.6;
 
 /** Static island scene: land, studded tops, water and clouds, a few merged meshes in total. */
 export class IslandBuilder {
   private land: BufferGeometry[] = [];
   private tops: BufferGeometry[] = [];
   private clouds: BufferGeometry[] = [];
+  private readonly p: LookPalette;
 
-  constructor(private readonly kit: MaterialKit) {}
+  constructor(
+    private readonly kit: MaterialKit,
+    private readonly look: Look,
+  ) {
+    this.p = look.palette;
+  }
 
-  build(world: WorldData, layout: WorldLayout, decor: readonly DecorSpot[]): Group {
+  build(world: WorldData, layout: WorldLayout): Group {
     this.land = [];
     this.tops = [];
     this.clouds = [];
     const purposes = new Map(world.sections.flatMap((s) => s.activities).map((a) => [a.id, a.purpose]));
 
-    this.island(layout.hub);
-    this.top(new CircleGeometry(PLAZA, 40), Palette.stone, 0, 0.02, 0);
-    this.box(3.2, 0.3, 3.2, Palette.stoneDark, 0, 0.15, 0);
+    for (const hub of layout.hubs) {
+      this.island(hub);
+    }
+    this.top(new CircleGeometry(PLAZA, 40), this.p.path[0] ?? Palette.stone, 0, 0.02, 0);
+    this.add(this.land, new CylinderGeometry(PLAZA + 0.15, PLAZA + 0.15, 0.1, 40, 1, true), this.p.stoneDark, 0, 0.0, 0);
+    this.box(3.2, 0.3, 3.2, this.p.stoneDark, 0, 0.15, 0);
     this.top(new PlaneGeometry(3.2, 3.2), Palette.blue, 0, 0.31, 0);
     for (const zone of layout.zones) {
       this.island(zone);
-      this.bridge(layout.hub, zone);
       for (const p of zone.plots) {
         const color = PurposeColor[purposes.get(p.activityId) ?? 'other'] ?? Palette.pink;
         this.box(PAD, PAD_H, PAD, Palette.white, p.x, PAD_H / 2, p.z, p.facing);
         this.top(new PlaneGeometry(PAD - 0.3, PAD - 0.3), color, p.x, PAD_H + 0.01, p.z, p.facing);
       }
-    }
-    for (const d of decor) {
-      this.decor(d);
     }
     this.cloudBank(world.courseId, layout.extent);
 
@@ -66,63 +69,20 @@ export class IslandBuilder {
     group.name = 'islands';
     group.add(this.mesh('land', this.land, this.kit.plastic, true));
     group.add(this.mesh('tops', this.tops, this.kit.studs, true));
-    group.add(this.mesh('water', [this.water()], this.kit.plastic, false));
+    const water = this.mesh('water', [this.water()], waterMaterial(this.look, [...layout.hubs, ...layout.zones]), false);
+    water.receiveShadow = false;
+    group.add(water);
     group.add(this.mesh('clouds', this.clouds, this.kit.plastic, false));
     return group;
   }
 
   private island(c: Circle): void {
     const seg = Math.max(32, Math.round(c.radius * 4));
-    this.top(new CircleGeometry(c.radius, seg), Palette.grass, c.x, 0, c.z);
-    this.add(this.land, new CylinderGeometry(c.radius, c.radius, 0.4, seg, 1, true), Palette.grassLight, c.x, -0.2, c.z);
-    this.add(this.land, new CylinderGeometry(c.radius, c.radius * 0.8, 2.6, seg, 1, true), Palette.dirt, c.x, -1.7, c.z);
-    this.add(this.land, new CylinderGeometry(c.radius + 1.4, c.radius + 2, 0.3, seg), Palette.sand, c.x, WATER_Y + 0.12, c.z);
-  }
-
-  private bridge(hub: Circle, zone: Circle & { angle: number }): void {
-    const dist = Math.hypot(zone.x, zone.z);
-    const from = hub.radius - 0.8;
-    const to = dist - zone.radius + 0.8;
-    const yaw = Math.atan2(zone.x, zone.z);
-    const dx = zone.x / dist;
-    const dz = zone.z / dist;
-    let i = 0;
-    for (let t = from; t <= to; t += PLANK, i++) {
-      this.box(BRIDGE_W, 0.2, PLANK - 0.08, i % 2 ? Palette.wood : Palette.woodDark, dx * t, 0.1, dz * t, yaw);
-    }
-    const mid = (from + to) / 2;
-    const len = to - from;
-    for (const side of [-1, 1]) {
-      const ox = dz * side * (BRIDGE_W / 2 - 0.1);
-      const oz = -dx * side * (BRIDGE_W / 2 - 0.1);
-      this.box(0.2, 0.2, len, Palette.woodDark, dx * mid + ox, 0.9, dz * mid + oz, yaw);
-      for (let t = from + 0.5; t < to; t += 2) {
-        this.box(0.25, 1.9, 0.25, Palette.woodDark, dx * t + ox, -0.05, dz * t + oz, yaw);
-      }
-    }
-  }
-
-  private decor(d: DecorSpot): void {
-    const s = d.scale;
-    switch (d.kind) {
-      case 'tree':
-        this.add(this.land, new CylinderGeometry(0.22 * s, 0.32 * s, 1.8 * s, 8), Palette.wood, d.x, 0.9 * s, d.z);
-        this.add(this.land, new SphereGeometry(1.25 * s, 14, 10), Palette.leaves, d.x, 2.5 * s, d.z);
-        break;
-      case 'pine':
-        this.add(this.land, new CylinderGeometry(0.2 * s, 0.28 * s, 1.2 * s, 8), Palette.wood, d.x, 0.6 * s, d.z);
-        this.add(this.land, new ConeGeometry(1.3 * s, 1.8 * s, 10), Palette.leavesDark, d.x, 1.8 * s, d.z, d.yaw);
-        this.add(this.land, new ConeGeometry(1 * s, 1.5 * s, 10), Palette.leavesDark, d.x, 2.7 * s, d.z, d.yaw);
-        this.add(this.land, new ConeGeometry(0.7 * s, 1.2 * s, 10), Palette.leavesDark, d.x, 3.5 * s, d.z, d.yaw);
-        break;
-      case 'bush':
-        this.add(this.land, new SphereGeometry(0.75 * s, 12, 8), Palette.grassLight, d.x, 0.35 * s, d.z, 0, new Vector3(1, 0.75, 1));
-        break;
-      case 'rock':
-        this.add(this.land, new BoxGeometry(1.1 * s, 0.7 * s, 0.9 * s), Palette.stone, d.x, 0.3 * s, d.z, d.yaw);
-        this.add(this.land, new BoxGeometry(0.6 * s, 0.5 * s, 0.6 * s), Palette.stoneDark, d.x + 0.5 * s, 0.25 * s, d.z, d.yaw + 0.5);
-        break;
-    }
+    this.top(new CircleGeometry(c.radius, seg), this.p.grass, c.x, 0, c.z);
+    this.add(this.land, new CylinderGeometry(c.radius, c.radius, 0.4, seg, 1, true), this.p.grassLight, c.x, -0.2, c.z);
+    this.add(this.land, new CylinderGeometry(c.radius, c.radius * 0.93, 0.9, seg, 1, true), this.p.dirt, c.x, -0.85, c.z);
+    this.add(this.land, new CylinderGeometry(c.radius * 0.93, c.radius * 0.85, 3, seg, 1, true), this.p.dirtDark, c.x, -2.8, c.z);
+    this.add(this.land, new CylinderGeometry(c.radius + 0.9, c.radius + 1.6, 0.3, seg), this.p.sand, c.x, WATER_Y + 0.12, c.z);
   }
 
   private cloudBank(seed: number, extent: number): void {
@@ -134,9 +94,10 @@ export class IslandBuilder {
       const z = Math.sin(a) * r;
       const y = 60 + random() * 15;
       const w = 6 + random() * 6;
-      this.add(this.clouds, new BoxGeometry(w, 2, w * 0.55), Palette.white, x, y, z, a);
-      this.add(this.clouds, new BoxGeometry(w * 0.55, 1.6, w * 0.4), Palette.white, x + 1.5, y + 1.4, z, a);
-      this.add(this.clouds, new BoxGeometry(w * 0.4, 1.2, w * 0.35), Palette.white, x - w * 0.4, y + 0.8, z + 0.6, a);
+      const flat = new Vector3(1, 0.45, 0.6);
+      this.add(this.clouds, new SphereGeometry(w * 0.5, 12, 8), this.p.cloud, x, y, z, a, flat);
+      this.add(this.clouds, new SphereGeometry(w * 0.32, 12, 8), this.p.cloud, x + w * 0.3, y + 1.2, z, a, flat);
+      this.add(this.clouds, new SphereGeometry(w * 0.28, 12, 8), this.p.cloud, x - w * 0.35, y + 0.6, z + 0.6, a, flat);
     }
   }
 

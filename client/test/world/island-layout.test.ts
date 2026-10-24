@@ -63,7 +63,7 @@ describe('IslandLayout', () => {
           expect(inside(z, { x: 0, z: 0, radius: layout.extent })).toBe(true);
           for (const p of z.plots) expect(inside(p, z)).toBe(true);
         }
-        expect(layout.extent).toBeLessThanOrEqual(150);
+        expect(layout.extent).toBeLessThanOrEqual(200);
       }
     });
   }

@@ -20,9 +20,13 @@ export class BvhCollider implements Collider {
     this.bvh = new MeshBVH(geometry);
   }
 
-  /** Merges the world-space positions of `meshes` into one collision geometry. */
-  static fromMeshes(meshes: readonly Object3D[]): BvhCollider {
-    const parts: BufferGeometry[] = [];
+  /** Merges the world-space positions of `meshes` and of the world-space `extra` geometries into one collision geometry. */
+  static fromMeshes(meshes: readonly Object3D[], extra: readonly BufferGeometry[] = []): BvhCollider {
+    const parts: BufferGeometry[] = extra.map((g) => {
+      const p = new BufferGeometry();
+      p.setAttribute('position', g.getAttribute('position'));
+      return p;
+    });
     for (const root of meshes) {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
@@ -34,7 +38,7 @@ export class BvhCollider implements Collider {
           if (index) {
             g.setIndex(index.clone());
           }
-          parts.push(g.applyMatrix4(mesh.matrixWorld));
+          parts.push((index ? g.toNonIndexed() : g).applyMatrix4(mesh.matrixWorld));
         }
       });
     }

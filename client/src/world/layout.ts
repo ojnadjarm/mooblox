@@ -14,15 +14,26 @@ export interface Plot extends Circle {
   readonly facing: number;
 }
 
-/** The island of one section; `angle` is its bearing from the hub. */
+/** The island of one section; `angle` is its bearing from `anchor`, the hub its bridge starts on. */
 export interface Zone extends Circle {
   readonly sectionId: number;
   readonly angle: number;
+  readonly anchor: Circle;
   readonly plots: readonly Plot[];
 }
 
+/** An always-open bridge between two hubs (indices into `hubs`). */
+export interface HubLink {
+  readonly from: number;
+  readonly to: number;
+}
+
 export interface WorldLayout {
+  /** The spawn plaza, `hubs[0]`. */
   readonly hub: Circle;
+  /** Plaza islands: the hub plus the extra plazas large courses open further out. */
+  readonly hubs: readonly Circle[];
+  readonly links: readonly HubLink[];
   readonly spawn: { readonly x: number; readonly z: number };
   readonly zones: readonly Zone[];
   /** Radius of the circle around the origin that holds every zone. */

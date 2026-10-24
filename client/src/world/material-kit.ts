@@ -27,11 +27,19 @@ export class MaterialKit {
   readonly studs: Material;
   /** Unlit gradient for the sky dome. */
   readonly sky: Material;
+  /** Unlit, over-bright vertex colour for lamps and lanterns (bloom source on the high tier). */
+  readonly glow: Material;
+  /** Kit-model dressing: vertex colours plus a wind sway in the vertex shader, weighted by the `sway` attribute. */
+  readonly scenery: Material;
+  /** Seconds the sway runs on; the frame loop advances it. */
+  readonly time = { value: 0 };
 
   constructor(private readonly tier: MaterialTier = 'standard') {
     this.plastic = plasticMaterial(tier, null);
     this.studs = plasticMaterial(tier, studNormalMap());
     this.sky = new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, depthWrite: false });
+    this.glow = new MeshBasicMaterial({ vertexColors: true, color: new Color().setScalar(tier === 'low' ? 1 : 2.5) });
+    this.scenery = swayMaterial(tier, this.time);
   }
 
   /** A material for one painted texture (signs), lit like the plastic. */
@@ -43,10 +51,25 @@ export class MaterialKit {
   }
 
   dispose(): void {
-    for (const m of [this.plastic, this.studs, this.sky]) {
+    for (const m of [this.plastic, this.studs, this.sky, this.glow, this.scenery]) {
       m.dispose();
     }
   }
+}
+
+function swayMaterial(tier: MaterialTier, time: { value: number }): Material {
+  const m = tier === 'low' ? new MeshLambertMaterial({ vertexColors: true }) : new MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0 });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms['uTime'] = time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float sway;\nuniform float uTime;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvec4 wp = modelMatrix * vec4(position, 1.0);\nfloat ph = uTime * 1.7 + wp.x * 0.35 + wp.z * 0.27;\ntransformed.x += sin(ph) * sway * 0.12;\ntransformed.z += cos(ph * 0.8) * sway * 0.08;',
+      );
+  };
+  m.customProgramCacheKey = () => 'mooblox-sway';
+  return m;
 }
 
 /** Paints every vertex of a geometry one palette colour (sRGB hex). */

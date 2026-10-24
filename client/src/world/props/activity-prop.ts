@@ -24,6 +24,7 @@ const FLAG_H = 0.6;
 export class ActivityProp implements Prop {
   readonly activityId: number;
   readonly root = new Group();
+  readonly detail = new Group();
   private readonly flag: Mesh;
   private readonly lock: Mesh;
   private readonly materials: Material[] = [];
@@ -55,18 +56,19 @@ export class ActivityProp implements Prop {
     const board = new Mesh(new PlaneGeometry(sign.w, sign.h), signMaterial);
     board.name = 'prop-sign';
     board.position.set(sign.x, sign.y, sign.z);
-    this.root.add(board);
+    this.detail.add(board);
 
     const cloth = new BoxGeometry(FLAG_W, FLAG_H, 0.06);
     cloth.translate(flag.x + FLAG_W / 2 + 0.05, flag.height - FLAG_H / 2 - 0.05, flag.z);
     this.flag = new Mesh(paint(cloth, Palette.white), ctx.kit.plastic);
     this.flag.name = 'prop-flag';
     this.flag.castShadow = true;
-    this.root.add(this.flag);
+    this.detail.add(this.flag);
 
     this.lock = padlock(ctx.kit.plastic);
     this.lock.position.set(lock.x, lock.y, lock.z);
-    this.root.add(this.lock);
+    this.detail.add(this.lock);
+    this.root.add(this.detail);
     this.update(a);
   }
 

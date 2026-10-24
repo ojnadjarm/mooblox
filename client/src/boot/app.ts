@@ -1,4 +1,4 @@
-import { Vector3, type Group, type Mesh } from 'three';
+import { Fog, Vector3, type BufferGeometry, type Group, type Mesh, type ShaderMaterial } from 'three';
 import type { Activity, WorldData } from '../domain/types';
 import { ActivityInteraction } from '../interaction/activity-interaction';
 import type { OpenerRegistry } from '../interaction/opener';
@@ -17,12 +17,15 @@ import { FollowCamera } from '../player/follow-camera';
 import { CombinedInput, KeyboardInput, type InputSource } from '../player/input';
 import { Player } from '../player/player';
 import { AccessFence, closedSections } from '../world/access-fence';
-import { scatterDecor } from '../world/decor';
 import { GateLayer, type GateStrings } from '../world/gates/gate-layer';
 import { structureKey, shiftFor } from '../world/rebuild';
 import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
 import type { WorldLayout } from '../world/layout';
+import { designWorld, type Dressing } from '../world/dressing';
+import { CAMPUS } from '../world/look';
+import type { ModelLibrary } from '../world/model-library';
+import { buildScenery, DETAIL_DISTANCE } from '../world/scenery';
 import { MaterialKit } from '../world/material-kit';
 import { createPropRegistry } from '../world/props/catalog';
 import { PropsLayer } from '../world/props/props-layer';
@@ -53,6 +56,10 @@ export interface WorldView {
   readonly fence: AccessFence;
   readonly kit: MaterialKit;
   readonly quality: QualityManager;
+  /** The designer's dressing of the current layout (paths, life spots, obstacles). */
+  readonly dressing: Dressing;
+  /** World-space solid triangles of the dressing, for the player's collider. */
+  readonly solids: BufferGeometry;
   /** Shows a fresh course: locks, gates and completion; rebuilds the islands when sections or activities came or went. */
   apply(world: WorldData): void;
   /** Adds a listener for structural rebuilds; returns its remover. */
@@ -63,8 +70,8 @@ export interface WorldView {
   onFrame(step: (dt: number) => void): () => void;
 }
 
-/** Builds the island scene for one course inside `root` and starts the render loop. */
-export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: GateStrings): WorldView {
+/** Builds the island scene for one course inside `root` (dressed with `models`) and starts the render loop. */
+export function startWorld(root: HTMLElement, world: WorldData, models: ModelLibrary, gateStrings?: GateStrings): WorldView {
   Object.assign(root.style, { position: 'fixed', inset: '0', overflow: 'hidden', touchAction: 'none' });
   const params = new URLSearchParams(location.search);
   const coarse = window.matchMedia('(pointer: coarse)').matches;
@@ -72,12 +79,23 @@ export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: Ga
   const tier = pickTier({ query: params.get('quality'), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse });
   const settings = QUALITY[tier];
   const kit = new MaterialKit(settings.materials);
-  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize });
+  const look = CAMPUS;
+  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: tier === 'high' }, look);
   const registry = createPropRegistry();
   const signs = new CanvasSignPainter(() => gate.invalidate());
+  const policy = new IslandLayout(look.size);
+  const dress = (w: WorldData, l: WorldLayout) => {
+    const group = new IslandBuilder(kit, look).build(w, l);
+    const d = designWorld(l, w.courseId, look.palette);
+    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier]);
+    group.add(scenery.group);
+    const water = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
+    return { group, dressing: d, solids: scenery.collision, water };
+  };
   let current = world;
-  let layout = new IslandLayout().layout(world);
-  let islands = new IslandBuilder(kit).build(world, layout, scatterDecor(layout, world.courseId));
+  let layout = policy.layout(world);
+  let built = dress(world, layout);
+  let islands = built.group;
   let props = new PropsLayer(registry, { kit, signs }).build(world, layout);
   let key = structureKey(world);
   const gates = new GateLayer(kit, gateStrings).build(world, layout);
@@ -95,7 +113,14 @@ export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: Ga
   const quality = new QualityManager(stage, tier);
   const overlay = params.get('perf') === '1' ? new PerfOverlay(root, stage.renderer, quality) : null;
   const steps = new Set<(dt: number) => void>();
+  let clock = 0;
+  const lod = PROP_LOD[tier];
   steps.add((dt) => {
+    clock += dt;
+    const eye = stage.camera.position;
+    props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
+    kit.time.value = clock;
+    built.water.uniforms['uTime']!.value = clock;
     if (gates.frame(dt)) {
       gate.invalidate();
     }
@@ -113,7 +138,7 @@ export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: Ga
   const resize = (): void => {
     quality.apply();
     if (overview) {
-      frameOverview(stage, e);
+      frameOverview(stage, layout);
     }
     gate.invalidate();
   };
@@ -129,9 +154,10 @@ export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: Ga
     for (const prop of props.all) {
       prop.dispose();
     }
-    layout = new IslandLayout().layout(next);
+    layout = policy.layout(next);
     e = layout.extent;
-    islands = new IslandBuilder(kit).build(next, layout, scatterDecor(layout, next.courseId));
+    built = dress(next, layout);
+    islands = built.group;
     props = new PropsLayer(registry, { kit, signs }).build(next, layout);
     stage.add(islands);
     stage.add(props.group);
@@ -160,6 +186,12 @@ export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: Ga
     fence,
     kit,
     quality,
+    get dressing() {
+      return built.dressing;
+    },
+    get solids() {
+      return built.solids;
+    },
     apply: (next) => {
       current = next;
       fence.setClosed(closedSections(next));
@@ -187,6 +219,10 @@ export function startWorld(root: HTMLElement, world: WorldData, gateStrings?: Ga
   };
 }
 
+/** Prop LOD distances (from the camera, metres) per tier, and the course size up to which every prop always shows. */
+const PROP_LOD = { low: { near: 30, far: 80 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 } } as const;
+const PROPS_ALWAYS = 40;
+
 const SPAWN_HEIGHT = 2;
 const SHADOW_RADIUS = 30;
 
@@ -199,7 +235,7 @@ export async function startPlayer(
 ): Promise<Player> {
   const avatar = await avatars.create(look);
   view.stage.add(avatar.root);
-  const solid = () => BvhCollider.fromMeshes(view.islands.children.filter((o) => o.name === 'land' || o.name === 'tops'));
+  const solid = () => BvhCollider.fromMeshes(view.islands.children.filter((o) => o.name === 'land' || o.name === 'tops'), [view.solids]);
   const collider = new FencedCollider(solid(), view.fence);
   const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement);
   const spawn = new Vector3(view.layout.spawn.x, SPAWN_HEIGHT, view.layout.spawn.z);
@@ -311,9 +347,23 @@ export function goToPlot(view: WorldView, player: Player, activityId: number): b
   return true;
 }
 
-/** Overview camera that keeps the whole island in view, pulling back on portrait screens. */
-function frameOverview(stage: Stage, extent: number): void {
+/** Overview camera that keeps every island in view, centred on their bounding box, pulling back on portrait screens. */
+function frameOverview(stage: Stage, layout: WorldLayout): void {
+  const all = [...layout.hubs, ...layout.zones];
+  const minX = Math.min(...all.map((c) => c.x - c.radius));
+  const maxX = Math.max(...all.map((c) => c.x + c.radius));
+  const minZ = Math.min(...all.map((c) => c.z - c.radius));
+  const maxZ = Math.max(...all.map((c) => c.z + c.radius));
+  const cx = (minX + maxX) / 2;
+  const cz = (minZ + maxZ) / 2;
+  const extent = Math.max(maxX - minX, maxZ - minZ) / 2;
   const pull = Math.pow(Math.max(1, 1.4 / stage.camera.aspect), 0.6);
-  stage.camera.position.set(-extent * 0.35 * pull, extent * 0.62 * Math.pow(pull, 0.7), extent * 1.05 * pull);
-  stage.camera.lookAt(0, -2, 0);
+  stage.camera.position.set(cx - extent * 0.45 * pull, extent * 0.8 * Math.pow(pull, 0.7), cz + extent * 1.35 * pull);
+  stage.camera.lookAt(cx, -2, cz + extent * 0.12);
+  const fog = stage.scene.fog;
+  if (fog instanceof Fog) {
+    const d = stage.camera.position.distanceTo(new Vector3(cx, 0, cz));
+    fog.near = Math.max(fog.near, d * 0.8);
+    fog.far = Math.max(fog.far, d * 2);
+  }
 }

@@ -1,0 +1,206 @@
+{
+ "nature/bridge_center_wood": {
+  "h": 0.3,
+  "w": 1,
+  "r": 0.707,
+  "tris": 52
+ },
+ "nature/cliff_large_rock": {
+  "h": 1,
+  "w": 1,
+  "r": 0.707,
+  "tris": 32
+ },
+ "nature/cliff_large_stone": {
+  "h": 1,
+  "w": 1,
+  "r": 0.707,
+  "tris": 32
+ },
+ "nature/cliff_steps_rock": {
+  "h": 1,
+  "w": 1.05,
+  "r": 0.743,
+  "tris": 219
+ },
+ "nature/flower_purpleA": {
+  "h": 0.242,
+  "w": 0.181,
+  "r": 0.105,
+  "tris": 76
+ },
+ "nature/flower_redA": {
+  "h": 0.292,
+  "w": 0.181,
+  "r": 0.105,
+  "tris": 76
+ },
+ "nature/flower_yellowA": {
+  "h": 0.192,
+  "w": 0.181,
+  "r": 0.105,
+  "tris": 76
+ },
+ "nature/path_stone": {
+  "h": 0.05,
+  "w": 1,
+  "r": 0.551,
+  "tris": 136
+ },
+ "nature/plant_bushDetailed": {
+  "h": 0.36,
+  "w": 0.603,
+  "r": 0.302,
+  "tris": 104
+ },
+ "nature/plant_bushLarge": {
+  "h": 0.243,
+  "w": 0.374,
+  "r": 0.187,
+  "tris": 60
+ },
+ "nature/rock_largeA": {
+  "h": 0.26,
+  "w": 1.015,
+  "r": 0.589,
+  "tris": 80
+ },
+ "nature/rock_largeB": {
+  "h": 0.43,
+  "w": 1.015,
+  "r": 0.595,
+  "tris": 85
+ },
+ "nature/rock_largeC": {
+  "h": 0.321,
+  "w": 1.064,
+  "r": 0.605,
+  "tris": 72
+ },
+ "nature/rock_tallA": {
+  "h": 0.996,
+  "w": 0.983,
+  "r": 0.522,
+  "tris": 136
+ },
+ "nature/rock_tallB": {
+  "h": 0.884,
+  "w": 0.77,
+  "r": 0.478,
+  "tris": 172
+ },
+ "nature/tree_detailed": {
+  "h": 1.332,
+  "w": 0.847,
+  "r": 0.467,
+  "tris": 402
+ },
+ "nature/tree_oak": {
+  "h": 1.226,
+  "w": 0.74,
+  "r": 0.37,
+  "tris": 196
+ },
+ "pirate/boat-row-small": {
+  "h": 0.848,
+  "w": 2.749,
+  "r": 1.413,
+  "tris": 168
+ },
+ "pirate/flag-pennant": {
+  "h": 2.097,
+  "w": 1.762,
+  "r": 1.562,
+  "tris": 118
+ },
+ "pirate/structure-platform-dock": {
+  "h": 1.312,
+  "w": 2.513,
+  "r": 1.768,
+  "tris": 324
+ },
+ "suburb/building-type-a": {
+  "h": 0.834,
+  "w": 1.3,
+  "r": 0.809,
+  "tris": 1174
+ },
+ "suburb/building-type-c": {
+  "h": 1.034,
+  "w": 1.286,
+  "r": 0.804,
+  "tris": 1196
+ },
+ "suburb/building-type-e": {
+  "h": 1.138,
+  "w": 1.3,
+  "r": 0.81,
+  "tris": 1731
+ },
+ "suburb/building-type-h": {
+  "h": 0.737,
+  "w": 1.3,
+  "r": 0.776,
+  "tris": 770
+ },
+ "suburb/building-type-k": {
+  "h": 1.15,
+  "w": 1.02,
+  "r": 0.667,
+  "tris": 1024
+ },
+ "suburb/building-type-t": {
+  "h": 1.156,
+  "w": 1.406,
+  "r": 0.924,
+  "tris": 2062
+ },
+ "suburb/planter": {
+  "h": 0.177,
+  "w": 0.4,
+  "r": 0.23,
+  "tris": 204
+ },
+ "suburb/tree-large": {
+  "h": 0.767,
+  "w": 0.243,
+  "r": 0.122,
+  "tris": 42
+ },
+ "town/fountain-round-detail": {
+  "h": 0.48,
+  "w": 2,
+  "r": 1,
+  "tris": 1628
+ },
+ "town/hedge-large": {
+  "h": 0.6,
+  "w": 1,
+  "r": 0.707,
+  "tris": 90
+ },
+ "town/lantern": {
+  "h": 1.556,
+  "w": 0.224,
+  "r": 0.123,
+  "tris": 158
+ },
+ "town/stall-bench": {
+  "h": 0.226,
+  "w": 0.94,
+  "r": 0.482,
+  "tris": 180
+ },
+ "town/stall-green": {
+  "h": 1.237,
+  "w": 1,
+  "r": 0.707,
+  "tris": 322
+ },
+ "town/tree-high-round": {
+  "h": 2.751,
+  "w": 1.019,
+  "r": 0.509,
+  "tris": 126
+ }
+}

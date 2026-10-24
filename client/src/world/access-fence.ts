@@ -8,9 +8,11 @@ export const GATE_SETBACK = 2.8;
 /** Half width of the bridge corridor the fence closes between the gate and the zone. */
 const CORRIDOR = 2.2;
 
-/** Where a zone's gate stands on its bridge: `t` metres from the hub centre along the bearing (dx, dz). */
+/** Where a zone's gate stands on its bridge: `t` metres from its hub's centre (ax, az) along the bearing (dx, dz). */
 export interface GateSpot {
   readonly sectionId: number;
+  readonly ax: number;
+  readonly az: number;
   readonly x: number;
   readonly z: number;
   readonly t: number;
@@ -21,11 +23,12 @@ export interface GateSpot {
 
 /** The gate spot of a zone, on its bridge just before the shore. */
 export function gateSpot(zone: Zone): GateSpot {
-  const dist = Math.hypot(zone.x, zone.z);
-  const dx = zone.x / dist;
-  const dz = zone.z / dist;
+  const { x: ax, z: az } = zone.anchor;
+  const dist = Math.hypot(zone.x - ax, zone.z - az);
+  const dx = (zone.x - ax) / dist;
+  const dz = (zone.z - az) / dist;
   const t = dist - zone.radius - GATE_SETBACK;
-  return { sectionId: zone.sectionId, x: dx * t, z: dz * t, t, dx, dz, yaw: Math.atan2(zone.x, zone.z) };
+  return { sectionId: zone.sectionId, ax, az, x: ax + dx * t, z: az + dz * t, t, dx, dz, yaw: Math.atan2(dx, dz) };
 }
 
 /** Ids of the sections the user cannot enter. */
@@ -61,8 +64,8 @@ export class AccessFence {
         continue;
       }
       const g = gateSpot(zone);
-      const t = px * g.dx + pz * g.dz;
-      const side = -px * g.dz + pz * g.dx;
+      const t = (px - g.ax) * g.dx + (pz - g.az) * g.dz;
+      const side = -(px - g.ax) * g.dz + (pz - g.az) * g.dx;
       if (t > g.t - r && Math.abs(side) < CORRIDOR + r && t < g.t + GATE_SETBACK + 1) {
         px += (g.t - r - t) * g.dx;
         pz += (g.t - r - t) * g.dz;
