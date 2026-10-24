@@ -24,6 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['disabled'] = 'MOOBLOX is turned off on this site.';
 $string['enabled'] = 'Enable MOOBLOX';
 $string['enabled_desc'] = 'When on, students and teachers can open each course as a 3D world.';
 $string['pluginname'] = 'MOOBLOX';
