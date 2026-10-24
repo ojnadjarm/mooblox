@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { CLIFF, cliffColumns, cliffWall } from '../../src/world/cliff-wall';
+import { CLIFF, cliffColumns, cliffWall, TERRACE_CLIFF } from '../../src/world/cliff-wall';
 import { CAMPUS } from '../../src/world/look';
 import { seededRandom } from '../../src/world/random';
 import { Surface } from '../../src/world/surfaces';
@@ -87,6 +87,33 @@ describe('cliff wall', () => {
       expect(d).toBeGreaterThan(R);
       expect(d).toBeLessThan(R + 2.2);
       expect(t.geometry.getAttribute('color').count).toBe(t.geometry.getAttribute('position').count);
+    }
+  });
+});
+
+describe('terrace cliff', () => {
+  const r = 2.4;
+  const h = 0.85;
+  const gap = { at: 1, half: 0.95 / r };
+  const cols = cliffColumns(r, -0.05, h, seededRandom(3), TERRACE_CLIFF, gap);
+
+  it('fills the rim but the stair opening, each column keeping a lower stratum under its upper block', () => {
+    const sweep = cols.reduce((s, c) => s + c.a1 - c.a0, 0);
+    expect(sweep).toBeCloseTo(Math.PI * 2 - 2 * gap.half, 9);
+    expect(cols[0]!.a0).toBeCloseTo(gap.at + gap.half, 12);
+    for (const c of cols) {
+      expect(c.slabs.length).toBeGreaterThan(1);
+      expect(c.slabs[0]!.y0).toBeGreaterThan(-0.05);
+      expect(c.slabs[c.slabs.length - 1]!.y0).toBe(-0.05);
+    }
+  });
+
+  it('stays at terrace scale: no stone more than a metre out from the rim', () => {
+    const { wall } = cliffWall(r, -0.05, h, 0, CAMPUS.palette, seededRandom(3), TERRACE_CLIFF, gap);
+    const pos = wall.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      expect(Math.hypot(pos.getX(i), pos.getZ(i))).toBeLessThan(r + 1);
+      expect(pos.getY(i)).toBeLessThanOrEqual(h + 0.1);
     }
   });
 });

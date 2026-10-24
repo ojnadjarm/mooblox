@@ -4,8 +4,31 @@ import type { LookPalette } from './look';
 import { bakeAo, facet } from './landmarks/shapes';
 import { Surface, type SurfaceId } from './surfaces';
 
+/** Sizes of a designed cliff: column widths, block heights and offsets, chances of notches, strata, moss and toe rocks. */
+export interface CliffSize {
+  readonly width: readonly [number, number];
+  readonly seam: number;
+  readonly depth: number;
+  readonly upper: readonly [number, number];
+  /** Most of the column height the upper block may take (the lower strata keep the rest). */
+  readonly upperShare: number;
+  readonly upperOut: readonly [number, number];
+  readonly step: readonly [number, number];
+  readonly notch: number;
+  readonly notchDrop: readonly [number, number];
+  readonly bulge: readonly [number, number];
+  readonly split: number;
+  readonly chamfer: number;
+  readonly moss: number;
+  readonly mossWidth: readonly [number, number];
+  readonly mossLength: readonly [number, number];
+  readonly toe: number;
+  readonly toeRadius: readonly [number, number];
+  readonly bush: number;
+}
+
 /** Sizes of the designed island cliff (art bible §3: banded, not a straight wall; concepts: stacked stone, moss, rocky toe). */
-export const CLIFF = {
+export const CLIFF: CliffSize = {
   /** Column width along the rim (metres) and the seam left between columns. */
   width: [2, 3.4],
   seam: 0.07,
@@ -13,6 +36,7 @@ export const CLIFF = {
   depth: 1.2,
   /** Upper block height and how far its face stands off the rim (the grass lip overhangs it). */
   upper: [0.9, 2],
+  upperShare: 0.9,
   upperOut: [-0.05, 0.1],
   /** Each lower block steps out this much from the one above it (strata). */
   step: [0.15, 0.4],
@@ -30,7 +54,34 @@ export const CLIFF = {
   toe: 0.45,
   toeRadius: [0.6, 1.3],
   bush: 0.3,
-} as const;
+};
+
+/** The same cliff at terrace scale (0.8-2.6 m raised lawns and landmark terraces): smaller blocks, shallower strata. */
+export const TERRACE_CLIFF: CliffSize = {
+  ...CLIFF,
+  width: [1.1, 1.8],
+  depth: 0.7,
+  upper: [0.5, 0.95],
+  upperShare: 0.7,
+  upperOut: [-0.04, 0.06],
+  step: [0.08, 0.2],
+  notch: 0.3,
+  notchDrop: [0.08, 0.22],
+  bulge: [0.06, 0.18],
+  split: 0.3,
+  chamfer: 0.08,
+  mossWidth: [0.5, 1.1],
+  mossLength: [0.25, 0.6],
+  toe: 0.35,
+  toeRadius: [0.28, 0.5],
+  bush: 0.35,
+};
+
+/** An opening in the rim (a stair): centred on angle `at`, `half` radians each side. */
+export interface CliffGap {
+  readonly at: number;
+  readonly half: number;
+}
 
 /** One stone block of a column: from y0 to y1, its face `out` metres off the rim, upper (cliffHigh) or lower (cliffLow). */
 export interface CliffSlab {
@@ -64,33 +115,33 @@ export interface CliffToe {
 
 const lerp = (range: readonly [number, number], t: number) => range[0] + (range[1] - range[0]) * t;
 
-/** The columns round a rim of `radius` from `base` up to `top`: widths fill the circle exactly, seeded by `random`. */
-export function cliffColumns(radius: number, base: number, top: number, random: () => number): CliffColumn[] {
-  const around = 2 * Math.PI * radius;
+/** The columns round a rim of `radius` from `base` up to `top`: widths fill the circle (less any `gap`) exactly, seeded by `random`. */
+export function cliffColumns(radius: number, base: number, top: number, random: () => number, size: CliffSize = CLIFF, gap: CliffGap | null = null): CliffColumn[] {
+  const around = (2 * Math.PI - (gap ? 2 * gap.half : 0)) * radius;
   const widths: number[] = [];
   for (let sum = 0; sum < around; ) {
-    const w = lerp(CLIFF.width, random());
+    const w = lerp(size.width, random());
     widths.push(w);
     sum += w;
   }
   const scale = around / widths.reduce((s, w) => s + w, 0);
   const columns: CliffColumn[] = [];
-  let a = random() * 2 * Math.PI;
+  let a = gap ? gap.at + gap.half : random() * 2 * Math.PI;
   for (const w of widths) {
     const a1 = a + (w * scale) / radius;
-    const y1 = top - (random() < CLIFF.notch ? lerp(CLIFF.notchDrop, random()) : 0);
-    const upperH = lerp(CLIFF.upper, random());
-    let out = lerp(CLIFF.upperOut, random());
-    const face = () => ({ shade: random() * 2 - 1, bulge: lerp(CLIFF.bulge, random()), ridge: (random() - 0.5) * 0.8 });
+    const y1 = top - (random() < size.notch ? lerp(size.notchDrop, random()) : 0);
+    const upperH = Math.min(lerp(size.upper, random()), (y1 - base) * size.upperShare);
+    let out = lerp(size.upperOut, random());
+    const face = () => ({ shade: random() * 2 - 1, bulge: lerp(size.bulge, random()), ridge: (random() - 0.5) * 0.8 });
     const slabs: CliffSlab[] = [{ y0: y1 - upperH, y1, out, upper: true, ...face() }];
     const lowTop = y1 - upperH;
-    const cuts = random() < CLIFF.split ? [lowTop, lowTop - (lowTop - base) * (0.4 + random() * 0.25), base] : [lowTop, base];
+    const cuts = random() < size.split ? [lowTop, lowTop - (lowTop - base) * (0.4 + random() * 0.25), base] : [lowTop, base];
     for (let k = 1; k < cuts.length; k++) {
-      out += lerp(CLIFF.step, random());
+      out += lerp(size.step, random());
       slabs.push({ y0: cuts[k]!, y1: cuts[k - 1]!, out, upper: false, ...face() });
     }
-    const moss = random() < CLIFF.moss ? { w: Math.min(w * scale * 0.8, lerp(CLIFF.mossWidth, random())), len: lerp(CLIFF.mossLength, random()) } : null;
-    const toe = random() < CLIFF.toe ? { r: lerp(CLIFF.toeRadius, random()), bush: random() < CLIFF.bush } : null;
+    const moss = random() < size.moss ? { w: Math.min(w * scale * 0.8, lerp(size.mossWidth, random())), len: lerp(size.mossLength, random()) } : null;
+    const toe = random() < size.toe ? { r: lerp(size.toeRadius, random()), bush: random() < size.bush } : null;
     columns.push({ a0: a, a1, slabs, moss, toe });
     a = a1;
   }
@@ -102,16 +153,18 @@ export function cliffColumns(radius: number, base: number, top: number, random: 
  * towards the water in the bible's bands, grass tongues hanging from the lip, lavender rocks (some with a bush) at the toe.
  * Stone crisp, moss and bushes soft in outline (bible §5). The wall is one merged geometry; the toe rocks come apart.
  */
-export function cliffWall(radius: number, base: number, top: number, waterY: number, p: LookPalette, random: () => number): { wall: BufferGeometry; toes: CliffToe[] } {
+export function cliffWall(
+  radius: number, base: number, top: number, waterY: number, p: LookPalette, random: () => number, size: CliffSize = CLIFF, gap: CliffGap | null = null,
+): { wall: BufferGeometry; toes: CliffToe[] } {
   const parts: BufferGeometry[] = [];
   const toes: CliffToe[] = [];
-  for (const col of cliffColumns(radius, base, top, random)) {
-    const seam = CLIFF.seam / 2 / radius;
+  for (const col of cliffColumns(radius, base, top, random, size, gap)) {
+    const seam = size.seam / 2 / radius;
     const a0 = col.a0 + seam;
     const a1 = col.a1 - seam;
     for (const s of col.slabs) {
       const colour = new Color(s.upper ? p.cliffHigh : p.cliffLow).offsetHSL(0, 0, s.shade * 0.035);
-      const g = slab(a0, a1, radius + s.out, s, CLIFF.depth, CLIFF.chamfer, colour.getHex());
+      const g = slab(a0, a1, radius + s.out, s, size.depth, size.chamfer, colour.getHex());
       parts.push(surfaced(s.upper ? bakeAo(g, s.y0, 0.35, 0.2) : bakeAo(g, waterY - 0.2, 0.5, 0.25), Surface.rock));
     }
     const upper = col.slabs[0]!;

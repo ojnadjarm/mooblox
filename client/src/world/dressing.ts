@@ -1,8 +1,8 @@
 import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import type { Landmark } from './landmarks/landmarks';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
-import { bakeAo, bands, box, prism } from './landmarks/shapes';
-import { cliffWall, type CliffToe } from './cliff-wall';
+import { box } from './landmarks/shapes';
+import { cliffWall, TERRACE_CLIFF, type CliffToe } from './cliff-wall';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
@@ -24,6 +24,12 @@ const PLAZA = 7;
 const SMALL_PLAZA = 6;
 /** Top of the island cliff: just under the grass lip, which overhangs it. */
 const RIM_TOP = -0.42;
+/** How far a raised lawn's cliff foot reaches past its rim (its obstacle). */
+const LAWN_FOOT = 0.3;
+/** Raised lawn sizes, largest first (radius range, clearance round the cliff foot); the small ones only fill what the large miss. */
+const LAWNS = [{ r: [2.2, 3], clear: 0.8 }, { r: [1.8, 2.2], clear: 0.5 }] as const;
+/** Thickness of a raised lawn's grass lip over its cliff. */
+const TERRACE_LIP = 0.16;
 const LAMP_STEP = 9;
 const HEDGE_STEP = 1.5;
 /** Hedge pieces per run and per run plus gap round a zone's rim. */
@@ -181,7 +187,6 @@ const SHORE_ROCKS = ['nature/rock_largeA', 'nature/rock_largeC', 'nature/rock_sm
 /** Roof colours round the hub (teal, coral, sunflower). */
 const HUB_ROOFS = [0xf07a5f, 0x2fa39a, 0xf6c445];
 const ROCKS = ['nature/rock_largeA', 'nature/rock_largeB', 'nature/rock_largeC', 'nature/rock_tallA', 'nature/rock_tallB'];
-const CLIFFS = ['nature/cliff_large_stone', 'nature/cliff_large_stone', 'nature/cliff_large_rock'];
 const SIDE: readonly (readonly [string, number])[] = [['suburb/building-type-a', 3.8], ['town/stall-green', 2.6], ['suburb/building-type-h', 4], ['suburb/building-type-e', 4]];
 const SMALL: readonly (readonly [string, number])[] = [['town/stall-bench', 0.55], ['town/fountain-round-detail', 0.7], ['suburb/planter', 0.7]];
 const LEAF_TINT = 0xc8eaa0;
@@ -199,7 +204,6 @@ export function modelIds(): string[] {
       ...CROPS,
       ...SHORE_ROCKS,
       ...ROCKS,
-      ...CLIFFS,
       ...SIDE.map((t) => t[0]),
       ...SMALL.map((t) => t[0]),
       'nature/cliff_steps_rock',
@@ -566,13 +570,29 @@ class Designer {
     this.dock(z, false);
   }
 
-  /** A raised grass terrace with rock cliff sides and rock stairs facing `face`. */
+  /** A raised grass terrace on the terrace cliff with rock stairs facing `face`. */
   private terrace(x: number, z: number, r: number, h: number, face: number): void {
     this.reserve(x, z, r + 1.6);
     this.obstacles.push({ x, z, r: r + 1.1 });
-    this.terrain(new CylinderGeometry(r, r, h, 28), this.p.grass, x, h / 2, z, 0, true, false);
-    this.rimCliffs({ x, z, radius: r }, -0.1, h + 0.1, r + 0.2);
+    const stair = FOOT['nature/cliff_steps_rock']!;
+    this.terraceSides(x, z, r, h, face, (stair.w * (h + 0.05)) / stair.h / 2);
     this.model('nature/cliff_steps_rock', x + Math.sin(face) * (r + 0.4), 0, z + Math.cos(face) * (r + 0.4), face, h + 0.05, {});
+  }
+
+  /**
+   * A raised lawn's body (art bible §3): grass top with an overhanging lip over the island cliff at terrace scale, open for a
+   * stair `half` metres each side facing `face`; its foot rocks stay clear of the stair.
+   */
+  private terraceSides(x: number, z: number, r: number, h: number, face: number, half: number): void {
+    this.terrain(new CylinderGeometry(r - 0.1, r - 0.1, h - TERRACE_LIP, 24), this.p.grass, x, (h - TERRACE_LIP) / 2, z, 0, true, false);
+    this.terrain(new CylinderGeometry(r + 0.12, r + 0.06, TERRACE_LIP, 28), this.p.grass, x, h - TERRACE_LIP / 2, z, 0, true, false);
+    const at = Math.atan2(Math.cos(face), Math.sin(face));
+    const { wall, toes } = cliffWall(r, -0.05, h - 0.1, 0, this.p, this.random, TERRACE_CLIFF, { at, half: (half + 0.05) / r });
+    this.district.terrain.push({ geometry: wall.translate(x, 0, z), solid: true, detail: false });
+    for (const t of toes) {
+      if (Math.abs(wrap(Math.atan2(t.z, t.x) - at)) < (half + t.r + 0.4) / r) t.geometry.dispose();
+      else this.district.terrain.push({ geometry: t.geometry.translate(x, 0, z), solid: false, detail: true });
+    }
   }
 
   private building(id: string, h: number, x: number, z: number, face: number, roofColour = this.theme.accent): void {
@@ -590,21 +610,6 @@ class Designer {
     const { wall, toes } = cliffWall(c.radius, WATER_Y - 0.4, RIM_TOP, WATER_Y, this.p, seededRandom(Math.round(c.x * 73 + c.z * 131) ^ 0x5c1f));
     this.district.terrain.push({ geometry: wall.translate(c.x, 0, c.z), solid: false, detail: false });
     this.toes = toes;
-  }
-
-  /** Rock cliff faces all round a circle, from `base` up to `top`. */
-  private rimCliffs(c: Circle, base: number, top: number, r: number): void {
-    const h = top - base;
-    const n = Math.max(8, Math.round((2 * Math.PI * r) / (h * 0.62)));
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * 2 * Math.PI;
-      const dx = Math.cos(a);
-      const dz = Math.sin(a);
-      const rr = r - 0.3 * h + (this.random() - 0.5) * 0.3;
-      this.model(this.pick(CLIFFS), c.x + dx * rr, base - this.random() * 0.4, c.z + dz * rr, Math.atan2(dx, dz) + (this.random() - 0.5) * 0.25, h + this.random() * 0.4, {
-        bands: { split: base + h * 0.55, hi: this.p.cliffHigh, lo: this.p.cliffLow },
-      });
-    }
   }
 
   /** Kit plank decks rim to rim on log piers, with a wooden rail each side (both collide, no hidden boxes). */
@@ -701,7 +706,8 @@ class Designer {
   /** Curated clusters over an island (art bible section 6): raised lawns, tree clumps, beds, rock groups, nooks; calm lawn between. */
   private fillIsland(c: Circle, inner: number): void {
     const k = (c.radius * c.radius) / HUB_AREA;
-    this.lawnTerraces(c, inner, k < 1.3 ? 1 : 2);
+    const landmark = this.landmarks.some((l) => Math.hypot(l.x - c.x, l.z - c.z) < c.radius) ? 1 : 0;
+    this.lawnTerraces(c, inner, (k < 1.3 ? 2 : 3) - landmark);
     this.clusters(c, inner, 'treeClump', Math.max(2, Math.round(5 * k)));
     this.clusters(c, inner, 'gardenBed', Math.max(1, Math.round(3 * k)));
     this.clusters(c, inner, 'rockGroup', Math.max(1, Math.round(2.5 * k)));
@@ -751,30 +757,33 @@ class Designer {
     this.reserve(x, z, rec.radius);
   }
 
-  /** Raised lawns about 1 m high (art bible section 4), each with stone steps towards the centre and a cluster on top. */
+  /** Raised lawns 0.9-1.4 m high (art bible §3), each with stone steps towards the centre and a cluster on top; large sizes first. */
   private lawnTerraces(c: Circle, inner: number, count: number): void {
-    const outer = c.radius - 5;
-    for (let i = 0, placed = 0; i < count * 40 && placed < count && outer > inner; i++) {
-      const r = 3 + this.random() * 0.8;
-      const a = this.random() * 2 * Math.PI;
-      const d = Math.sqrt(inner * inner + this.random() * (outer * outer - inner * inner));
-      const x = c.x + Math.cos(a) * d;
-      const z = c.z + Math.sin(a) * d;
-      if (!this.free(x, z, 2 * r + 1.2, 0.2)) continue;
-      const h = 1 + this.random() * 0.25;
-      const face = Math.atan2(c.x - x, c.z - z);
-      this.raisedLawn(x, z, r, h, face);
-      this.stamp(recipe(this.pick(['readingNook', 'gardenBed', 'rockGroup'] as const), this.random), x, h, z, face + Math.PI, false);
-      placed++;
+    const outer = c.radius - 2;
+    let placed = 0;
+    for (const size of LAWNS) {
+      for (let i = 0; i < count * 100 && placed < count && outer > inner; i++) {
+        const r = size.r[0] + this.random() * (size.r[1] - size.r[0]);
+        const a = this.random() * 2 * Math.PI;
+        const d = Math.sqrt(inner * inner + this.random() * (outer * outer - inner * inner));
+        const x = c.x + Math.cos(a) * d;
+        const z = c.z + Math.sin(a) * d;
+        if (!this.free(x, z, 2 * r + size.clear, 0) || this.obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + r + LAWN_FOOT)) continue;
+        const h = 0.9 + this.random() * 0.5;
+        const face = Math.atan2(c.x - x, c.z - z);
+        this.raisedLawn(x, z, r, h, face);
+        const kinds = r >= 2.7 ? (['readingNook', 'gardenBed', 'rockGroup'] as const) : (['readingNook', 'rockGroup'] as const);
+        this.stamp(recipe(this.pick(kinds), this.random), x, h, z, face + Math.PI, false);
+        placed++;
+      }
     }
   }
 
-  /** A faceted lawn platform with banded cliff sides and a short stone stair facing `face`. */
+  /** A lawn platform on the terrace cliff with a short stone stair facing `face`. */
   private raisedLawn(x: number, z: number, r: number, h: number, face: number): void {
     this.reserve(x, z, r + 1.4);
-    this.obstacles.push({ x, z, r: r + 0.35 });
-    const side = bands(prism(r, r + 0.35, h, 11, this.p.grass, 0, 0, 0, false, 2), [[h * 0.45, this.p.cliffLow], [h - 0.02, this.p.cliffHigh]]);
-    this.district.terrain.push({ geometry: bakeAo(side, 0, 0.45, 0.3).rotateY(this.random() * 6).translate(x, 0, z), solid: true, detail: false });
+    this.obstacles.push({ x, z, r: r + LAWN_FOOT });
+    this.terraceSides(x, z, r, h, face, 0.9);
     const n = Math.ceil(h / 0.25) - 1;
     for (let k = 1; k <= n; k++) {
       const depth = 0.45 * (n - k + 1) + 0.3;

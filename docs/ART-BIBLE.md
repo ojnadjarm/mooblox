@@ -114,7 +114,7 @@ The contrast between soft and crisp is the point. Baked into the shared models f
 | Soft edges | buildings, market stalls, roofs | one chamfer on long edges only (wall corners, eaves, ridges) |
 | Bulging | house roofs, landmark domes, tent and keeper's-house roofs, canopies | slopes split 3x3 and pushed out most at mid-slope, smooth-shaded (pillowy); spires keep crisp hips with a flared, curved profile; mansard roofs stay flat |
 | Crisp | planks, bridges, docks, fences, stone steps, crates, logs, carts, windows, doors, rocks, small dressing | left sharp |
-| Cut stone | island cliffs | columns of chunky blocks: two-facet faces meeting at a ridge, one chamfer on the top edge, seams between columns; grass tongues hang soft over them |
+| Cut stone | island cliffs, terrace sides | columns of chunky blocks: two-facet faces meeting at a ridge, one chamfer on the top edge, seams between columns; grass tongues hang soft over them |
 
 Districts get a theme (from the section's dominant activity purpose, else in order) with a hand-made landmark:
 
@@ -143,6 +143,10 @@ Landmarks are bespoke models (Blender or composed kit pieces with their own face
   wide of stacked stone in the cliff bands (upper `#ECC193` block under the grass lip, 1-2 lower `#D39A6E` strata each
   stepping out 0.15-0.4 m towards the water), a third of the column tops notched lower, grass tongues hanging from the
   lip on about 60% of columns, lavender toe rocks at the waterline (some with a bush), none under bridges or docks.
+- **Terraces share the island cliff at terrace scale** (district concept): every raised lawn and landmark terrace stands on
+  the same cut-stone columns (1.1-1.8 m wide, upper block at most 70% of the height, strata stepping out 0.08-0.2 m) under
+  an overhanging grass lip, grass tongues over the lip, small lavender rocks at the foot, open only where the stair comes
+  down. Each island aims for 2 terraces (3 on big islands) counting its landmark terrace; raised lawns are 0.9-1.4 m high.
 - **Shore**: coves with sand, foam rings around rocks and islands, a turquoise-to-cobalt gradient, a dock per island at most,
   reeds and lilies only in sheltered coves.
 - **Life** sits where the story is: kids at hangouts and on paths, gulls over docks, ducks in coves, butterflies over beds.
