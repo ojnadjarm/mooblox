@@ -62,6 +62,18 @@ foreach (array_keys(\local_mooblox\character::catalogue()['fields']) as $field) 
     $config['strings']['creator_field_' . $field] = get_string('creator_field_' . $field, 'local_mooblox');
 }
 
+$placeholders = [
+    'hud_alldone' => null,
+    'hud_level' => '{level}',
+    'hud_progress' => (object) ['done' => '{done}', 'total' => '{total}'],
+    'hud_week' => null,
+    'hud_weeks' => '{weeks}',
+    'hud_xp' => (object) ['xp' => '{xp}', 'next' => '{next}'],
+];
+foreach ($placeholders as $key => $a) {
+    $config['strings'][$key] = get_string($key, 'local_mooblox', $a);
+}
+
 echo $OUTPUT->header();
 echo $OUTPUT->render_from_template('local_mooblox/play', [
     'configjson' => json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT),

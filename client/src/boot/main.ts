@@ -9,6 +9,7 @@ import { DEFAULT_TUTOR_STRINGS, ScriptedTutor } from '../tutor/scripted-tutor';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld } from './app';
 import { readConfig } from './config';
+import { startRewards } from './rewards';
 import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
 import { modelIds } from '../world/dressing';
 import { startLife } from '../world/life';
@@ -43,8 +44,9 @@ async function boot(): Promise<void> {
   const strings = config.strings;
   const keep = (l: typeof look) => gateway.savePreference(AVATAR_PREFERENCE, encodeLook(l));
   const picker = startAvatarPicker(view, player, avatars, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
+  const rewards = await startRewards(view, interaction, { gateway, courseId: config.courseid, strings });
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
-  Object.assign(window, { mooblox: { ...view, view, player, interaction, store, guide, picker } });
+  Object.assign(window, { mooblox: { ...view, view, player, interaction, store, guide, picker, rewards } });
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));
