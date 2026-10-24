@@ -1,6 +1,6 @@
 // Art-round stills and walk clip: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--video]
 // Same cameras every round: overview 1366 (high), play 1366 (high), play 400 (low), plus the concept cameras hub, district and
-// shore 1366 (high, `?scene=shot&cam=`, kids on); JPEGs `<prefix>-<shape>-<view>.jpg`.
+// shore 1366 (high, `?scene=shot&cam=`, kids on), and the sunlit hub cliff from the water; JPEGs `<prefix>-<shape>-<view>.jpg`.
 // --video records `walk.webm` (12 s, 1366x768 high, autopilot to the farthest demo plot) from the canvas stream.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,6 +30,7 @@ const VIEWS = [
   { name: 'hub-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=hub' },
   { name: 'district-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=district' },
   { name: 'shore-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=shore' },
+  { name: 'cliff-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=cliff' },
 ];
 const only = opt('views', '');
 const views = only ? VIEWS.filter((v) => only.split(',').includes(v.name)) : VIEWS;

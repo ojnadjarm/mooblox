@@ -2,6 +2,7 @@ import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quatern
 import type { Landmark } from './landmarks/landmarks';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { bakeAo, bands, box, prism } from './landmarks/shapes';
+import { cliffWall, type CliffToe } from './cliff-wall';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
@@ -21,7 +22,8 @@ const DECK_W = 3.2;
 const RAIL_H = 1;
 const PLAZA = 7;
 const SMALL_PLAZA = 6;
-const CLIFF_TOP = 0.12;
+/** Top of the island cliff: just under the grass lip, which overhangs it. */
+const RIM_TOP = -0.42;
 const LAMP_STEP = 9;
 const HEDGE_STEP = 1.5;
 /** Hedge pieces per run and per run plus gap round a zone's rim. */
@@ -269,6 +271,8 @@ class Designer {
   private hall: HallSite | null = null;
   private monument: HallSite | null = null;
   private frame: FrameArc[] = [];
+  /** Waterline rocks of the current island's cliff, laid in `shore` once its bridges and dock are known. */
+  private toes: CliffToe[] = [];
   private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
   private readonly random: () => number;
   private district!: District;
@@ -296,7 +300,7 @@ class Designer {
     hubs.forEach((hub, i) => {
       districts.push(this.open(hub));
       this.theme = HUB_THEME;
-      this.rimCliffs(hub, WATER_Y - 0.4, CLIFF_TOP, hub.radius);
+      this.islandCliff(hub);
       this.hubWalks(hub, i === 0 ? PLAZA : SMALL_PLAZA);
       if (i === 0) this.hub(hub);
       else this.plaza(hub, i);
@@ -318,7 +322,7 @@ class Designer {
       districts.push(this.open(z));
       this.theme = this.themes[i]!;
       this.paintPaths(z);
-      this.rimCliffs(z, WATER_Y - 0.4, CLIFF_TOP, z.radius);
+      this.islandCliff(z);
       this.bridge(z.anchor, z);
       this.zone(z, i);
       this.themed(z, this.theme.corners, Math.max(1, Math.round((z.radius * z.radius) / 120)));
@@ -579,6 +583,13 @@ class Designer {
     if (this.model(id, x, 0, z, face + (house ? Math.PI : 0), h, { solid: true, ...(roof !== undefined ? { roof } : {}) }) && house && this.random() < 0.4) {
       this.smoke.push({ x, y: h * 0.92, z });
     }
+  }
+
+  /** The island's designed cliff (`cliff-wall.ts`) under the grass lip, merged into the district; its toe rocks wait for `shore`. */
+  private islandCliff(c: Circle): void {
+    const { wall, toes } = cliffWall(c.radius, WATER_Y - 0.4, RIM_TOP, WATER_Y, this.p, seededRandom(Math.round(c.x * 73 + c.z * 131) ^ 0x5c1f));
+    this.district.terrain.push({ geometry: wall.translate(c.x, 0, c.z), solid: false, detail: false });
+    this.toes = toes;
   }
 
   /** Rock cliff faces all round a circle, from `base` up to `top`. */
@@ -1019,6 +1030,14 @@ class Designer {
 
   /** Shore dressing in groups (art bible section 6): rock groups and one sheltered reed-and-lily cove on a sand crescent; a duck and a buoy offshore. */
   private shore(c: Circle): void {
+    const docks = this.district.placements.filter((p) => p.id === 'pirate/structure-platform-dock');
+    for (const t of this.toes) {
+      const x = c.x + t.x;
+      const z = c.z + t.z;
+      if (this.nearBridge(x, z, DECK_HALF + t.r + 0.6) || docks.some((d) => Math.hypot(d.x - x, d.z - z) < 2 + t.r)) continue;
+      this.district.terrain.push({ geometry: t.geometry.translate(c.x, 0, c.z), solid: false, detail: false });
+    }
+    this.toes = [];
     const groups = 2 + Math.floor(this.random() * 3);
     const start = this.random() * 2 * Math.PI;
     for (let g = 0; g <= groups; g++) {

@@ -41,7 +41,7 @@ export const CHUNK_VERTICES = 3 * 8192;
  * thread can run it in frame slices; the build worker runs it straight through.
  */
 export function* prepDistrict(input: PrepInput, lib: ModelSource): Generator<void, Prepped> {
-  const tag = (g: BufferGeometry, id: string) => (input.rich ? tagSurface(g, id) : g);
+  const tag = (g: BufferGeometry, id: string) => (input.rich && !g.getAttribute('surface') ? tagSurface(g, id) : g);
   // Each part is appended to its mesh as it is placed: no merge pass, nothing big left for one slice.
   const meshes = [new MeshMerge(), new MeshMerge(), new MeshMerge()];
   const solid = new SolidsMerge();
@@ -113,11 +113,11 @@ export function preppedTransferables(p: Prepped): ArrayBuffer[] {
   return [...out];
 }
 
-/** Keeps position, normal and colour only, plus a `sway` weight that grows with height above the base. */
+/** Keeps position, normal, colour and a builder's surface ids only, plus a `sway` weight that grows with height above the base. */
 export function withSway(g: BufferGeometry, sway: boolean, height: number, baseY = 0): BufferGeometry {
   const flat = g.index ? g.toNonIndexed() : g;
   for (const name of Object.keys(flat.attributes)) {
-    if (name !== 'position' && name !== 'normal' && name !== 'color') flat.deleteAttribute(name);
+    if (name !== 'position' && name !== 'normal' && name !== 'color' && name !== 'surface') flat.deleteAttribute(name);
   }
   if (!flat.getAttribute('normal')) flat.computeVertexNormals();
   const nrm = flat.getAttribute('normal');

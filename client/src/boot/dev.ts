@@ -64,7 +64,7 @@ async function boot(): Promise<void> {
     propLineup(view, probe);
   } else if (scene === 'shot') {
     const name = params.get('cam');
-    const shot = conceptShot(name === 'district' || name === 'shore' ? name : 'hub', view.layout, view.dressing);
+    const shot = conceptShot(name === 'district' || name === 'shore' || name === 'cliff' ? name : 'hub', view.layout, view.dressing);
     view.stopOverview();
     // The island looked at is the live one (the camera itself may hover over the water).
     view.follow({ x: shot.at.x, z: shot.at.z });

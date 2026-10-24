@@ -114,6 +114,7 @@ The contrast between soft and crisp is the point. Baked into the shared models f
 | Soft edges | buildings, market stalls, roofs | one chamfer on long edges only (wall corners, eaves, ridges) |
 | Bulging | house roofs, landmark domes, tent and keeper's-house roofs, canopies | slopes split 3x3 and pushed out most at mid-slope, smooth-shaded (pillowy); spires keep crisp hips with a flared, curved profile; mansard roofs stay flat |
 | Crisp | planks, bridges, docks, fences, stone steps, crates, logs, carts, windows, doors, rocks, small dressing | left sharp |
+| Cut stone | island cliffs | columns of chunky blocks: two-facet faces meeting at a ridge, one chamfer on the top edge, seams between columns; grass tongues hang soft over them |
 
 Districts get a theme (from the section's dominant activity purpose, else in order) with a hand-made landmark:
 
@@ -138,6 +139,10 @@ Landmarks are bespoke models (Blender or composed kit pieces with their own face
 - **The spawn plaza is framed, not open lawn** (hub concept): a ring of raised planters just outside the paving (terracotta
   kerb, cream cap rim, puffy clipped hedge blocks, flowers between), cut into runs with walk-through gaps, open at every
   entry, cream square posts at each run end, a lamp pair at each entry, benches inside facing the spawn pad.
+- **Island cliffs are designed, not a wall** (overview, district and shore concepts; `world/cliff-wall.ts`): columns 2-3.4 m
+  wide of stacked stone in the cliff bands (upper `#ECC193` block under the grass lip, 1-2 lower `#D39A6E` strata each
+  stepping out 0.15-0.4 m towards the water), a third of the column tops notched lower, grass tongues hanging from the
+  lip on about 60% of columns, lavender toe rocks at the waterline (some with a bush), none under bridges or docks.
 - **Shore**: coves with sand, foam rings around rocks and islands, a turquoise-to-cobalt gradient, a dock per island at most,
   reeds and lilies only in sheltered coves.
 - **Life** sits where the story is: kids at hangouts and on paths, gulls over docks, ducks in coves, butterflies over beds.

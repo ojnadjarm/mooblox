@@ -311,6 +311,13 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     -> `plazaFrame` (`FRAME` r 7.1-8.25, h 0.48; open 2.5 m each side of every walk and the tower avenue; lamp pair per entry
     replaces the gap lamps) and `plazaBenches` after the monument (benches inside the ring, `wall` 0.5). Spawn hub only (further
     plazas unchanged). Play 1366 47 -> 49 draws, low play-400 19 -> 20, demo low 46.7k tris; gate 76 pass / 0 fail.
+  - Round 10 (designed island cliffs, overview/district/shore concepts): `world/cliff-wall.ts` (art data `CLIFF`; pure
+    `cliffColumns` = columns filling the rim with 2-3 stacked slabs stepping out, notches, moss and toe picks; `cliffWall` =
+    chamfered two-facet stone blocks in the cliff bands tagged `Surface.rock`, grass tongues following the facets, lavender toe
+    rocks (some with a bush) returned apart). `Designer.islandCliff` replaces the kit cliff ring on every island rim (own seed per
+    island; terraces keep `rimCliffs`); `shore` lays the toe rocks clear of bridges and docks. `MeshMerge` keeps surface ids once
+    any part carries them (0 = colour + slope for the rest), `withSway` keeps `surface`, rich tiers tag only untagged parts.
+    Dev `?scene=shot&cam=cliff` (sunlit hub rim from open water), `art-stills.mjs` view `cliff-1366`.
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

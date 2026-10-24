@@ -29,15 +29,21 @@ describe('district merge', () => {
     expect(new MeshMerge().finish()).toBeNull();
   });
 
-  it('keeps surface ids only when every part carries them', () => {
+  it('keeps surface ids once any part carries them, 0 for the parts without', () => {
     const tagged = new MeshMerge();
     tagged.add(box(0, 0, 2));
     tagged.add(box(3, 0, 5));
     expect(tagged.finish()!.surface![36]).toBe(5);
     const mixed = new MeshMerge();
-    mixed.add(box(0, 0, 2));
-    mixed.add(box(3));
-    expect(mixed.finish()!.surface).toBeNull();
+    mixed.add(box(0));
+    mixed.add(box(3, 0, 2));
+    mixed.add(box(6));
+    const m = mixed.finish()!;
+    expect(m.surface!.length).toBe(m.position.length / 3);
+    expect([m.surface![0], m.surface![36], m.surface![72]]).toEqual([0, 2, 0]);
+    const plain = new MeshMerge();
+    plain.add(box(0));
+    expect(plain.finish()!.surface).toBeNull();
   });
 
   it('builds a serialized BVH over the solids that collides like one built in place', () => {

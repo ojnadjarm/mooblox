@@ -1,5 +1,6 @@
 import type { Dressing } from '../world/dressing';
 import type { Circle, WorldLayout } from '../world/layout';
+import { CAMPUS } from '../world/look';
 
 /** A fixed camera: eye and look-at point (m). */
 export interface Shot {
@@ -7,8 +8,8 @@ export interface Shot {
   readonly at: { readonly x: number; readonly y: number; readonly z: number };
 }
 
-/** The concept cameras of the art bible (`hub.jpg`, `district.jpg`, `shore.jpg`) rebuilt on any course. */
-export type ShotName = 'hub' | 'district' | 'shore';
+/** The concept cameras of the art bible (`hub.jpg`, `district.jpg`, `shore.jpg`) rebuilt on any course, plus a sunlit hub cliff. */
+export type ShotName = 'hub' | 'district' | 'shore' | 'cliff';
 
 /** District themes in the order the shots prefer them (the concepts show a library and a lighthouse). */
 const DISTRICT_PICK = ['library', 'science', 'arts', 'sports', 'harbour'];
@@ -20,6 +21,22 @@ const SHORE_PICK = ['harbour', 'arts', 'science', 'library', 'sports'];
  */
 export function conceptShot(name: ShotName, layout: WorldLayout, dressing: Dressing): Shot {
   const hub = layout.hub;
+  if (name === 'cliff') {
+    // From open water on the sun side of the hub, low, along the curve of its rim (the bearing nearest the sun with no island
+    // or bridge within 6 m of the camera).
+    const sun = Math.atan2(CAMPUS.sun.dir[2], CAMPUS.sun.dir[0]);
+    const d = hub.radius + 12;
+    const clear = (b: number) => {
+      const x = hub.x + Math.cos(b) * d;
+      const z = hub.z + Math.sin(b) * d;
+      return layout.zones.every((zn) => Math.hypot(x - zn.x, z - zn.z) > zn.radius + 6 && segment(x, z, zn.anchor, zn) > 6);
+    };
+    const a = Array.from({ length: 64 }, (_, i) => sun + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.1).find(clear) ?? sun;
+    return {
+      eye: { x: hub.x + Math.cos(a) * d, y: 4, z: hub.z + Math.sin(a) * d },
+      at: { x: hub.x + Math.cos(a - 0.3) * hub.radius, y: -1, z: hub.z + Math.sin(a - 0.3) * hub.radius },
+    };
+  }
   if (name === 'hub') {
     const tower = dressing.focus ?? { x: hub.x, z: hub.z - 1 };
     const [ux, uz] = unit(hub.x - tower.x, hub.z - tower.z);
@@ -49,6 +66,14 @@ export function conceptShot(name: ShotName, layout: WorldLayout, dressing: Dress
     eye: { x: zone.x + Math.cos(a) * d, y: 7, z: zone.z + Math.sin(a) * d },
     at: { x: (lm.x + zone.x) / 2, y: Math.min(5, lm.top * 0.3), z: (lm.z + zone.z) / 2 },
   };
+}
+
+/** Distance from (x, z) to the segment between two circle centres. */
+function segment(x: number, z: number, a: Circle, b: Circle): number {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(x - a.x - dx * t, z - a.z - dz * t);
 }
 
 function unit(x: number, z: number): [number, number] {

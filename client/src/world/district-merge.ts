@@ -34,13 +34,23 @@ class Floats {
   private n = 0;
 
   push(a: Float32Array): void {
-    if (this.n + a.length > this.data.length) {
-      const grown = new Float32Array(Math.max(this.n + a.length, this.data.length * 2));
-      grown.set(this.data.subarray(0, this.n));
-      this.data = grown;
-    }
+    this.reserve(a.length);
     this.data.set(a, this.n);
     this.n += a.length;
+  }
+
+  /** Appends `count` zeros. */
+  zeros(count: number): void {
+    this.reserve(count);
+    this.data.fill(0, this.n, this.n + count);
+    this.n += count;
+  }
+
+  private reserve(count: number): void {
+    if (this.n + count <= this.data.length) return;
+    const grown = new Float32Array(Math.max(this.n + count, this.data.length * 2));
+    grown.set(this.data.subarray(0, this.n));
+    this.data = grown;
   }
 
   get length(): number {
@@ -61,16 +71,21 @@ export class MeshMerge {
   private readonly sway = new Floats();
   private readonly surface = new Floats();
   private colorSize = 0;
-  private tagged = true;
+  private tagged = false;
 
   add(p: PartArrays): void {
     this.colorSize ||= p.colorSize;
+    // Surface ids: kept once any part carries them, 0 (layer from colour and slope) for the parts that do not.
+    if (p.surface && !this.tagged) {
+      this.surface.zeros(this.sway.length);
+      this.tagged = true;
+    }
+    if (p.surface) this.surface.push(p.surface);
+    else if (this.tagged) this.surface.zeros(p.sway.length);
     this.position.push(p.position);
     this.normal.push(p.normal);
     this.color.push(p.color);
     this.sway.push(p.sway);
-    if (p.surface) this.surface.push(p.surface);
-    else this.tagged = false;
   }
 
   /** The merged arrays; null when nothing was added. */
