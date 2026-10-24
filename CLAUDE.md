@@ -299,6 +299,12 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     crisp rules, ART-BIBLE §5); `ModelLibrary` keeps the glb normals. Low: atlas `LinearMipmapNearest`, anisotropy 1; scatter
     uploads only the filled range (`addUpdateRange`). Gate 76 pass / 0 fail (baseline 75/1); low demo 22 -> 24 draws, 39k -> 48k
     tris, programs 11 = 11, 60 fps all shapes. Dist not rebuilt (T1369 WIP).
+  - Round 8 (roofs + hero landmarks): `tools/round-kit.py` splits every house roof slope 3x3 and pushes it out at mid-slope,
+    smooth-shaded (mansard roofs stay flat; kit 22.3k -> 23.9k tris). `landmarks.ts` heroes rebuilt with `lathe`/`hipRoof`
+    (`shapes.ts`): tower (stepped plinth, arches, flared roof, vane), library (podium, stair, portico, pediment, ribbed dome),
+    science (glass greenhouse, round-nosed rocket), stadium (canopy, gate), arts (bulging striped tent, valance), harbour
+    (lighthouse gallery and dome, keeper's house); <= 3k tris each, merged into the district mesh (draws unchanged: overview 90,
+    play 47, play-400 19). Gate 76 pass / 0 fail; low 60 fps all 4 shapes; demo low 24 draws, 47.5k tris.
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.
