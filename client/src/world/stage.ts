@@ -9,6 +9,7 @@ import {
   PCFShadowMap,
   PCFSoftShadowMap,
   PerspectiveCamera,
+  SRGBColorSpace,
   Scene,
   SphereGeometry,
   WebGLRenderer,
@@ -145,14 +146,15 @@ function vignette(canvas: HTMLElement, strength: number): void {
 /** Unlit gradient dome, horizon to zenith. */
 function skyDome(kit: MaterialKit, look: Look): Mesh {
   const g = new SphereGeometry(800, 24, 12);
-  const top = new Color(look.skyTop);
-  const horizon = new Color(look.skyHorizon);
+  // Blended in sRGB (a linear blend of cream and blue greys out in the middle); the sky material skips tone mapping.
+  const top = new Color(look.skyTop).getRGB({ r: 0, g: 0, b: 0 }, SRGBColorSpace);
+  const horizon = new Color(look.skyHorizon).getRGB({ r: 0, g: 0, b: 0 }, SRGBColorSpace);
   const pos = g.getAttribute('position');
   const colors = new Float32Array(pos.count * 3);
   const c = new Color();
   for (let i = 0; i < pos.count; i++) {
-    const t = Math.max(0, pos.getY(i) / 800);
-    c.copy(horizon).lerp(top, Math.pow(t, 0.6));
+    const t = Math.pow(Math.max(0, pos.getY(i) / 800), 0.45);
+    c.setRGB(horizon.r + (top.r - horizon.r) * t, horizon.g + (top.g - horizon.g) * t, horizon.b + (top.b - horizon.b) * t, SRGBColorSpace);
     colors.set([c.r, c.g, c.b], i * 3);
   }
   g.setAttribute('color', new BufferAttribute(colors, 3));

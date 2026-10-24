@@ -123,8 +123,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const level = { minor: tier !== 'low', rich: tier === 'xhigh', detailShadows: tier === 'high' || tier === 'xhigh', minorDistance: MINOR_DISTANCE[tier] };
   const collider = new CompositeCollider();
   const dress = (w: WorldData, l: WorldLayout) => {
-    const group = new IslandBuilder(kit, look, tier === 'low').build(w, l);
-    const d = designWorld(l, w.courseId, look.palette);
+    const group = new IslandBuilder(kit, look, tier === 'low', RIM_DETAIL[tier]).build(w, l);
+    const purposes = new Map(w.sections.flatMap((sec) => sec.activities).map((act) => [act.id, act.purpose]));
+    const d = designWorld(l, w.courseId, look.palette, (id) => purposes.get(id));
     const scenery = new Group();
     scenery.name = 'scenery';
     const builds = d.districts.map((district) => new DistrictBuild(district, models, kit.scenery, DETAIL_DISTANCE[tier], level, (g) => new BvhCollider(g)));
@@ -298,15 +299,17 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
 }
 
 /** Prop LOD distances (from the camera, metres) per tier, and the course size up to which every prop always shows. */
-const PROP_LOD = { low: { near: 20, far: 50 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 }, xhigh: { near: 70, far: 200 } } as const;
+const PROP_LOD = { low: { near: 20, far: 50 }, medium: { near: 30, far: 70 }, high: { near: 50, far: 140 }, xhigh: { near: 70, far: 200 } } as const;
 const PROPS_ALWAYS = 40;
+/** Island rim segments per metre of radius per tier. */
+const RIM_DETAIL = { low: 1.5, medium: 2.5, high: 4, xhigh: 4 } as const;
 
 /** Districts within this edge distance of the spawn are built before the first frame; the rest stream in. */
 const FIRST_PLAYABLE = 25;
 /** Per tier: build within `keep` m of the camera (edge), free past `drop`, at most `sliceMs` of building per frame. */
 const STREAM = {
   low: { sliceMs: 4, keep: 70, drop: 100 },
-  medium: { sliceMs: 6, keep: 170, drop: 200 },
+  medium: { sliceMs: 6, keep: 125, drop: 150 },
   high: { sliceMs: 6, keep: 280, drop: 320 },
   xhigh: { sliceMs: 8, keep: Infinity, drop: Infinity },
 } as const;
@@ -337,6 +340,9 @@ export async function startPlayer(
   const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
   const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
+  const focus = view.dressing.focus;
+  // The first view frames the hub landmark down its avenue.
+  if (focus) player.teleport(spawn.x, spawn.z, Math.atan2(focus.x - spawn.x, focus.z - spawn.z));
   view.onRebuild((before, after) => {
     const p = player.body.position;
     const shift = shiftFor(before, after, p.x, p.z);

@@ -2,6 +2,7 @@ import { Box3, BufferAttribute, BufferGeometry, Color, Group, Matrix4, Mesh, Qua
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { District, Dressing, Placement } from './dressing';
 import type { ModelLibrary } from './model-library';
+import { bakeAo } from './landmarks/shapes';
 import { tagSurface } from './surfaces';
 
 /** Distance past which a district drops its detail (flowers, bushes, hedges, lamps, small props) per tier. */
@@ -207,7 +208,9 @@ function placeModel(p: Placement, lib: ModelLibrary): BufferGeometry {
   if (p.tint !== undefined) tint(g, p.tint);
   if (p.roof !== undefined) repaintRoof(g, p.roof);
   g.applyMatrix4(new Matrix4().compose(new Vector3(p.x, p.y, p.z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), p.yaw), new Vector3(s, s, s)));
-  return withSway(g, p.sway === true, p.height, p.y);
+  if (p.bands) repaintBands(g, p.bands);
+  const out = withSway(g, p.sway === true, p.height, p.y);
+  return p.solid && p.y > -1 ? bakeAo(out, p.y, p.height > 0 ? Math.min(1.2, Math.max(0.3, p.height * 0.5)) : 0.6, 0.24) : out;
 }
 
 function triangles(g: BufferGeometry | null): number {
@@ -269,6 +272,20 @@ function repaintRoof(g: BufferGeometry, hex: number): void {
       const l = gr / 0.55;
       col.setXYZ(i, c.r * l, c.g * l, c.b * l);
     }
+  }
+}
+
+const bandColour = new Color();
+
+/** Two horizontal colour bands split at world y, keeping each vertex's shading (its brightness against the model's). */
+function repaintBands(g: BufferGeometry, b: NonNullable<Placement['bands']>): void {
+  const pos = g.getAttribute('position');
+  const col = g.getAttribute('color');
+  if (!col) return;
+  for (let i = 0; i < col.count; i++) {
+    const lum = Math.min(1.15, Math.max(0.7, (col.getX(i) + col.getY(i) + col.getZ(i)) / 3 / 0.62));
+    bandColour.set(pos.getY(i) > b.split ? b.hi : b.lo);
+    col.setXYZ(i, bandColour.r * lum, bandColour.g * lum, bandColour.b * lum);
   }
 }
 

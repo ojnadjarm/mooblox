@@ -6,7 +6,7 @@ import type { Look } from './look';
 const MAX_ISLANDS = 48;
 const SHORE_PAD = 1.6;
 
-/** Stylised water: shore-to-deep gradient, animated foam band, ripple lines, sky fresnel and sun glint. */
+/** Stylised water: turquoise-to-cobalt shore gradient (three stops), animated foam band, ripple lines, sky fresnel and sun glint. */
 export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMaterial {
   const list = Array.from({ length: MAX_ISLANDS }, (_, i) => {
     const c = islands[i];
@@ -22,6 +22,7 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
         uIslands: { value: list },
         uCount: { value: Math.min(MAX_ISLANDS, islands.length) },
         uShallow: { value: new Color(look.water.shallow) },
+        uMid: { value: new Color(look.water.mid) },
         uDeep: { value: new Color(look.water.deep) },
         uFoam: { value: new Color(look.water.foam) },
         uGlint: { value: new Color(look.water.glint) },
@@ -44,7 +45,7 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
       uniform float uTime;
       uniform vec4 uIslands[${MAX_ISLANDS}];
       uniform int uCount;
-      uniform vec3 uShallow, uDeep, uFoam, uGlint, uSky, uSun;
+      uniform vec3 uShallow, uMid, uDeep, uFoam, uGlint, uSky, uSun;
       varying vec3 vWorld;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p) {
@@ -61,8 +62,8 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
           shore = min(shore, length(p - c.xy) - c.z);
         }
         float n = noise(p * 0.35 + uTime * 0.12) * 0.6 + noise(p * 1.1 - uTime * 0.2) * 0.4;
-        float depth = smoothstep(0.0, 16.0, shore + (n - 0.5) * 3.0);
-        vec3 col = mix(uShallow, uDeep, depth);
+        float depth = smoothstep(0.0, 26.0, shore + (n - 0.5) * 3.0);
+        vec3 col = mix(mix(uShallow, uMid, smoothstep(0.0, 0.45, depth)), uDeep, smoothstep(0.4, 1.0, depth));
         float band = 0.55 + 0.35 * sin(uTime * 1.4);
         float foam = 1.0 - smoothstep(0.15, 0.6 + n * 0.5, shore - 0.05);
         float wave = smoothstep(0.08, 0.0, abs(fract(shore * 0.45 - uTime * 0.25 + n * 0.4) - 0.5) - 0.42) * (1.0 - smoothstep(1.0, 5.0, shore)) * band;
@@ -92,6 +93,7 @@ export function bakedWaterGeometry(look: Look, islands: readonly Circle[], exten
   const cells = Math.min(48, Math.max(24, Math.round((half * 2) / 4)));
   const step = (half * 2) / cells;
   const shallow = new Color(look.water.shallow);
+  const mid = new Color(look.water.mid);
   const deep = new Color(look.water.deep);
   const foam = new Color(look.water.foam);
   const c = new Color();
@@ -103,8 +105,9 @@ export function bakedWaterGeometry(look: Look, islands: readonly Circle[], exten
     const z = pos.getZ(i);
     let shore = 1e4;
     for (const isl of islands) shore = Math.min(shore, Math.hypot(x - isl.x, z - isl.z) - isl.radius - SHORE_PAD);
-    const t = Math.min(1, Math.max(0, shore / 16));
-    c.copy(shallow).lerp(deep, t * t * (3 - 2 * t));
+    const t = Math.min(1, Math.max(0, shore / 26));
+    if (t < 0.45) c.copy(shallow).lerp(mid, smooth(t / 0.45));
+    else c.copy(mid).lerp(deep, smooth((t - 0.45) / 0.55));
     if (shore < step * 0.6) c.lerp(foam, 0.35);
     colors.set([c.r, c.g, c.b], i * 3);
   }
@@ -116,4 +119,8 @@ export function bakedWaterGeometry(look: Look, islands: readonly Circle[], exten
   for (let i = 0; i < rc.length; i += 3) rc.set([deep.r, deep.g, deep.b], i);
   ring.setAttribute('color', new BufferAttribute(rc, 3));
   return mergeGeometries([grid, ring], false)!;
+}
+
+function smooth(t: number): number {
+  return t * t * (3 - 2 * t);
 }

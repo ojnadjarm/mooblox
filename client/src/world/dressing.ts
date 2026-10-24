@@ -1,4 +1,6 @@
 import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
+import type { Landmark } from './landmarks/landmarks';
+import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
 import type { LookPalette } from './look';
@@ -61,6 +63,8 @@ export interface Placement {
   readonly rich?: boolean;
   /** Repaints the model's green roof faces with this colour. */
   readonly roof?: number;
+  /** Repaints the model in two horizontal bands (keeping its shading): `hi` above world y `split`, `lo` below (banded cliffs). */
+  readonly bands?: { readonly split: number; readonly hi: number; readonly lo: number };
 }
 
 /** An animal of the life layer, wandering a small circle round (x, z). */
@@ -124,6 +128,10 @@ export interface Dressing {
   /** Chimney and campfire smoke sources. */
   readonly smoke: readonly { readonly x: number; readonly y: number; readonly z: number }[];
   readonly sails: readonly Sail[];
+  /** Every placed hero landmark: its district theme, ground spot and top height. */
+  readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly top: number }[];
+  /** The hub landmark the spawn camera frames, or null. */
+  readonly focus: { readonly x: number; readonly z: number } | null;
 }
 
 interface Footprint {
@@ -140,17 +148,16 @@ const FLOWERS = ['nature/flower_redA', 'nature/flower_yellowA', 'nature/flower_p
 const TUFTS = ['nature/grass_large', 'nature/grass_leafs', 'nature/grass_leafsLarge', 'nature/plant_flatTall', 'nature/plant_flatShort', 'nature/plant_bushSmall'];
 const CROPS = ['nature/crop_pumpkin', 'nature/crop_carrot', 'nature/crop_melon', 'nature/crops_cornStageC', 'nature/crops_wheatStageB', 'nature/crops_leafsStageB'];
 const SHORE_ROCKS = ['nature/rock_largeA', 'nature/rock_largeC', 'nature/rock_smallA', 'nature/rock_smallC'];
-const THEMES = ['park', 'market', 'garden', 'plaza', 'woods'] as const;
-type Theme = (typeof THEMES)[number];
 /** Cheerful repaint colours for house roofs, playground kit and awnings. */
-const ACCENTS = [0xe8604c, 0x3d8bd9, 0xf2a33a, 0x8a5bd6, 0x2fa38a, 0xf06292];
+/** Roof colours round the hub (teal, coral, sunflower). */
+const HUB_ROOFS = [0xf07a5f, 0x2fa39a, 0xf6c445];
 const ROCKS = ['nature/rock_largeA', 'nature/rock_largeB', 'nature/rock_largeC', 'nature/rock_tallA', 'nature/rock_tallB'];
 const CLIFFS = ['nature/cliff_large_stone', 'nature/cliff_large_stone', 'nature/cliff_large_rock'];
-const HALL: readonly [string, number] = ['suburb/building-type-t', 7.5];
-const MESAS = ['suburb/building-type-k', 'suburb/building-type-c'];
 const SIDE: readonly (readonly [string, number])[] = [['suburb/building-type-a', 3.8], ['town/stall-green', 2.6], ['suburb/building-type-h', 4], ['suburb/building-type-e', 4]];
 const SMALL: readonly (readonly [string, number])[] = [['town/stall-bench', 0.55], ['town/fountain-round-detail', 0.7], ['suburb/planter', 0.7]];
 const LEAF_TINT = 0xc8eaa0;
+/** Warm lavender over the kit's grey rocks (the bible's rock colour, never neutral grey). */
+const ROCK_TINT = 0xf0e2f4;
 
 /** Every kit model the designer may place (the loader fetches exactly these). */
 export function modelIds(): string[] {
@@ -164,8 +171,6 @@ export function modelIds(): string[] {
       ...SHORE_ROCKS,
       ...ROCKS,
       ...CLIFFS,
-      HALL[0],
-      ...MESAS,
       ...SIDE.map((t) => t[0]),
       ...SMALL.map((t) => t[0]),
       'nature/cliff_steps_rock',
@@ -205,9 +210,12 @@ export function modelIds(): string[] {
   ];
 }
 
-/** Designs the cosy-campus dressing for any layout: districts sized by their island, everything kept off plots, paths and bridges. */
-export function designWorld(layout: WorldLayout, seed: number, palette: LookPalette): Dressing {
-  return new Designer(layout, seed, palette).build();
+/**
+ * Designs the cosy-campus dressing for any layout: districts sized by their island, everything kept off plots, paths and
+ * bridges; `purposeOf` (activity id to Moodle purpose) picks each district's theme, else themes go in order.
+ */
+export function designWorld(layout: WorldLayout, seed: number, palette: LookPalette, purposeOf?: (activityId: number) => string | undefined): Dressing {
+  return new Designer(layout, seed, palette, purposeOf).build();
 }
 
 class Designer {
@@ -227,8 +235,11 @@ class Designer {
   private readonly critters: Critter[] = [];
   private readonly hangouts: Hangout[] = [];
   private readonly smoke: { x: number; y: number; z: number }[] = [];
-  private readonly themeShift: number;
+  private readonly themes: readonly DistrictTheme[];
+  private theme: DistrictTheme = HUB_THEME;
   private readonly entries = new Set<Segment>();
+  private focus: { x: number; z: number } | null = null;
+  private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
   private readonly random: () => number;
   private district!: District;
 
@@ -236,9 +247,10 @@ class Designer {
     private readonly layout: WorldLayout,
     seed: number,
     private readonly p: LookPalette,
+    purposeOf?: (activityId: number) => string | undefined,
   ) {
     this.random = seededRandom(seed ^ 0x2545f491);
-    this.themeShift = Math.floor(this.random() * THEMES.length);
+    this.themes = pickThemes(layout.zones.map((z) => z.plots.map((pl) => purposeOf?.(pl.activityId) ?? ''))).map((t) => DISTRICT_THEMES[t]);
     for (const z of layout.zones) this.spans.push(span(z.anchor, z));
     for (const l of layout.links) this.spans.push(span(layout.hubs[l.from]!, layout.hubs[l.to]!));
     for (const z of layout.zones) this.walks.push(spoke(z.anchor, z));
@@ -253,11 +265,12 @@ class Designer {
     const districts: District[] = [];
     hubs.forEach((hub, i) => {
       districts.push(this.open(hub));
+      this.theme = HUB_THEME;
       this.rimCliffs(hub, WATER_Y - 0.4, CLIFF_TOP, hub.radius);
       this.hubWalks(hub, i === 0 ? PLAZA : SMALL_PLAZA);
       if (i === 0) this.hub(hub);
       else this.plaza(hub, i);
-      this.themed(hub, i === 0 ? ['market', 'park'] : ['plaza'], i === 0 ? 2 : 1);
+      this.themed(hub, i === 0 ? HUB_THEME.corners : ['plaza'], i === 0 ? 2 : 1);
       this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8);
       this.shore(hub);
     });
@@ -268,19 +281,19 @@ class Designer {
     zones.forEach((z) => this.layPaths(z));
     zones.forEach((z, i) => {
       districts.push(this.open(z));
+      this.theme = this.themes[i]!;
       this.paintPaths(z);
       this.rimCliffs(z, WATER_Y - 0.4, CLIFF_TOP, z.radius);
       this.bridge(z.anchor, z);
       this.zone(z, i);
-      const theme = THEMES[(i + this.themeShift) % THEMES.length]!;
-      this.themed(z, [theme], Math.max(1, Math.round((z.radius * z.radius) / 120)));
+      this.themed(z, this.theme.corners, Math.max(1, Math.round((z.radius * z.radius) / 120)));
       this.fillIsland(z, 0);
       this.shore(z);
     });
     const sails = this.sea(districts);
     return {
       districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges,
-      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails,
+      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks,
     };
   }
 
@@ -338,15 +351,22 @@ class Designer {
     for (const w of this.walks) {
       if (w.ax !== hub.x || w.az !== hub.z) continue;
       const len = Math.hypot(w.bx - w.ax, w.bz - w.az);
-      const ux = (w.bx - w.ax) / len;
-      const uz = (w.bz - w.az) / len;
-      const mid = (plaza + len) / 2;
-      this.terrain(new BoxGeometry(2.6, 0.08, len - plaza + 0.4), colour, hub.x + ux * mid, 0.035, hub.z + uz * mid, Math.atan2(ux, uz), false, false);
+      this.avenue(hub, (w.bx - w.ax) / len, (w.bz - w.az) / len, plaza, len, colour, 2.6);
+    }
+  }
+
+  /** A straight paved walk with cream edging along (ux, uz) from `from` to `to` metres off the hub centre. */
+  private avenue(hub: Circle, ux: number, uz: number, from: number, to: number, colour: number, width: number): void {
+    const mid = (from + to) / 2;
+    const yaw = Math.atan2(ux, uz);
+    this.terrain(new BoxGeometry(width, 0.08, to - from + 0.4), colour, hub.x + ux * mid, 0.035, hub.z + uz * mid, yaw, false, false);
+    for (const side of [-1, 1]) {
+      const off = width / 2 + 0.1;
+      this.terrain(new BoxGeometry(0.22, 0.1, to - from), this.p.trim, hub.x + ux * mid + uz * side * off, 0.05, hub.z + uz * mid - ux * side * off, yaw, false, false);
     }
   }
 
   private hub(hub: Circle): void {
-    this.terrain(new CylinderGeometry(PLAZA + 0.3, PLAZA + 0.3, 0.1, 48), this.p.stoneDark, hub.x, 0, hub.z, 0, false, false);
     const bearings = this.bearingsAt(0);
     const back = widestGap(bearings, this.random() * 2 * Math.PI);
     const lr = hub.radius - 4.5;
@@ -354,20 +374,28 @@ class Designer {
     const lz = Math.sin(back) * lr;
     const face = Math.atan2(-lx, -lz);
     this.terrace(lx, lz, 3.8, 1.6, face);
-    this.model(HALL[0], lx, 1.6, lz, face + Math.PI, HALL[1], { solid: true });
-    this.smoke.push({ x: lx, y: 1.6 + HALL[1] * 0.95, z: lz });
-    this.life.push({ kind: 'flag', id: 'pirate/flag-pennant', x: lx, y: 1.6 + HALL[1] * 0.98, z: lz, yaw: 0, height: 2.6 });
+    this.theme = HUB_THEME;
+    this.landmark(HUB_THEME, lx, 1.6, lz, face);
+    this.focus = { x: lx, z: lz };
+    const ux = Math.cos(back);
+    const uz = Math.sin(back);
+    this.avenue(hub, ux, uz, PLAZA, lr - 3.6, this.p.path[1] ?? this.p.stone, 2.4);
+    this.walks.push({ ax: hub.x, az: hub.z, bx: hub.x + ux * (lr - 3.6), bz: hub.z + uz * (lr - 3.6) });
+    for (const side of [-1, 1]) {
+      const t = PLAZA + 1.2;
+      this.lamp(hub.x + ux * t + uz * side * 1.9, hub.z + uz * t - ux * side * 1.9, 2.8);
+    }
     gaps(bearings).forEach(([a, width], i) => {
       if (Math.abs(wrap(a - back)) < 0.8 || width * (hub.radius - 4.4) < 16) return;
       const x = Math.cos(a) * (hub.radius - 4.4);
       const z = Math.sin(a) * (hub.radius - 4.4);
       const [id, h] = SIDE[i % SIDE.length]!;
-      this.building(id, h, x, z, Math.atan2(-x, -z));
+      this.building(id, h, x, z, Math.atan2(-x, -z), HUB_ROOFS[i % HUB_ROOFS.length]);
     });
     for (const [a, width] of gaps(bearings)) {
       const x = Math.cos(a) * (PLAZA + 1.3);
       const z = Math.sin(a) * (PLAZA + 1.3);
-      this.lamp(x, z, 2.8);
+      if (Math.abs(wrap(a - back)) > 0.3) this.lamp(x, z, 2.8);
       for (const side of [-1, 1]) {
         const b = a + side * Math.min(0.3, width / 4);
         const bx = Math.cos(b) * (PLAZA + 1.9);
@@ -392,15 +420,20 @@ class Designer {
   private zone(z: Zone, i: number): void {
     const out = z.angle;
     const entry = out + Math.PI;
-    const r = z.radius - 4;
-    const mx = z.x + Math.cos(out) * r;
-    const mz = z.z + Math.sin(out) * r;
-    const face = Math.atan2(z.x - mx, z.z - mz);
+    const lm = this.theme.landmark(this.p, this.theme.accent, this.theme.accentShade);
+    // Big districts get a bigger hero so it stays the tallest thing in view.
+    const grow = Math.min(1.5, Math.max(1, z.radius / 18));
+    const tr = Math.max(3.4, lm.radius * grow + 0.5);
     const h = 1.8 + (i % 2) * 0.8;
-    if (this.free(mx, mz, 6, 0.5, true)) {
-      this.terrace(mx, mz, 3.4, h, face);
-      this.model(MESAS[i % 2]!, mx, h, mz, face + Math.PI, 5.6, { solid: true });
-      this.life.push({ kind: 'flag', id: 'pirate/flag-pennant', x: mx + Math.sin(face + Math.PI / 2) * 2, y: h, z: mz + Math.cos(face + Math.PI / 2) * 2, yaw: face, height: 3.4 });
+    for (const r of [z.radius - tr - 0.6, z.radius - 4]) {
+      const mx = z.x + Math.cos(out) * r;
+      const mz = z.z + Math.sin(out) * r;
+      const face = Math.atan2(z.x - mx, z.z - mz);
+      const terraceR = r === z.radius - 4 ? 3.4 : tr;
+      if (!this.free(mx, mz, 2 * terraceR + 0.6, 0.5, true)) continue;
+      this.terrace(mx, mz, terraceR, h, face);
+      this.placeLandmark(lm, mx, h, mz, face, (grow * terraceR) / tr);
+      break;
     }
     const step = 9 / (z.radius - 4);
     for (let a = out + 0.9, k = 0; a < out + 2 * Math.PI - 0.9; a += step, k++) {
@@ -438,11 +471,11 @@ class Designer {
     this.model('nature/cliff_steps_rock', x + Math.sin(face) * (r + 0.4), 0, z + Math.cos(face) * (r + 0.4), face, h + 0.05, {});
   }
 
-  private building(id: string, h: number, x: number, z: number, face: number): void {
+  private building(id: string, h: number, x: number, z: number, face: number, roofColour = this.theme.accent): void {
     const reach = this.reach(id, h);
     if (!this.free(x, z, reach * 2, 1, true)) return;
     const house = id.startsWith('suburb');
-    const roof = house ? this.pick(ACCENTS) : undefined;
+    const roof = house ? roofColour : undefined;
     if (this.model(id, x, 0, z, face + (house ? Math.PI : 0), h, { solid: true, ...(roof !== undefined ? { roof } : {}) }) && house && this.random() < 0.4) {
       this.smoke.push({ x, y: h * 0.92, z });
     }
@@ -457,7 +490,9 @@ class Designer {
       const dx = Math.cos(a);
       const dz = Math.sin(a);
       const rr = r - 0.3 * h + (this.random() - 0.5) * 0.3;
-      this.model(this.pick(CLIFFS), c.x + dx * rr, base - this.random() * 0.4, c.z + dz * rr, Math.atan2(dx, dz) + (this.random() - 0.5) * 0.25, h + this.random() * 0.4, {});
+      this.model(this.pick(CLIFFS), c.x + dx * rr, base - this.random() * 0.4, c.z + dz * rr, Math.atan2(dx, dz) + (this.random() - 0.5) * 0.25, h + this.random() * 0.4, {
+        bands: { split: base + h * 0.55, hi: this.p.cliffHigh, lo: this.p.cliffLow },
+      });
     }
   }
 
@@ -558,7 +593,7 @@ class Designer {
     this.fill(c, inner, Math.round(18 * k), 3.2, 1.4, (x, z, s) => this.tree(x, z, s));
     this.fill(c, inner, Math.round(40 * k), 1.2, 0.8, (x, z) => this.bush(x, z));
     this.fill(c, inner, Math.round(30 * k), 1, 0.6, (x, z) => this.flowerBed(x, z));
-    this.fill(c, inner, Math.round(10 * k), 1.4, 0.8, (x, z) => this.model(this.pick(ROCKS), x, 0, z, this.random() * 6, 0.6 + this.random() * 0.6, { detail: true }));
+    this.fill(c, inner, Math.round(10 * k), 1.4, 0.8, (x, z) => this.model(this.pick(ROCKS), x, 0, z, this.random() * 6, 0.6 + this.random() * 0.6, { detail: true, tint: ROCK_TINT }));
     this.fill(c, inner, Math.round(70 * k), 0.5, 0.2, (x, z) => this.model(this.pick(TUFTS), x, 0, z, this.random() * 6, 0.35 + this.random() * 0.3, { sway: true, detail: true, minor: true, tint: LEAF_TINT }));
     this.fill(c, inner, Math.round(90 * k), 0.4, 0.1, (x, z) => this.model(this.pick(this.random() < 0.6 ? TUFTS : FLOWERS), x, 0, z, this.random() * 6, 0.3 + this.random() * 0.25, { sway: true, detail: true, rich: true }));
     this.groundPatches(c, Math.round(16 * k));
@@ -678,8 +713,25 @@ class Designer {
       ...(o.minor ? { minor: true } : {}),
       ...(o.rich ? { rich: true } : {}),
       ...(o.roof !== undefined ? { roof: o.roof } : {}),
+      ...(o.bands ? { bands: o.bands } : {}),
     });
     return true;
+  }
+
+  /** A theme's hero landmark at (x, y, z) facing `face` (its front towards the island centre), scaled by `scale`. */
+  private landmark(theme: DistrictTheme, x: number, y: number, z: number, face: number): void {
+    this.placeLandmark(theme.landmark(this.p, theme.accent, theme.accentShade), x, y, z, face, 1);
+  }
+
+  private placeLandmark(lm: Landmark, x: number, y: number, z: number, face: number, scale: number): void {
+    this.landmarks.push({ theme: this.theme.id, x, z, top: y + lm.height * scale });
+    const m = new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), face), new Vector3(scale, scale, scale));
+    for (const g of lm.parts) this.district.terrain.push({ geometry: g.applyMatrix4(m), solid: true, detail: false });
+    for (const g of lm.glow) this.district.glow.push(g.applyMatrix4(m));
+    if (lm.flag) {
+      const f = new Vector3(lm.flag.x, lm.flag.y, lm.flag.z).applyMatrix4(m);
+      this.life.push({ kind: 'flag', id: 'pirate/flag-pennant', x: f.x, y: f.y, z: f.z, yaw: face, height: lm.flag.h * scale });
+    }
   }
 
   /** A model on open ground: kept off plots, paths, bridges and the shore, and off everything already placed. */
@@ -708,7 +760,7 @@ class Designer {
   }
 
   /** Themed corners of an island (playgrounds, market stalls, gardens, fountain squares, woods), as many as fit. */
-  private themed(c: Circle, themes: readonly Theme[], count: number): void {
+  private themed(c: Circle, themes: readonly Corner[], count: number): void {
     let placed = 0;
     for (let k = 0; k < count * 30 && placed < count; k++) {
       const a = this.random() * 2 * Math.PI;
@@ -720,11 +772,11 @@ class Designer {
     }
   }
 
-  private vignette(theme: Theme, x: number, z: number, face: number): boolean {
+  private vignette(theme: Corner, x: number, z: number, face: number): boolean {
     const at = (dx: number, dz: number): [number, number] => [x + dx * Math.cos(face) + dz * Math.sin(face), z - dx * Math.sin(face) + dz * Math.cos(face)];
-    const accent = this.pick(ACCENTS);
+    const accent = this.theme.accent;
     if (theme === 'park') {
-      const piece = playground(Math.floor(this.random() * 3), accent, this.pick(ACCENTS), this.p.wood);
+      const piece = playground(Math.floor(this.random() * 3), accent, this.p.trim, this.p.wood);
       if (!this.structure(x, z, face, piece.r, piece.parts)) return false;
       this.hangouts.push({ kind: 'play', x: at(0, -piece.r - 0.6)[0], z: at(0, -piece.r - 0.6)[1], face });
       const [bx, bz] = at(0, piece.r + 1.8);
@@ -832,7 +884,7 @@ class Designer {
       const x = c.x + Math.cos(a) * out;
       const z = c.z + Math.sin(a) * out;
       if (this.nearBridge(x, z, DECK_HALF + 2.5) || this.occ.hits(x, z, 0.6)) continue;
-      if (kind < 0.45) this.model(this.pick(SHORE_ROCKS), x, WATER_Y - 0.25, z, this.random() * 6, 0.6 + this.random() * 0.7, { detail: true });
+      if (kind < 0.45) this.model(this.pick(SHORE_ROCKS), x, WATER_Y - 0.25, z, this.random() * 6, 0.6 + this.random() * 0.7, { detail: true, tint: ROCK_TINT });
       else if (kind < 0.8) {
         for (let k = 0; k < 3; k++) {
           this.model('nature/grass_leafsLarge', x + (this.random() - 0.5), WATER_Y - 0.05, z + (this.random() - 0.5), this.random() * 6, 0.9 + this.random() * 0.4, { sway: true, detail: true, minor: true, tint: 0x9bc46c });
@@ -922,6 +974,7 @@ interface ModelOptions {
   roof?: number;
   /** Footprint radius of an abutting wall piece (hedges, fences) instead of its full reach. */
   wall?: number;
+  bands?: { readonly split: number; readonly hi: number; readonly lo: number };
   /** Extra clearance claimed round the footprint (default 0.2 m). */
   margin?: number;
 }

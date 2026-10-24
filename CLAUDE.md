@@ -241,3 +241,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Client: `domain/rewards*.ts` (types, wire DTO, mapper + `assertRewardsDto` exact shape), `MoodleGateway.getRewards |
     claimCollectible | setLook` in Ajax and Fake; `test/fixtures/get_rewards_demo.json` captured from 5.2. Not wired to boot yet.
   - Tests: PHPUnit 77, Behat 4 scenarios, vitest +2 files (rewards 9 tests), `mci full` 15 ok 0 red 1 skip (mustache: no java).
+- T1364, 2026-10-24, art direction rounds (bible `docs/ART-BIBLE.md`, compare page `~/drop/T1364/index.html`, log
+  `~/agent-work/research/2026-10-24/T1364/ROUNDS.md`):
+  - Round 1: `world/look.ts` CAMPUS = bible palette (trim, cliff bands, lavender rock, wall), hemisphere ground = shadow tint
+    `#4B5A8C`, sky blended in sRGB without tone mapping (`kit.sky.toneMapped = false`), water shallow/mid/deep over 26 m.
+    `world/landmarks/`: `shapes.ts` (faceted helpers: box, prism, bowl, gable, cone, dome, rock, disc; `alternate`, `bands`,
+    `bakeAo`), `landmarks.ts` (art data: clock tower 16 m, library, science dome + rocket, stadium, theatre tent, lighthouse;
+    ≤ 3k tris each, tested), `themes.ts` (`pickThemes`: dominant activity purpose per district, unused first; accent + corner
+    clusters per theme). Designer: hub tower on its terrace with an avenue and lamp pair (`Dressing.focus`: the spawn camera
+    faces it), district landmark on a terrace where the bridge points (grows with the island), roofs in the district accent,
+    `Placement.bands` (banded cliffs), `Dressing.landmarks`. Scenery bakes AO at the base of solids. Hub plaza: radial paving,
+    cream trims, round stepped spawn pad; lawns flat-coloured with a gradient (no studs; pads keep them).
+  - Tiers: xhigh uses `standard` materials (no detail textures); medium `districtDistance` 110, `sceneryTris` 90k, props
+    30/70 m, streaming keep/drop 125/150 m, rims 2.5 segments per metre; island land casts no shadow (all tiers).
+  - `node tools/art-stills.mjs <dir> [--shapes demo,8x12] [--prefix after] [--video]`: overview 1366 + play 1366 (high),
+    play 400 (low) JPEGs and a 12 s `walk.webm`. Round 1 gate 8 over budget (HEAD 17); medium draws/tris pass on all shapes.
