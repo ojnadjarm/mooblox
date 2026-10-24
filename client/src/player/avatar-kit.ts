@@ -22,8 +22,13 @@ export interface AvatarLook {
 
 export const SKINS = 'abcdefghijklmnopqr'.split('');
 
+/** Builds avatars from a look; the one seam a different character set plugs into. */
+export interface AvatarFactory {
+  create(look: AvatarLook): Promise<Avatar>;
+}
+
 /** Loads the blocky character once and builds tinted avatars from it. */
-export class AvatarKit {
+export class AvatarKit implements AvatarFactory {
   private readonly skins = new Map<string, Promise<ImageBitmap>>();
 
   private readonly uvTransform: Texture | null;

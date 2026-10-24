@@ -9,7 +9,7 @@ import { completionToggle } from '../ui/completion-toggle';
 import { FrameGate } from '../perf/frame-gate';
 import { QUALITY, pickTier } from '../perf/quality';
 import { QualityManager } from '../perf/quality-manager';
-import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
+import type { AvatarFactory, AvatarLook } from '../player/avatar-kit';
 import { BvhCollider } from '../player/collider';
 import { FollowCamera } from '../player/follow-camera';
 import { CombinedInput, KeyboardInput, type InputSource } from '../player/input';
@@ -25,6 +25,9 @@ import { CanvasSignPainter } from '../world/props/sign-painter';
 import { Panel } from '../ui/panel';
 import { PerfOverlay } from '../ui/perf-overlay';
 import { ActivityPrompt } from '../ui/prompt';
+import { Guide, type GuideStrings } from '../tutor/guide';
+import type { Tutor } from '../tutor/tutor';
+import { Palette } from '../world/palette';
 import { BookController } from '../ui/book-controller';
 import { TouchControls } from '../ui/touch-controls';
 import { Stage } from '../world/stage';
@@ -114,12 +117,11 @@ const SHADOW_RADIUS = 30;
 /** Loads the avatar and starts the local player at the spawn, driven by the keyboard plus `inputs`. */
 export async function startPlayer(
   view: WorldView,
-  assetBase: string,
+  avatars: AvatarFactory,
   look: AvatarLook,
   inputs: readonly InputSource[] = [],
 ): Promise<Player> {
-  const kit = await AvatarKit.load(assetBase);
-  const avatar = await kit.create(look);
+  const avatar = await avatars.create(look);
   view.stage.add(avatar.root);
   const collider = BvhCollider.fromMeshes(view.islands.children.filter((o) => o.name === 'land' || o.name === 'tops'));
   const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement);
@@ -159,6 +161,30 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
   view.onFrame(() => interaction.update(player.body.position.x, player.body.position.z));
   new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => goToPlot(view, player, id));
   return interaction;
+}
+
+const GUIDE_LOOK: AvatarLook = { skin: 'n', tint: Palette.yellow };
+const GUIDE_SPOT = { x: 1.8, z: -4.6 };
+const PLAZA_TOP = 0.02;
+
+/** The Guide NPC by the spawn: greets, then names the next step whenever the course changes. */
+export async function startGuide(
+  view: WorldView,
+  player: Player,
+  avatars: AvatarFactory,
+  tutor: Tutor,
+  course: Course,
+  strings: GuideStrings,
+): Promise<Guide> {
+  const avatar = await avatars.create(GUIDE_LOOK);
+  const s = view.layout.spawn;
+  avatar.root.position.set(s.x + GUIDE_SPOT.x, PLAZA_TOP, s.z + GUIDE_SPOT.z);
+  view.stage.add(avatar.root);
+  const guide = new Guide(avatar, view.stage.camera, view.stage.canvasHost, strings, (id) => goToPlot(view, player, id));
+  guide.say(tutor.greet({ world: course.store.world ?? view.world }));
+  course.store.subscribe((world) => guide.say(tutor.nextStep({ world })));
+  view.onFrame((dt) => guide.update(dt, player.avatar.root.position));
+  return guide;
 }
 
 const STAND_OFF = 1.6;

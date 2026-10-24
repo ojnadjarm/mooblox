@@ -44,6 +44,13 @@ $config = [
     'firstname' => $USER->firstname,
     'avatar' => (string) get_user_preferences('local_mooblox_avatar', ''),
     'rev' => (int) $rev,
+    'strings' => [
+        'guide' => get_string('guide', 'local_mooblox'),
+        'greeting' => get_string('guide_greeting', 'local_mooblox', '{name}'),
+        'next' => get_string('guide_next', 'local_mooblox', '{activity}'),
+        'alldone' => get_string('guide_alldone', 'local_mooblox'),
+        'showme' => get_string('guide_showme', 'local_mooblox'),
+    ],
 ];
 
 echo $OUTPUT->header();

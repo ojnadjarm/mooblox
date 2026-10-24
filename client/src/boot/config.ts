@@ -6,6 +6,8 @@ export interface PlayConfig {
   readonly firstname: string;
   readonly avatar: string;
   readonly rev: number;
+  /** Lang strings for the client UI, by key. */
+  readonly strings: Readonly<Record<string, string>>;
 }
 
 /** Thrown when the play.php config is missing or malformed. */
@@ -35,7 +37,18 @@ export function readConfig(json: string | null | undefined): PlayConfig {
     firstname: str(o, 'firstname'),
     avatar: str(o, 'avatar'),
     rev: int(o, 'rev'),
+    strings: strings(o['strings']),
   };
+}
+
+function strings(v: unknown): Record<string, string> {
+  if (v === undefined) {
+    return {};
+  }
+  if (typeof v !== 'object' || v === null || Object.values(v).some((x) => typeof x !== 'string')) {
+    throw new ConfigError('config.strings must map keys to strings');
+  }
+  return v as Record<string, string>;
 }
 
 function str(o: Record<string, unknown>, key: string): string {

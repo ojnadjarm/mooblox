@@ -12,7 +12,9 @@ const valid = {
 
 describe('readConfig', () => {
   it('parses the play.php config and trims the wwwroot slash', () => {
-    expect(readConfig(JSON.stringify(valid))).toEqual({ ...valid, wwwroot: 'https://moodle.example' });
+    expect(readConfig(JSON.stringify(valid))).toEqual({ ...valid, wwwroot: 'https://moodle.example', strings: {} });
+    const strings = { guide: 'Guide' };
+    expect(readConfig(JSON.stringify({ ...valid, strings })).strings).toEqual(strings);
   });
 
   it.each([
@@ -21,6 +23,7 @@ describe('readConfig', () => {
     ['not an object', '1'],
     ['wrong type', JSON.stringify({ ...valid, courseid: '30' })],
     ['missing key', JSON.stringify({ ...valid, sesskey: undefined })],
+    ['strings not text', JSON.stringify({ ...valid, strings: { guide: 1 } })],
   ])('rejects a config that is %s', (_label, json) => {
     expect(() => readConfig(json)).toThrow(ConfigError);
   });
