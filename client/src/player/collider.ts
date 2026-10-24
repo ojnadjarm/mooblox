@@ -43,8 +43,9 @@ export class BvhCollider implements Collider {
     },
   };
 
+  /** Reuses the geometry's `boundsTree` when one was built elsewhere (the build worker). */
   constructor(geometry: BufferGeometry) {
-    this.bvh = new MeshBVH(geometry);
+    this.bvh = geometry.boundsTree instanceof MeshBVH ? geometry.boundsTree : new MeshBVH(geometry);
     this.index = geometry.getIndex() as BufferAttribute;
     this.position = geometry.getAttribute('position') as BufferAttribute;
   }

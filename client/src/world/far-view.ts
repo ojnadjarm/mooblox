@@ -11,6 +11,7 @@ import {
   MeshBasicMaterial,
   OrthographicCamera,
   Quaternion,
+  SRGBColorSpace,
   Vector3,
   WebGLRenderTarget,
   type Material,
@@ -27,8 +28,8 @@ import { withFade } from './island-fade';
 /** How the islands past the live one look: haze only, real neighbours, ultra-low-poly silhouettes or pre-rendered cards. */
 export type FarMode = 'fog' | 'full' | 'silhouette' | 'impostor';
 
-/** The default, picked on look per cost (`~/drop/T1368/options.html`). */
-export const DEFAULT_FAR: FarMode = 'silhouette';
+/** The default on every tier and shape: pre-rendered cards (T1369; options in `~/drop/T1368/options.html`). */
+export const DEFAULT_FAR: FarMode = 'impostor';
 
 /** `?far=` or the default. */
 export function farMode(query: string | null): FarMode {
@@ -250,8 +251,13 @@ export class Impostors implements FarView {
     /** Where cards are seen from most (the spawn): each capture looks from there. */
     private readonly from: { x: number; z: number },
   ) {
-    const material = new MeshBasicMaterial({ map: this.target.texture, alphaTest: 0.5 });
+    // Captures render like the canvas (sRGB out, tone mapped): the scenery's own programs, no render-target variants
+    // compiled mid-walk. The atlas then holds display colours: the card decodes them and is not tone mapped again.
+    (this.target as WebGLRenderTarget & { isXRRenderTarget: boolean }).isXRRenderTarget = true;
+    this.target.texture.colorSpace = SRGBColorSpace;
+    const material = new MeshBasicMaterial({ map: this.target.texture, alphaTest: 0.5, toneMapped: false });
     material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', 'diffuseColor *= sRGBTransferEOTF(texture2D(map, vMapUv));');
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute vec3 centre;')
         .replace(
@@ -312,12 +318,19 @@ export class Impostors implements FarView {
     cam.near = d - c.radius - 4;
     cam.far = d + c.radius + 4;
     cam.updateProjectionMatrix();
+    // Only the district's line to the scene and that line's siblings change: a big world's thousands of props stay untouched.
     const shown = new Map<Object3D, boolean>();
-    const keep = new Set<Object3D>([...this.host.keep, this.host.districts[i]!]);
-    scene.traverse((o) => {
-      if (o === scene) return;
-      shown.set(o, o.visible);
-      o.visible = keep.has(o) || isLight(o) || hasAncestor(o, this.host.districts[i]!);
+    const keep = new Set<Object3D>(this.host.keep);
+    const district = this.host.districts[i]!;
+    for (let a = district; a.parent; a = a.parent) {
+      for (const o of a.parent.children) {
+        shown.set(o, o.visible);
+        o.visible = o === a || keep.has(o) || isLight(o);
+      }
+    }
+    district.traverse((o) => {
+      if (!shown.has(o)) shown.set(o, o.visible);
+      o.visible = true;
     });
     const background = scene.background;
     const fog = scene.fog as { near: number; far: number } | null;
@@ -470,9 +483,4 @@ function dist(c: Circle, p: { x: number; z: number }): number {
 
 function isLight(o: Object3D): boolean {
   return (o as Object3D & { isLight?: boolean }).isLight === true;
-}
-
-function hasAncestor(o: Object3D, a: Object3D): boolean {
-  for (let p = o.parent; p; p = p.parent) if (p === a) return true;
-  return false;
 }

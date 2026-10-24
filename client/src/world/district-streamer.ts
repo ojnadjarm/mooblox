@@ -1,9 +1,13 @@
+import type { FrameBudget } from '../perf/frame-budget';
+
 /** Something the streamer builds in slices near the player and frees far away: one district island. */
 export interface StreamUnit {
   readonly x: number;
   readonly z: number;
   readonly radius: number;
   readonly isBuilt: boolean;
+  /** True while the build waits on background work (the build worker): the streamer moves on to the next unit. */
+  readonly busy?: boolean;
   /** Runs one slice of the build; true once complete. */
   step(): boolean;
   /** Builds every remaining slice now. */
@@ -20,7 +24,7 @@ export const edgeMetric: StreamMetric = (u, _i, x, z) => edge(u, x, z);
 
 /** How far the streamer keeps districts and how long one frame may build. */
 export interface StreamPolicy {
-  /** Milliseconds of building per frame. */
+  /** Milliseconds of building per frame (when no frame budget is given). */
   readonly sliceMs: number;
   /** Units whose edge is within this distance get built (nearest first). */
   readonly keep: number;
@@ -41,6 +45,8 @@ export class DistrictStreamer {
     private readonly now: () => number = () => performance.now(),
     /** Which units are near: edge distance by default, the island streamer's live set for one island at a time. */
     private readonly metric: StreamMetric = edgeMetric,
+    /** The measured per-frame slice shared with other background work; `policy.sliceMs` when absent. */
+    private readonly budget: FrameBudget | null = null,
   ) {}
 
   /** Units not yet built within the keep distance of the last focus. */
@@ -54,7 +60,8 @@ export class DistrictStreamer {
   }
 
   /**
-   * One frame of streaming around (x, z): frees far units, then builds the nearest unbuilt ones until the slice is spent.
+   * One frame of streaming around (x, z): frees far units, then builds the nearest unbuilt ones until the slice is spent
+   * (a unit waiting on the build worker is left for a later frame).
    * `all` keeps and builds everything (overview). Returns true when the scene changed.
    */
   pump(x: number, z: number, all = false): boolean {
@@ -76,31 +83,45 @@ export class DistrictStreamer {
       const d = all ? edge(u, x, z) : this.metric(u, i, x, z);
       if (u.isBuilt || d > keep) continue;
       pending++;
-      if (d < best) {
+      if (!u.busy && d < best) {
         best = d;
         nearest = i;
       }
     }
     this.pending = pending;
     if (nearest < 0) return this.changed;
-    const end = this.now() + this.policy.sliceMs;
-    // Keep working on the nearest unit; pick the next nearest once it is done, until the slice is spent.
-    while (nearest >= 0 && this.now() < end) {
-      if (this.units[nearest]!.step()) {
+    // Keep working on the nearest unit; pick the next nearest once it is done or waiting, until the slice is spent.
+    const job = (): boolean => {
+      const u = this.units[nearest]!;
+      if (u.step()) {
         this.changed = true;
         this.pending--;
         nearest = this.nearestUnbuilt(x, z, keep, all);
+      } else if (u.busy) {
+        nearest = this.nearestUnbuilt(x, z, keep, all);
       }
+      return nearest < 0;
+    };
+    if (this.budget) {
+      this.budget.run(job);
+    } else {
+      const end = this.now() + this.policy.sliceMs;
+      while (this.now() < end && !job());
     }
     return this.changed;
   }
 
-  /** Builds every wanted unit now (a teleport or a new current island must not wait for the slices). */
-  finishWanted(x: number, z: number, upTo = 0): void {
+  /** Builds every wanted unit now (a teleport or a new current island must not wait for the slices); true when any was built. */
+  finishWanted(x: number, z: number, upTo = 0): boolean {
+    let any = false;
     for (let i = 0; i < this.units.length; i++) {
       const u = this.units[i]!;
-      if (!u.isBuilt && this.metric(u, i, x, z) <= upTo) u.finish();
+      if (!u.isBuilt && this.metric(u, i, x, z) <= upTo) {
+        u.finish();
+        any = true;
+      }
     }
+    return any;
   }
 
   private nearestUnbuilt(x: number, z: number, keep: number, all: boolean): number {
@@ -109,7 +130,7 @@ export class DistrictStreamer {
     for (let i = 0; i < this.units.length; i++) {
       const u = this.units[i]!;
       const d = all ? edge(u, x, z) : this.metric(u, i, x, z);
-      if (!u.isBuilt && d <= keep && d < best) {
+      if (!u.isBuilt && !u.busy && d <= keep && d < best) {
         best = d;
         nearest = i;
       }

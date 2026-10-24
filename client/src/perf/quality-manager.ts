@@ -13,8 +13,10 @@ export class QualityManager {
     private current: QualityTier,
     /** Null when the tier was asked for (`?quality=`): never stepped down. */
     private readonly remember: TierMemory | null = null,
+    /** Software GL: starts at the scale floor (it ends there anyway, and every step on the way is a canvas resize hitch). */
+    private readonly software = false,
   ) {
-    this.dynamic = new DynamicResolution(QUALITY[current].minScale);
+    this.dynamic = this.governor(current);
     this.apply();
   }
 
@@ -24,22 +26,29 @@ export class QualityManager {
 
   setTier(tier: QualityTier): void {
     this.current = tier;
-    this.dynamic = new DynamicResolution(QUALITY[tier].minScale);
+    this.dynamic = this.governor(tier);
     this.apply();
   }
 
-  /** Feeds one frame time in ms; re-applies the pixel ratio when dynamic resolution moves, drops a tier when it is starved. */
+  /**
+   * Feeds one frame time in ms; re-applies the pixel ratio only when dynamic resolution moves (a resize reallocates the
+   * canvas: a long frame), drops a tier when it is starved and a lower one exists.
+   */
   frame(frameMs: number): void {
-    if (!this.dynamic.sample(frameMs) && !this.dynamic.starved) {
-      return;
-    }
+    const moved = this.dynamic.sample(frameMs);
     const lower = this.dynamic.starved && this.remember ? lowerTier(this.current) : null;
     if (lower) {
       this.remember!(lower);
       this.setTier(lower);
-    } else {
+    } else if (moved) {
       this.apply();
     }
+  }
+
+  private governor(tier: QualityTier): DynamicResolution {
+    const d = new DynamicResolution(QUALITY[tier].minScale);
+    if (this.software) d.scale = QUALITY[tier].minScale;
+    return d;
   }
 
   /** Re-reads the host size and device pixel ratio. */

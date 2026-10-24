@@ -360,3 +360,23 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     packs only what `view.sees()` through the haze. `WorldView.follow(target)`, `far`, `island`, `sees`.
   - Tools: `node tools/near-island.mjs <dir> [--modes ..] [--shapes ..]` (options at one camera, `options.json` + JPEGs);
     `tools/perf.mjs --query k=v` appends to every page query.
+- T1369, 2026-10-24, smooth streaming (evidence `~/drop/T1369/index.html`, data `~/agent-work/evidence/T1369/`):
+  - Budgets (owner): memory = JS heap + GPU estimate <= 800 MB per shape in the gate, hard ceiling 1 GB; spend it on smoothness.
+    Low (Iris Xe DPR 1, 4x CPU) worst frame <= 20 ms over the walk and its bridge crossing; stress (SwiftShader 6x) <= 100 ms,
+    30 fps. Low programs 11 (was 10): the impostor card is the one program the silhouettes did not need.
+  - `perf/frame-budget.ts` `FrameBudget`: one measured slice per frame for all background work (0.7 of the device's usual
+    interval minus the frame's own work, halved after a late frame; late = past 1.25x the running average, so a 30 Hz device is
+    not late every frame). `world/gpu-warmup.ts` `GpuWarmup`: uploads fresh meshes before they are seen (render with a hidden
+    material into a 1x1 target), one mesh per budget slice.
+  - `DistrictBuild`: one placement per slice, appended to its mesh as it is placed (`world/district-merge.ts` `MeshMerge`,
+    `SolidsMerge`; surface ids kept on rich tiers); the collision BVH builds in `world/build.worker.ts` (`build-worker.ts`
+    `WorkerTrees`, `MeshBVH.serialize`, transferred back; inline where there is no worker or after it failed); `finish()` reuses
+    a build waiting on the worker. Meshes come in 1 MB chunks (one short upload each). `BvhCollider` reuses a ready `boundsTree`.
+  - Impostor is the default far view (`?far=` keeps the others); captures reuse the canvas programs (`isXRRenderTarget`, sRGB
+    atlas, the card decodes) and touch only the district's line to the scene. Impostor-built districts refresh the collider.
+  - `QualityManager`: resizes only when dynamic resolution moves; software GL starts at the scale floor.
+  - Tools: `node tools/crossing.mjs <out.json> [--shapes] [--rigs low,stress,medium,high] [--query] [--walk]`: per-frame times of one
+    bridge crossing (pump, render, off-screen renders, uploads, links).
+  - Gate (quiet machine): 73 pass, 3 fail (stress demo fps 27, worst 300 ms; stress 1x2 worst 233 ms). Low green on all shapes.
+    Open: stress keeps one 230-430 ms frame when the deck safety net finishes the island across inline (fix: placement prep in
+    the worker); on high, impostor captures cost single 50-280 ms frames (16.8-33 ms with `?far=silhouette`).

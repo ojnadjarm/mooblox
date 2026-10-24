@@ -29,6 +29,8 @@ import { CAMPUS } from '../world/look';
 import type { ModelLibrary } from '../world/model-library';
 import { buildGlow, cullDistricts, DETAIL_DISTANCE, DistrictBuild, MINOR_DISTANCE } from '../world/scenery';
 import { DistrictStreamer } from '../world/district-streamer';
+import { FrameBudget } from '../perf/frame-budget';
+import { GpuWarmup } from '../world/gpu-warmup';
 import { Haze, installHaze, type HazeBand } from '../world/haze';
 import { islandGraph, IslandStreamer } from '../world/island-streamer';
 import { FADE_SLOTS, setFades, withFade } from '../world/island-fade';
@@ -92,6 +94,7 @@ export interface WorldView {
 }
 
 let pickedTier: QualityTier | null = null;
+let pickedGpu = '';
 
 /** The tier this page runs at: `?quality=` wins, else picked once from the device and its GPU. */
 export function bootTier(): QualityTier {
@@ -99,7 +102,8 @@ export function bootTier(): QualityTier {
     const params = new URLSearchParams(location.search);
     const coarse = window.matchMedia('(pointer: coarse)').matches;
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    pickedTier = pickTier({ query: params.get('quality'), stored: storedTier(), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse, gpu: gpuName(), ua: navigator.userAgent });
+    pickedGpu = gpuName();
+    pickedTier = pickTier({ query: params.get('quality'), stored: storedTier(), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse, gpu: pickedGpu, ua: navigator.userAgent });
   }
   return pickedTier;
 }
@@ -145,6 +149,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const policy = new IslandLayout(look.size);
   const level = { minor: tier !== 'low', rich: tier === 'xhigh', detailShadows: tier === 'high' || tier === 'xhigh', minorDistance: MINOR_DISTANCE[tier] };
   const collider = new CompositeCollider();
+  // One measured slice per frame for every background job: GPU pre-uploads, district builds, impostor captures.
+  const budget = new FrameBudget({ target: FRAME_MS, min: 1, max: STREAM[tier].sliceMs, fill: 0.7 });
+  const warmup = new GpuWarmup(stage.renderer);
   const dress = (w: WorldData, l: WorldLayout) => {
     const group = new IslandBuilder(kit, look, tier === 'low', RIM_DETAIL[tier]).build(w, l);
     const purposes = new Map(w.sections.flatMap((sec) => sec.activities).map((act) => [act.id, act.purpose]));
@@ -169,13 +176,23 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       get isBuilt() {
         return b.isBuilt;
       },
-      step: () => b.step(),
-      finish: () => b.finish(),
+      get busy() {
+        return b.busy;
+      },
+      step: () => {
+        const done = b.step();
+        if (done) warmup.add(b.group);
+        return done;
+      },
+      finish: () => {
+        b.finish();
+        warmup.add(b.group);
+      },
       unload: () => b.unload(),
     }));
     const graph = islandGraph(l);
     const islandStream = new IslandStreamer(graph.islands, graph.bridges, { ...ISLAND, neighbours: far === 'full' });
-    const streamer = new DistrictStreamer(units, { sliceMs: STREAM[tier].sliceMs, keep: ISLAND.preload, drop: ISLAND.preload + 10 }, undefined, islandStream.metric);
+    const streamer = new DistrictStreamer(units, { sliceMs: STREAM[tier].sliceMs, keep: ISLAND.preload, drop: ISLAND.preload + 10 }, undefined, islandStream.metric, budget);
     const landmarkOf = (c: { x: number; z: number; radius: number }) =>
       d.landmarks.find((m) => Math.hypot(m.x - c.x, m.z - c.z) < c.radius) ?? null;
     let farView: FarView | null = null;
@@ -189,9 +206,25 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
         renderer: stage.renderer,
         scene: stage.scene,
         districts: builds.map((b) => b.group),
-        build: (i) => builds[i]!.step(),
+        // Builds in the shared slice; the capture (one unsplittable render) waits for an upload-free, calm frame.
+        build: (i) => {
+          const b = builds[i]!;
+          if (streamer.pending > 0) return false;
+          if (!b.isBuilt) {
+            budget.run(() => b.step() || b.busy);
+            if (b.isBuilt) {
+              warmup.add(b.group);
+              solids();
+            }
+            return false;
+          }
+          return warmup.pending === 0 && !budget.wasLate && budget.left >= CAPTURE_MS;
+        },
         release: (i) => {
-          if (islandStream.metric(units[i]!, i, 0, 0) === Infinity) builds[i]!.unload();
+          if (islandStream.metric(units[i]!, i, 0, 0) === Infinity) {
+            builds[i]!.unload();
+            solids();
+          }
         },
         keep: [group, scenery],
       }, l.spawn);
@@ -247,7 +280,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   let e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
 
-  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier);
+  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier, SOFTWARE_GL.test(pickedGpu));
   const overlay = params.get('perf') === '1' ? new PerfOverlay(root, stage.renderer, quality) : null;
   const steps = new Set<(dt: number) => void>();
   let clock = 0;
@@ -256,12 +289,16 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   stage.add(sparkles.mesh);
   steps.add((dt) => {
     clock += dt;
+    if (warmup.step(budget)) gate.invalidate();
     sparkles.update(dt);
     const eye = stage.camera.position;
     props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
     const f = focus ?? eye;
     if (islandFrame(f.x, f.z, dt)) gate.invalidate();
-    if (built.streamer.pump(f.x, f.z, overview)) {
+    let solid = built.streamer.pump(f.x, f.z, overview);
+    // Safety net: a deck the player steps on is solid even when the background build fell behind (one long frame, no fall).
+    if (!overview && built.streamer.finishWanted(f.x, f.z, ON_DECK)) solid = true;
+    if (solid) {
       built.solids();
       gate.invalidate();
     }
@@ -358,10 +395,12 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     }
   };
   const gate = new FrameGate((dt) => {
+    budget.begin();
     for (const step of steps) {
       step(dt);
     }
     stage.render();
+    budget.end();
     if (dt > 0) {
       quality.frame(dt * 1000);
     }
@@ -486,6 +525,8 @@ const RIM_DETAIL = { low: 1.5, medium: 2.5, high: 4, xhigh: 4 } as const;
 
 /** One island at a time: build the island across a bridge within `preload` m of its deck, draw it within `show` m. */
 const ISLAND = { preload: 20, show: 2.5, shore: 2 } as const;
+/** Bridge distance (m) at which the island across must be built: the player is on its deck. */
+const ON_DECK = 1;
 /** A focus move longer than this (m) in one frame is a teleport. */
 const TELEPORT = 6;
 /** Haze band past the bubble edge per far view: tight when nothing stands in, wide enough to see the fakes otherwise. */
@@ -495,7 +536,13 @@ const FADE_SECONDS = 0.5;
 const FADE_MARGIN = 0.5;
 /** Cap colour of a silhouette landmark: the bible's teal (hub roofs). */
 const LANDMARK_CAP = 0x2fa39a;
-/** Per tier: at most `sliceMs` of building per frame (`keep`/`drop` are the edge-distance policy of the T1367 streamer). */
+/** Software rasterisers (no GPU): dynamic resolution starts at its floor there. */
+const SOFTWARE_GL = /swiftshader|llvmpipe|software|microsoft basic/i;
+/** Frame interval the background budget holds (60 Hz). */
+const FRAME_MS = 1000 / 60;
+/** Background time (ms) a frame must still have before an impostor capture runs in it. */
+const CAPTURE_MS = 3;
+/** Per tier: at most `sliceMs` of background work per frame (`keep`/`drop` are the edge-distance policy of the T1367 streamer). */
 const STREAM = {
   low: { sliceMs: 4, keep: 70, drop: 100 },
   medium: { sliceMs: 6, keep: 125, drop: 150 },

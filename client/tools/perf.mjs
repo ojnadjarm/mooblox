@@ -1,7 +1,8 @@
 // Perf gate + stills: node tools/perf.mjs [outdir] [--shapes demo,1x2,8x12,20x30] [--tiers low,medium] [--gate] [--stills] [--load]
 // Builds the dev page, serves the build, then per shape x tier walks the player to the farthest plot and reads frame times,
 // draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on the real GPU at DPR 1, 400x800 under 4x CPU
-// throttle (the realistic low-end proxy), then again on SwiftShader under 6x as a stress floor (30 fps, no frame > 100 ms);
+// throttle (the realistic low-end proxy: no frame > 20 ms over the walk and its bridge crossing), then again on SwiftShader under
+// 6x as a stress floor (30 fps, no frame > 100 ms); memory = heap + GPU estimate <= 800 MB per page;
 // the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
 // --browser gpu|soft and --throttle N override the rig (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,11 +11,15 @@ import { join } from 'node:path';
 import { build, preview } from 'vite';
 import { loadChromium } from './playwright.mjs';
 
+// Low programs 11: the impostor card (the default far view since T1369) is the one program the silhouettes did not need.
 const BUDGETS = {
-  low: { fps: 58, calls: 40, tris: 80000, programs: 10, shadow: 1024, post: false },
+  low: { fps: 58, calls: 40, tris: 80000, programs: 11, shadow: 1024, post: false },
   medium: { fps: 58, calls: 60, tris: 200000, programs: 30, shadow: 1024, post: false },
 };
-const ALL = { loadMb: 3, loadS: 3, heapMb: 150, gpuMb: 200, frameMs: 50, bigCourse: 1.5 };
+/** Memory = JS heap + GPU estimate per page (owner, T1369: 800 MB, hard ceiling 1 GB; spend it on smoothness). */
+const ALL = { loadMb: 3, loadS: 3, memoryMb: 800, frameMs: 50, bigCourse: 1.5 };
+/** The realistic low-end proxy (Iris Xe DPR 1, 4x CPU) walks over a bridge without a dropped frame. */
+const LOW_FRAME_MS = 20;
 /** Software GL (SwiftShader) under 6x CPU: harsher than any real GPU, so a floor, not the target. */
 const STRESS = { fps: 30, frameMs: 100 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
@@ -176,9 +181,10 @@ try {
         check(m.shadow <= b.shadow, `${id}: shadow map ${m.shadow} <= ${b.shadow}`);
         check(b.post || !m.post, `${id}: post ${m.post} allowed ${b.post}`);
       }
-      check(m.maxFrame <= ALL.frameMs, `${id}: worst frame ${m.maxFrame} ms <= ${ALL.frameMs}`);
-      check(m.heapMb <= ALL.heapMb, `${id}: heap ${m.heapMb} MB <= ${ALL.heapMb}`);
-      check(m.gpuMb <= ALL.gpuMb, `${id}: gpu estimate ${m.gpuMb} MB <= ${ALL.gpuMb}`);
+      const frameMs = tier === 'low' ? LOW_FRAME_MS : ALL.frameMs;
+      check(m.maxFrame <= frameMs, `${id}: worst frame ${m.maxFrame} ms <= ${frameMs}`);
+      const memory = +(m.heapMb + m.gpuMb).toFixed(1);
+      check(memory <= ALL.memoryMb, `${id}: memory heap ${m.heapMb} + gpu ${m.gpuMb} = ${memory} MB <= ${ALL.memoryMb}`);
       if (row.loadS !== undefined) {
         check(row.loadS <= ALL.loadS, `${id}: first playable ${row.loadS} s <= ${ALL.loadS} on Fast 4G`);
         check(row.loadMb <= ALL.loadMb, `${id}: transferred ${row.loadMb} MB <= ${ALL.loadMb}`);

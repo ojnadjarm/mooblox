@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FrameBudget } from '../../src/perf/frame-budget';
 import { DistrictStreamer, type StreamUnit } from '../../src/world/district-streamer';
 
 /** A unit that needs `slices` steps; each step advances the fake clock by 1 ms. */
@@ -67,5 +68,24 @@ describe('DistrictStreamer', () => {
     const { units, streamer } = setup();
     for (let i = 0; i < 10; i++) streamer.pump(0, 0, true);
     expect(units.every((u) => u.isBuilt)).toBe(true);
+  });
+
+  it('skips a unit waiting on the worker and builds the next one', () => {
+    const { units, streamer } = setup();
+    const waiting = units[0]!;
+    Object.defineProperty(waiting, 'busy', { get: () => true });
+    streamer.pump(0, 0);
+    expect(waiting.done).toBe(0);
+    expect(units[1]!.done).toBeGreaterThan(0);
+  });
+
+  it('takes its slice from the shared frame budget when given one', () => {
+    const clock = { t: 0 };
+    const units = [0, 40].map((x) => new Unit(x, 0, 10, 10, clock));
+    const budget = new FrameBudget({ target: 16, min: 2, max: 2, fill: 0.8 }, () => clock.t);
+    const streamer = new DistrictStreamer(units, { sliceMs: 100, keep: 150, drop: 200 }, () => clock.t, undefined, budget);
+    budget.begin();
+    streamer.pump(0, 0);
+    expect(units[0]!.done + units[1]!.done).toBe(2);
   });
 });
