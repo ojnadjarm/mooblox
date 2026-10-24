@@ -106,6 +106,23 @@ describe('campus layout and dressing for any course shape', () => {
         }
       });
 
+      it('never places one solid model inside another (footprint overlap)', () => {
+        const solids = [...dressing.obstacles].sort((a, b) => a.x - b.x);
+        const maxR = Math.max(0, ...solids.map((o) => o.r));
+        const overlaps: string[] = [];
+        for (let i = 0; i < solids.length; i++) {
+          const a = solids[i]!;
+          for (let j = i + 1; j < solids.length && solids[j]!.x - a.x < a.r + maxR; j++) {
+            const b = solids[j]!;
+            if (Math.hypot(a.x - b.x, a.z - b.z) < a.r + b.r - 1e-6) overlaps.push(`${a.x.toFixed(1)},${a.z.toFixed(1)} r${a.r.toFixed(2)} x ${b.x.toFixed(1)},${b.z.toFixed(1)} r${b.r.toFixed(2)}`);
+          }
+        }
+        expect(overlaps).toEqual([]);
+        const placedSolids = dressing.districts.flatMap((d) => d.placements).filter((p) => p.solid && p.y < 1 && p.id !== 'nature/bridge_center_wood');
+        expect(placedSolids.length).toBeLessThanOrEqual(solids.length);
+        expect(dressing.districts.flatMap((d) => d.placements).filter((p) => (p.minor || p.rich) && p.solid)).toEqual([]);
+      });
+
       it('lets the player walk from the spawn to every plot', () => {
         const { grid, w: gw, h, cell } = walkable(layout, dressing);
         const start = cell(layout.spawn.x, layout.spawn.z);

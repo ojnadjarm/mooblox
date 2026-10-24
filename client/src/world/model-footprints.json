@@ -5,6 +5,18 @@
   "r": 0.707,
   "tris": 52
  },
+ "nature/campfire_stones": {
+  "h": 0.078,
+  "w": 0.541,
+  "r": 0.298,
+  "tris": 264
+ },
+ "nature/canoe": {
+  "h": 0.183,
+  "w": 1.15,
+  "r": 0.575,
+  "tris": 200
+ },
  "nature/cliff_large_rock": {
   "h": 1,
   "w": 1,
@@ -23,11 +35,77 @@
   "r": 0.743,
   "tris": 219
  },
+ "nature/crop_carrot": {
+  "h": 0.619,
+  "w": 0.343,
+  "r": 0.172,
+  "tris": 148
+ },
+ "nature/crop_melon": {
+  "h": 0.348,
+  "w": 0.418,
+  "r": 0.209,
+  "tris": 236
+ },
+ "nature/crop_pumpkin": {
+  "h": 0.334,
+  "w": 0.452,
+  "r": 0.231,
+  "tris": 120
+ },
+ "nature/crops_cornStageC": {
+  "h": 1.25,
+  "w": 0.304,
+  "r": 0.154,
+  "tris": 148
+ },
+ "nature/crops_dirtRow": {
+  "h": 0.05,
+  "w": 1,
+  "r": 0.573,
+  "tris": 44
+ },
+ "nature/crops_leafsStageB": {
+  "h": 0.677,
+  "w": 0.389,
+  "r": 0.197,
+  "tris": 84
+ },
+ "nature/crops_wheatStageB": {
+  "h": 0.535,
+  "w": 0.54,
+  "r": 0.313,
+  "tris": 360
+ },
+ "nature/fence_planks": {
+  "h": 0.345,
+  "w": 1,
+  "r": 0.726,
+  "tris": 96
+ },
+ "nature/fence_simple": {
+  "h": 0.345,
+  "w": 1,
+  "r": 0.707,
+  "tris": 64
+ },
  "nature/flower_purpleA": {
   "h": 0.242,
   "w": 0.181,
   "r": 0.105,
   "tris": 76
+ },
+ "nature/flower_purpleB": {
+  "h": 0.208,
+  "w": 0.239,
+  "r": 0.13,
+  "tris": 98
+ },
+ "nature/flower_purpleC": {
+  "h": 0.183,
+  "w": 0.181,
+  "r": 0.105,
+  "tris": 78
  },
  "nature/flower_redA": {
   "h": 0.292,
@@ -35,11 +113,89 @@
   "r": 0.105,
   "tris": 76
  },
+ "nature/flower_redB": {
+  "h": 0.258,
+  "w": 0.239,
+  "r": 0.13,
+  "tris": 98
+ },
+ "nature/flower_redC": {
+  "h": 0.233,
+  "w": 0.181,
+  "r": 0.105,
+  "tris": 78
+ },
  "nature/flower_yellowA": {
   "h": 0.192,
   "w": 0.181,
   "r": 0.105,
   "tris": 76
+ },
+ "nature/flower_yellowB": {
+  "h": 0.159,
+  "w": 0.239,
+  "r": 0.13,
+  "tris": 154
+ },
+ "nature/flower_yellowC": {
+  "h": 0.133,
+  "w": 0.181,
+  "r": 0.105,
+  "tris": 78
+ },
+ "nature/grass_large": {
+  "h": 0.254,
+  "w": 0.409,
+  "r": 0.259,
+  "tris": 224
+ },
+ "nature/grass_leafs": {
+  "h": 0.142,
+  "w": 0.257,
+  "r": 0.143,
+  "tris": 36
+ },
+ "nature/grass_leafsLarge": {
+  "h": 0.142,
+  "w": 0.487,
+  "r": 0.308,
+  "tris": 144
+ },
+ "nature/lily_large": {
+  "h": 0.098,
+  "w": 0.314,
+  "r": 0.157,
+  "tris": 86
+ },
+ "nature/lily_small": {
+  "h": 0.04,
+  "w": 0.218,
+  "r": 0.109,
+  "tris": 52
+ },
+ "nature/log": {
+  "h": 0.173,
+  "w": 0.71,
+  "r": 0.369,
+  "tris": 200
+ },
+ "nature/log_stack": {
+  "h": 0.346,
+  "w": 0.71,
+  "r": 0.407,
+  "tris": 184
+ },
+ "nature/mushroom_redGroup": {
+  "h": 0.25,
+  "w": 0.27,
+  "r": 0.169,
+  "tris": 144
+ },
+ "nature/mushroom_tanGroup": {
+  "h": 0.25,
+  "w": 0.27,
+  "r": 0.169,
+  "tris": 144
  },
  "nature/path_stone": {
   "h": 0.05,
@@ -59,6 +215,30 @@
   "r": 0.187,
   "tris": 60
  },
+ "nature/plant_bushSmall": {
+  "h": 0.207,
+  "w": 0.383,
+  "r": 0.191,
+  "tris": 16
+ },
+ "nature/plant_flatShort": {
+  "h": 0.235,
+  "w": 0.278,
+  "r": 0.139,
+  "tris": 44
+ },
+ "nature/plant_flatTall": {
+  "h": 0.284,
+  "w": 0.272,
+  "r": 0.136,
+  "tris": 32
+ },
+ "nature/pot_large": {
+  "h": 0.2,
+  "w": 0.564,
+  "r": 0.282,
+  "tris": 68
+ },
  "nature/rock_largeA": {
   "h": 0.26,
   "w": 1.015,
@@ -77,6 +257,18 @@
   "r": 0.605,
   "tris": 72
  },
+ "nature/rock_smallA": {
+  "h": 0.191,
+  "w": 0.361,
+  "r": 0.221,
+  "tris": 16
+ },
+ "nature/rock_smallC": {
+  "h": 0.123,
+  "w": 0.361,
+  "r": 0.196,
+  "tris": 16
+ },
  "nature/rock_tallA": {
   "h": 0.996,
   "w": 0.983,
@@ -89,11 +281,59 @@
   "r": 0.478,
   "tris": 172
  },
+ "nature/sign": {
+  "h": 0.409,
+  "w": 0.3,
+  "r": 0.159,
+  "tris": 44
+ },
+ "nature/statue_obelisk": {
+  "h": 0.875,
+  "w": 0.307,
+  "r": 0.217,
+  "tris": 38
+ },
+ "nature/stone_tallA": {
+  "h": 0.996,
+  "w": 0.983,
+  "r": 0.522,
+  "tris": 136
+ },
+ "nature/stump_round": {
+  "h": 0.206,
+  "w": 0.371,
+  "r": 0.185,
+  "tris": 56
+ },
+ "nature/tent_smallOpen": {
+  "h": 0.561,
+  "w": 0.666,
+  "r": 0.42,
+  "tris": 224
+ },
+ "nature/tree_blocks": {
+  "h": 1.185,
+  "w": 0.6,
+  "r": 0.424,
+  "tris": 132
+ },
+ "nature/tree_default": {
+  "h": 1.708,
+  "w": 0.755,
+  "r": 0.378,
+  "tris": 114
+ },
  "nature/tree_detailed": {
   "h": 1.332,
   "w": 0.847,
   "r": 0.467,
   "tris": 402
+ },
+ "nature/tree_fat": {
+  "h": 1.15,
+  "w": 0.755,
+  "r": 0.378,
+  "tris": 50
  },
  "nature/tree_oak": {
   "h": 1.226,
@@ -101,17 +341,89 @@
   "r": 0.37,
   "tris": 196
  },
+ "nature/tree_pineRoundA": {
+  "h": 1.366,
+  "w": 0.712,
+  "r": 0.356,
+  "tris": 204
+ },
+ "pirate/barrel": {
+  "h": 1.229,
+  "w": 1.336,
+  "r": 0.668,
+  "tris": 148
+ },
+ "pirate/boat-row-large": {
+  "h": 0.848,
+  "w": 2.852,
+  "r": 1.503,
+  "tris": 174
+ },
  "pirate/boat-row-small": {
   "h": 0.848,
   "w": 2.749,
   "r": 1.413,
   "tris": 168
  },
+ "pirate/crate": {
+  "h": 0.77,
+  "w": 1.309,
+  "r": 0.848,
+  "tris": 76
+ },
+ "pirate/flag-high": {
+  "h": 3.597,
+  "w": 1.337,
+  "r": 1.137,
+  "tris": 144
+ },
  "pirate/flag-pennant": {
   "h": 2.097,
   "w": 1.762,
   "r": 1.562,
   "tris": 118
+ },
+ "pirate/grass-plant": {
+  "h": 0.52,
+  "w": 1.237,
+  "r": 0.656,
+  "tris": 144
+ },
+ "pirate/patch-grass": {
+  "h": 0.25,
+  "w": 5.273,
+  "r": 2.905,
+  "tris": 84
+ },
+ "pirate/rocks-a": {
+  "h": 2.898,
+  "w": 5.113,
+  "r": 2.853,
+  "tris": 264
+ },
+ "pirate/rocks-b": {
+  "h": 3.654,
+  "w": 4.705,
+  "r": 2.59,
+  "tris": 300
+ },
+ "pirate/rocks-sand-a": {
+  "h": 3.212,
+  "w": 5.113,
+  "r": 2.853,
+  "tris": 552
+ },
+ "pirate/ship-small": {
+  "h": 9.964,
+  "w": 8.8,
+  "r": 4.605,
+  "tris": 1370
+ },
+ "pirate/structure-platform-dock-small": {
+  "h": 1.312,
+  "w": 2.512,
+  "r": 1.57,
+  "tris": 312
  },
  "pirate/structure-platform-dock": {
   "h": 1.312,
@@ -155,6 +467,18 @@
   "r": 0.924,
   "tris": 2062
  },
+ "suburb/fence-low": {
+  "h": 0.17,
+  "w": 1.275,
+  "r": 0.768,
+  "tris": 180
+ },
+ "suburb/path-stones-short": {
+  "h": 0.01,
+  "w": 0.2,
+  "r": 0.122,
+  "tris": 24
+ },
  "suburb/planter": {
   "h": 0.177,
   "w": 0.4,
@@ -167,17 +491,59 @@
   "r": 0.122,
   "tris": 42
  },
+ "suburb/tree-small": {
+  "h": 0.567,
+  "w": 0.243,
+  "r": 0.122,
+  "tris": 42
+ },
+ "town/banner-green": {
+  "h": 0.839,
+  "w": 0.5,
+  "r": 0.482,
+  "tris": 102
+ },
+ "town/banner-red": {
+  "h": 0.839,
+  "w": 0.5,
+  "r": 0.482,
+  "tris": 98
+ },
+ "town/cart": {
+  "h": 0.536,
+  "w": 1.34,
+  "r": 0.767,
+  "tris": 608
+ },
+ "town/fence": {
+  "h": 0.38,
+  "w": 1,
+  "r": 0.707,
+  "tris": 84
+ },
  "town/fountain-round-detail": {
   "h": 0.48,
   "w": 2,
   "r": 1,
   "tris": 1628
  },
+ "town/fountain-round": {
+  "h": 0.28,
+  "w": 2,
+  "r": 1,
+  "tris": 1002
+ },
  "town/hedge-large": {
   "h": 0.6,
   "w": 1,
   "r": 0.707,
   "tris": 90
+ },
+ "town/hedge": {
+  "h": 0.25,
+  "w": 1,
+  "r": 0.707,
+  "tris": 54
  },
  "town/lantern": {
   "h": 1.556,
@@ -196,6 +562,18 @@
   "w": 1,
   "r": 0.707,
   "tris": 322
+ },
+ "town/stall-red": {
+  "h": 1.237,
+  "w": 1,
+  "r": 0.707,
+  "tris": 270
+ },
+ "town/stall-stool": {
+  "h": 0.226,
+  "w": 0.26,
+  "r": 0.167,
+  "tris": 180
  },
  "town/tree-high-round": {
   "h": 2.751,

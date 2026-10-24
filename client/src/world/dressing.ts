@@ -3,6 +3,7 @@ import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
 import type { LookPalette } from './look';
 import FOOTPRINTS from './model-footprints.json';
+import { Occupancy } from './occupancy';
 import { seededRandom } from './random';
 
 export const WATER_Y = -3;
@@ -29,9 +30,9 @@ export interface Segment {
   readonly bz: number;
 }
 
-/** A moving model for the life layer: a flag that waves or a boat that bobs. */
+/** A moving model for the life layer: a flag that waves, a boat or a buoy that bobs. */
 export interface LifeSpot {
-  readonly kind: 'flag' | 'boat';
+  readonly kind: 'flag' | 'boat' | 'buoy';
   readonly id: string;
   readonly x: number;
   readonly y: number;
@@ -53,6 +54,29 @@ export interface Placement {
   readonly tint?: number;
   readonly solid: boolean;
   readonly detail: boolean;
+  /** Small dressing the low tier leaves out (never solid). */
+  readonly minor?: boolean;
+  /** Extra dressing only the xhigh tier shows (never solid). */
+  readonly rich?: boolean;
+  /** Repaints the model's green roof faces with this colour. */
+  readonly roof?: number;
+}
+
+/** An animal of the life layer, wandering a small circle round (x, z). */
+export interface Critter {
+  readonly kind: 'duck' | 'cat' | 'dog' | 'butterfly';
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly r: number;
+}
+
+/** Where NPC kids hang out: playing on a playground piece or sitting at a bench, fountain or campfire. */
+export interface Hangout {
+  readonly kind: 'play' | 'sit';
+  readonly x: number;
+  readonly z: number;
+  readonly face: number;
 }
 
 /** Painted terrain geometry (paths, terraces, rails, piers) in world space. */
@@ -77,6 +101,13 @@ export interface District {
   readonly glow: BufferGeometry[];
 }
 
+/** A sailing ship looping a circle round the archipelago. */
+export interface Sail {
+  readonly x: number;
+  readonly z: number;
+  readonly r: number;
+}
+
 /** Everything the designer decides for a course; pure data, the same for the same layout and seed. */
 export interface Dressing {
   readonly districts: readonly District[];
@@ -85,6 +116,11 @@ export interface Dressing {
   readonly obstacles: readonly Obstacle[];
   /** Walkable bridge decks, rim to rim. */
   readonly bridges: readonly Segment[];
+  readonly critters: readonly Critter[];
+  readonly hangouts: readonly Hangout[];
+  /** Chimney and campfire smoke sources. */
+  readonly smoke: readonly { readonly x: number; readonly y: number; readonly z: number }[];
+  readonly sails: readonly Sail[];
 }
 
 interface Footprint {
@@ -95,15 +131,22 @@ interface Footprint {
 
 const FOOT = FOOTPRINTS as Readonly<Record<string, Footprint>>;
 
-const TREES: readonly (readonly [string, number])[] = [['suburb/tree-large', 5], ['town/tree-high-round', 5.4], ['nature/tree_detailed', 4.6], ['nature/tree_oak', 4.2]];
+const TREES: readonly (readonly [string, number])[] = [['suburb/tree-large', 5], ['town/tree-high-round', 5.4], ['nature/tree_detailed', 4.6], ['nature/tree_oak', 4.2], ['nature/tree_default', 4.8], ['nature/tree_fat', 3.6], ['nature/tree_pineRoundA', 4.4], ['nature/tree_blocks', 3.8], ['suburb/tree-small', 3.4]];
 const BUSHES: readonly (readonly [string, number])[] = [['nature/plant_bushDetailed', 0.9], ['nature/plant_bushLarge', 1]];
-const FLOWERS = ['nature/flower_redA', 'nature/flower_yellowA', 'nature/flower_purpleA'];
+const FLOWERS = ['nature/flower_redA', 'nature/flower_yellowA', 'nature/flower_purpleA', 'nature/flower_redB', 'nature/flower_yellowB', 'nature/flower_purpleB', 'nature/flower_redC', 'nature/flower_purpleC'];
+const TUFTS = ['nature/grass_large', 'nature/grass_leafs', 'nature/grass_leafsLarge', 'nature/plant_flatTall', 'nature/plant_flatShort', 'nature/plant_bushSmall'];
+const CROPS = ['nature/crop_pumpkin', 'nature/crop_carrot', 'nature/crop_melon', 'nature/crops_cornStageC', 'nature/crops_wheatStageB', 'nature/crops_leafsStageB'];
+const SHORE_ROCKS = ['nature/rock_largeA', 'nature/rock_largeC', 'nature/rock_smallA', 'nature/rock_smallC'];
+const THEMES = ['park', 'market', 'garden', 'plaza', 'woods'] as const;
+type Theme = (typeof THEMES)[number];
+/** Cheerful repaint colours for house roofs, playground kit and awnings. */
+const ACCENTS = [0xe8604c, 0x3d8bd9, 0xf2a33a, 0x8a5bd6, 0x2fa38a, 0xf06292];
 const ROCKS = ['nature/rock_largeA', 'nature/rock_largeB', 'nature/rock_largeC', 'nature/rock_tallA', 'nature/rock_tallB'];
 const CLIFFS = ['nature/cliff_large_stone', 'nature/cliff_large_stone', 'nature/cliff_large_rock'];
 const HALL: readonly [string, number] = ['suburb/building-type-t', 7.5];
 const MESAS = ['suburb/building-type-k', 'suburb/building-type-c'];
 const SIDE: readonly (readonly [string, number])[] = [['suburb/building-type-a', 3.8], ['town/stall-green', 2.6], ['suburb/building-type-h', 4], ['suburb/building-type-e', 4]];
-const SMALL: readonly (readonly [string, number])[] = [['town/stall-bench', 0.7], ['town/fountain-round-detail', 1.1], ['suburb/planter', 0.7]];
+const SMALL: readonly (readonly [string, number])[] = [['town/stall-bench', 0.55], ['town/fountain-round-detail', 0.7], ['suburb/planter', 0.7]];
 const LEAF_TINT = 0xc8eaa0;
 
 /** Every kit model the designer may place (the loader fetches exactly these). */
@@ -113,6 +156,9 @@ export function modelIds(): string[] {
       ...TREES.map((t) => t[0]),
       ...BUSHES.map((t) => t[0]),
       ...FLOWERS,
+      ...TUFTS,
+      ...CROPS,
+      ...SHORE_ROCKS,
       ...ROCKS,
       ...CLIFFS,
       HALL[0],
@@ -127,6 +173,31 @@ export function modelIds(): string[] {
       'pirate/boat-row-small',
       'town/lantern',
       'town/hedge-large',
+      'town/stall-red',
+      'town/stall-stool',
+      'town/cart',
+      'town/banner-red',
+      'town/banner-green',
+      'town/fountain-round',
+      'pirate/barrel',
+      'pirate/crate',
+      'pirate/rocks-sand-a',
+      'pirate/rocks-b',
+      'pirate/grass-plant',
+      'pirate/ship-small',
+      'pirate/flag-high',
+      'nature/crops_dirtRow',
+      'nature/fence_simple',
+      'nature/pot_large',
+      'nature/log',
+      'nature/stump_round',
+      'nature/mushroom_redGroup',
+      'nature/mushroom_tanGroup',
+      'nature/tent_smallOpen',
+      'nature/campfire_stones',
+      'nature/sign',
+      'nature/lily_large',
+      'nature/lily_small',
     ]),
   ];
 }
@@ -144,7 +215,11 @@ class Designer {
   private readonly spans: Segment[] = [];
   /** Plaza walks: from each hub's centre out to every bridge landing on it. */
   private readonly walks: Segment[] = [];
-  private readonly spots: Obstacle[] = [];
+  private readonly occ = new Occupancy();
+  private readonly critters: Critter[] = [];
+  private readonly hangouts: Hangout[] = [];
+  private readonly smoke: { x: number; y: number; z: number }[] = [];
+  private readonly themeShift: number;
   private readonly entries = new Set<Segment>();
   private readonly random: () => number;
   private district!: District;
@@ -155,6 +230,7 @@ class Designer {
     private readonly p: LookPalette,
   ) {
     this.random = seededRandom(seed ^ 0x2545f491);
+    this.themeShift = Math.floor(this.random() * THEMES.length);
     for (const z of layout.zones) this.spans.push(span(z.anchor, z));
     for (const l of layout.links) this.spans.push(span(layout.hubs[l.from]!, layout.hubs[l.to]!));
     for (const z of layout.zones) this.walks.push(spoke(z.anchor, z));
@@ -170,7 +246,9 @@ class Designer {
       this.hubWalks(hub, i === 0 ? PLAZA : SMALL_PLAZA);
       if (i === 0) this.hub(hub);
       else this.plaza(hub, i);
+      this.themed(hub, i === 0 ? ['market', 'park'] : ['plaza'], i === 0 ? 2 : 1);
       this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8);
+      this.shore(hub);
     });
     for (const l of this.layout.links) {
       this.district = districts[l.to]!;
@@ -183,9 +261,16 @@ class Designer {
       this.rimCliffs(z, WATER_Y - 0.4, CLIFF_TOP, z.radius);
       this.bridge(z.anchor, z);
       this.zone(z, i);
+      const theme = THEMES[(i + this.themeShift) % THEMES.length]!;
+      this.themed(z, [theme], Math.max(1, Math.round((z.radius * z.radius) / 120)));
       this.fillIsland(z, 0);
+      this.shore(z);
     });
-    return { districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges };
+    const sails = this.sea(districts);
+    return {
+      districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges,
+      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails,
+    };
   }
 
   private open(island: Circle): District {
@@ -222,6 +307,11 @@ class Designer {
       const yaw = Math.atan2(s.bx - s.ax, s.bz - s.az);
       this.terrain(new BoxGeometry(2.2, 0.06, len), colour, (s.ax + s.bx) / 2, 0.03, (s.az + s.bz) / 2, yaw, false, false);
       this.terrain(new CylinderGeometry(1.1, 1.1, 0.06, 10), colour, s.bx, 0.031, s.bz, 0, false, false);
+      for (const side of [-1, 1]) {
+        const ox = (Math.cos(yaw) * side * 1.17);
+        const oz = (-Math.sin(yaw) * side * 1.17);
+        this.terrain(new BoxGeometry(0.16, 0.1, len), this.p.stone, (s.ax + s.bx) / 2 + ox, 0.05, (s.az + s.bz) / 2 + oz, yaw, false, true);
+      }
       if (!this.entries.has(s)) return;
       for (let t = 1.2; t < len - 0.8; t += 2.4) {
         const x = s.ax + ((s.bx - s.ax) * t) / len;
@@ -254,6 +344,7 @@ class Designer {
     const face = Math.atan2(-lx, -lz);
     this.terrace(lx, lz, 3.8, 1.6, face);
     this.model(HALL[0], lx, 1.6, lz, face + Math.PI, HALL[1], { solid: true });
+    this.smoke.push({ x: lx, y: 1.6 + HALL[1] * 0.95, z: lz });
     this.life.push({ kind: 'flag', id: 'pirate/flag-pennant', x: lx, y: 1.6 + HALL[1] * 0.98, z: lz, yaw: 0, height: 2.6 });
     gaps(bearings).forEach(([a, width], i) => {
       if (Math.abs(wrap(a - back)) < 0.8 || width * (hub.radius - 4.4) < 16) return;
@@ -262,10 +353,17 @@ class Designer {
       const [id, h] = SIDE[i % SIDE.length]!;
       this.building(id, h, x, z, Math.atan2(-x, -z));
     });
-    for (const [a] of gaps(bearings)) {
+    for (const [a, width] of gaps(bearings)) {
       const x = Math.cos(a) * (PLAZA + 1.3);
       const z = Math.sin(a) * (PLAZA + 1.3);
       this.lamp(x, z, 2.8);
+      for (const side of [-1, 1]) {
+        const b = a + side * Math.min(0.3, width / 4);
+        const bx = Math.cos(b) * (PLAZA + 1.9);
+        const bz = Math.sin(b) * (PLAZA + 1.9);
+        if (this.nearBridge(bx, bz, DECK_HALF + 1.3)) continue;
+        if (this.model('town/stall-bench', bx, 0, bz, Math.atan2(-bx, -bz), 0.55, { solid: true })) this.hangouts.push({ kind: 'sit', x: bx * 0.86, z: bz * 0.86, face: Math.atan2(bx, bz) });
+      }
     }
     this.dock(hub, true);
   }
@@ -274,7 +372,7 @@ class Designer {
   private plaza(hub: Circle, index: number): void {
     this.terrain(new CylinderGeometry(SMALL_PLAZA, SMALL_PLAZA, 0.1, 40), this.p.path[1] ?? this.p.stone, hub.x, 0.03, hub.z, 0, false, false);
     this.model('town/fountain-round-detail', hub.x, 0.05, hub.z, this.random() * 6, 1.3, { solid: true });
-    this.reserve(hub.x, hub.z, 3);
+    this.hangouts.push({ kind: 'sit', x: hub.x + 3.2, z: hub.z, face: Math.PI / 2 });
     for (const [a] of gaps(this.bearingsAt(index))) {
       this.lamp(hub.x + Math.cos(a) * (SMALL_PLAZA + 1), hub.z + Math.sin(a) * (SMALL_PLAZA + 1), 2.6);
     }
@@ -308,15 +406,13 @@ class Designer {
       const x = z.x + Math.cos(a) * (z.radius - 1.9);
       const zz = z.z + Math.sin(a) * (z.radius - 1.9);
       const [id, hh] = SMALL[k % SMALL.length]!;
-      if (this.free(x, zz, 1.6, 0.8)) {
-        this.reserve(x, zz, 1);
-        this.model(id, x, 0, zz, this.random() * 6, hh, { solid: id !== 'suburb/planter', detail: true });
-      }
+      if (this.free(x, zz, 1.6, 0.8)) this.model(id, x, 0, zz, this.random() * 6, hh, { solid: id !== 'suburb/planter', detail: true });
     }
     if (z.plots.length === 0) {
       this.model('town/fountain-round-detail', z.x, 0, z.z, 0, 1.3, { solid: true });
-      this.reserve(z.x, z.z, 3);
     }
+    const [sx, sz] = [z.x + Math.cos(entry) * (z.radius - 3.2) + Math.cos(entry + Math.PI / 2) * 2.2, z.z + Math.sin(entry) * (z.radius - 3.2) + Math.sin(entry + Math.PI / 2) * 2.2];
+    this.item('nature/sign', sx, sz, Math.atan2(Math.cos(entry), Math.sin(entry)), 1.3, { solid: true, detail: true, margin: 0.3 });
     this.hedgeRing(z);
     this.lampsAlongPaths(z);
     this.dock(z, false);
@@ -334,8 +430,11 @@ class Designer {
   private building(id: string, h: number, x: number, z: number, face: number): void {
     const reach = this.reach(id, h);
     if (!this.free(x, z, reach * 2, 1, true)) return;
-    this.reserve(x, z, reach);
-    this.model(id, x, 0, z, face + (id.startsWith('suburb') ? Math.PI : 0), h, { solid: true });
+    const house = id.startsWith('suburb');
+    const roof = house ? this.pick(ACCENTS) : undefined;
+    if (this.model(id, x, 0, z, face + (house ? Math.PI : 0), h, { solid: true, ...(roof !== undefined ? { roof } : {}) }) && house && this.random() < 0.4) {
+      this.smoke.push({ x, y: h * 0.92, z });
+    }
   }
 
   /** Rock cliff faces all round a circle, from `base` up to `top`. */
@@ -415,8 +514,8 @@ class Designer {
       const a = (i / n) * 2 * Math.PI;
       const x = z.x + Math.cos(a) * r;
       const zz = z.z + Math.sin(a) * r;
-      if (i % HEDGE_CYCLE >= HEDGE_RUN || this.nearBridge(x, zz, DECK_HALF + 1.6) || this.near(x, zz, 0.4)) continue;
-      this.model('town/hedge-large', x, 0, zz, -a, 0.9, { solid: true, detail: true });
+      if (i % HEDGE_CYCLE >= HEDGE_RUN || this.nearBridge(x, zz, DECK_HALF + 1.6)) continue;
+      this.model('town/hedge-large', x, 0, zz, -a, 0.9, { solid: true, detail: true, wall: 0.7 });
     }
   }
 
@@ -431,15 +530,14 @@ class Designer {
         const side = k % 2 ? 1.7 : -1.7;
         const x = s.ax + ((s.bx - s.ax) * t) / len + nx * side;
         const zz = s.az + ((s.bz - s.az) * t) / len + nz * side;
-        if (this.near(x, zz, 0.3) || this.onPlot(x, zz, 0.8)) continue;
+        if (this.onPlot(x, zz, 0.8)) continue;
         this.lamp(x, zz, 2.6);
       }
     }
   }
 
   private lamp(x: number, z: number, h: number): void {
-    this.reserve(x, z, 0.6);
-    this.model('town/lantern', x, 0, z, 0, h, { solid: true, detail: true });
+    if (!this.model('town/lantern', x, 0, z, 0, h, { solid: true, detail: true, margin: 0.5 })) return;
     this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, x, h * 0.875, z, 0));
   }
 
@@ -448,8 +546,12 @@ class Designer {
     const k = (c.radius * c.radius) / HUB_AREA;
     this.fill(c, inner, Math.round(18 * k), 3.2, 1.4, (x, z, s) => this.tree(x, z, s));
     this.fill(c, inner, Math.round(40 * k), 1.2, 0.8, (x, z) => this.bush(x, z));
-    this.fill(c, inner, Math.round(26 * k), 1, 0.6, (x, z) => this.flowerBed(x, z));
+    this.fill(c, inner, Math.round(30 * k), 1, 0.6, (x, z) => this.flowerBed(x, z));
     this.fill(c, inner, Math.round(10 * k), 1.4, 0.8, (x, z) => this.model(this.pick(ROCKS), x, 0, z, this.random() * 6, 0.6 + this.random() * 0.6, { detail: true }));
+    this.fill(c, inner, Math.round(70 * k), 0.5, 0.2, (x, z) => this.model(this.pick(TUFTS), x, 0, z, this.random() * 6, 0.35 + this.random() * 0.3, { sway: true, detail: true, minor: true, tint: LEAF_TINT }));
+    this.fill(c, inner, Math.round(90 * k), 0.4, 0.1, (x, z) => this.model(this.pick(this.random() < 0.6 ? TUFTS : FLOWERS), x, 0, z, this.random() * 6, 0.3 + this.random() * 0.25, { sway: true, detail: true, rich: true }));
+    this.groundPatches(c, Math.round(16 * k));
+    this.pets(c);
   }
 
   private fill(c: Circle, inner: number, tries: number, gap: number, clearPath: number, make: (x: number, z: number, s: number) => void): void {
@@ -460,8 +562,8 @@ class Designer {
       const x = c.x + Math.cos(a) * r;
       const z = c.z + Math.sin(a) * r;
       if (this.free(x, z, gap, clearPath)) {
-        this.reserve(x, z, gap / 2);
         make(x, z, this.random());
+        this.reserve(x, z, gap / 2);
       }
     }
   }
@@ -478,9 +580,10 @@ class Designer {
 
   private flowerBed(x: number, z: number): void {
     const id = this.pick(FLOWERS);
-    for (let i = 0; i < 3; i++) {
-      this.model(i === 2 ? this.pick(FLOWERS) : id, x + (this.random() - 0.5) * 1.2, 0, z + (this.random() - 0.5) * 1.2, this.random() * 6, 0.45 + this.random() * 0.2, { sway: true, detail: true });
+    for (let i = 0; i < 5; i++) {
+      this.model(i === 2 ? this.pick(FLOWERS) : id, x + (this.random() - 0.5) * 1.2, 0, z + (this.random() - 0.5) * 1.2, this.random() * 6, 0.45 + this.random() * 0.2, { sway: true, detail: true, ...(i > 2 ? { minor: true } : {}) });
     }
+    if (this.random() < 0.3) this.critters.push({ kind: 'butterfly', x, y: 0.9, z, r: 1.4 });
   }
 
   /** Free ground: off plots, bridges, plazas, paths (by `clearPath`) and earlier things (by `gap`), inside its island (centre only on the `rim`). */
@@ -506,11 +609,11 @@ class Designer {
   }
 
   private near(x: number, z: number, r: number): boolean {
-    return this.spots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + r);
+    return this.occ.hits(x, z, r);
   }
 
   private reserve(x: number, z: number, r: number): void {
-    this.spots.push({ x, z, r });
+    this.occ.add(x, z, r);
   }
 
   /** Bearings of every bridge on hub i: its zones' and its plaza links'. */
@@ -534,24 +637,310 @@ class Designer {
     return list[Math.floor(this.random() * list.length)]!;
   }
 
-  /** Places a model; solid ones below terrace height also block the ground, unless they are walked on (`ground`). */
-  private model(id: string, x: number, y: number, z: number, yaw: number, height: number, o: { width?: number; sway?: boolean; tint?: number; solid?: boolean; detail?: boolean; ground?: boolean }): void {
+  /**
+   * Places a model. Solid ones below terrace height (unless walked on, `ground`) claim their footprint (or `wall`, the
+   * half length of an abutting wall piece) in the occupancy grid and are skipped, returning false, when it is taken.
+   */
+  private model(id: string, x: number, y: number, z: number, yaw: number, height: number, o: ModelOptions): boolean {
     const solid = o.solid === true;
     if (solid && y < 1 && !o.ground) {
       const f = FOOT[id]!;
-      this.obstacles.push({ x, z, r: o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h });
+      const r = o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h);
+      if (this.occ.hits(x, z, r)) return false;
+      this.occ.add(x, z, r + (o.margin ?? (o.wall ? 0 : 0.2)));
+      this.obstacles.push({ x, z, r });
     }
     this.district.placements.push({
       id, x, y, z, yaw, height, solid, detail: o.detail === true,
       ...(o.width ? { width: o.width } : {}),
       ...(o.sway ? { sway: true } : {}),
       ...(o.tint !== undefined ? { tint: o.tint } : {}),
+      ...(o.minor ? { minor: true } : {}),
+      ...(o.rich ? { rich: true } : {}),
+      ...(o.roof !== undefined ? { roof: o.roof } : {}),
     });
+    return true;
+  }
+
+  /** A model on open ground: kept off plots, paths, bridges and the shore, and off everything already placed. */
+  private item(id: string, x: number, z: number, yaw: number, height: number, o: ModelOptions): boolean {
+    const r = o.width ? (FOOT[id]!.r * o.width) / FOOT[id]!.w : this.reach(id, height);
+    if (!this.free(x, z, 2 * r, 0.1)) return false;
+    if (!o.solid) {
+      this.model(id, x, 0, z, yaw, height, o);
+      this.reserve(x, z, r);
+      return true;
+    }
+    return this.model(id, x, 0, z, yaw, height, o);
+  }
+
+  /** Own-built solid geometry (playground kit): all parts or none, claiming one footprint of radius r. */
+  private structure(x: number, z: number, yaw: number, r: number, parts: readonly (readonly [BufferGeometry, number, number, number, number])[]): boolean {
+    if (!this.free(x, z, 2 * r, 0.1)) return false;
+    this.occ.add(x, z, r + 0.2);
+    this.obstacles.push({ x, z, r });
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    for (const [g, colour, px, py, pz] of parts) {
+      this.terrain(g, colour, x + px * c + pz * s, py, z - px * s + pz * c, yaw, true, false);
+    }
+    return true;
+  }
+
+  /** Themed corners of an island (playgrounds, market stalls, gardens, fountain squares, woods), as many as fit. */
+  private themed(c: Circle, themes: readonly Theme[], count: number): void {
+    let placed = 0;
+    for (let k = 0; k < count * 30 && placed < count; k++) {
+      const a = this.random() * 2 * Math.PI;
+      const r = Math.sqrt(this.random()) * (c.radius - 3);
+      const x = c.x + Math.cos(a) * r;
+      const z = c.z + Math.sin(a) * r;
+      if (!this.free(x, z, 4, 0.2)) continue;
+      if (this.vignette(themes[placed % themes.length]!, x, z, Math.atan2(c.x - x, c.z - z))) placed++;
+    }
+  }
+
+  private vignette(theme: Theme, x: number, z: number, face: number): boolean {
+    const at = (dx: number, dz: number): [number, number] => [x + dx * Math.cos(face) + dz * Math.sin(face), z - dx * Math.sin(face) + dz * Math.cos(face)];
+    const accent = this.pick(ACCENTS);
+    if (theme === 'park') {
+      const piece = playground(Math.floor(this.random() * 3), accent, this.pick(ACCENTS), this.p.wood);
+      if (!this.structure(x, z, face, piece.r, piece.parts)) return false;
+      this.hangouts.push({ kind: 'play', x: at(0, -piece.r - 0.6)[0], z: at(0, -piece.r - 0.6)[1], face });
+      const [bx, bz] = at(0, piece.r + 1.8);
+      this.item('town/stall-bench', bx, bz, face + Math.PI, 0.55, { solid: true });
+      for (const [dx, dz] of [[-piece.r - 1.2, 0.6], [piece.r + 1.2, -0.4]] as const) {
+        const [fx, fz] = at(dx, dz);
+        this.item(this.pick(FLOWERS), fx, fz, this.random() * 6, 0.55, { sway: true, detail: true, minor: true });
+      }
+      return true;
+    }
+    if (theme === 'market') {
+      if (!this.item(this.random() < 0.5 ? 'town/stall-red' : 'town/stall-green', x, z, face + Math.PI, 2.6, { solid: true })) return false;
+      const goods: [string, number, number, number][] = [['pirate/barrel', -2.1, 0.4, 0.8], ['pirate/crate', 2.1, 0.5, 0.65], ['town/cart', 2.6, -2, 1.1], ['town/banner-red', -2.4, -1.4, 2.4]];
+      for (const [id, dx, dz, h] of goods) {
+        const [gx, gz] = at(dx, dz);
+        this.item(id === 'town/banner-red' && this.random() < 0.5 ? 'town/banner-green' : id, gx, gz, face + this.random() * 0.6, h, { solid: true, detail: true });
+      }
+      for (const dx of [-0.7, 0.7]) {
+        const [sx, sz] = at(dx, -1.9);
+        this.item('town/stall-stool', sx, sz, this.random() * 6, 0.45, { detail: true, minor: true });
+      }
+      this.hangouts.push({ kind: 'sit', x: at(0, -2.4)[0], z: at(0, -2.4)[1], face: face + Math.PI });
+      return true;
+    }
+    if (theme === 'garden') {
+      let rows = 0;
+      for (const dz of [-1.1, 0, 1.1]) {
+        const [rx, rz] = at(0, dz);
+        if (!this.free(rx, rz, 3.4, 0.1)) continue;
+        rows++;
+        this.reserve(rx, rz, 1.7);
+        this.model('nature/crops_dirtRow', rx, 0.01, rz, face + Math.PI / 2, 0, { width: 3, detail: true });
+        const crop = this.pick(CROPS);
+        for (const dx of [-1, 0, 1]) {
+          const [cx, cz] = at(dx, dz);
+          this.model(crop, cx, 0.05, cz, this.random() * 6, crop.includes('corn') ? 1.3 : 0.55, { sway: true, detail: true, minor: true });
+        }
+      }
+      if (rows === 0) return false;
+      for (const dx of [-1, 0, 1]) {
+        const [fx, fz] = at(dx * 1.4, 2.1);
+        this.item('nature/fence_simple', fx, fz, face + Math.PI / 2, 0, { width: 1.4, solid: true, detail: true, wall: 0.68 });
+      }
+      const [px, pz] = at(-2.4, -1.6);
+      this.item('nature/pot_large', px, pz, 0, 0.5, { detail: true, minor: true });
+      this.hangouts.push({ kind: 'play', x: at(2.6, 0)[0], z: at(2.6, 0)[1], face: face - Math.PI / 2 });
+      return true;
+    }
+    if (theme === 'plaza') {
+      if (!this.item('town/fountain-round', x, z, this.random() * 6, 0.6, { solid: true })) return false;
+      this.terrain(new CylinderGeometry(3.1, 3.1, 0.04, 24), this.p.path[1] ?? this.p.stone, x, 0.012, z, 0, false, false);
+      for (const side of [-1, 1]) {
+        const [bx, bz] = at(side * 3.6, 0);
+        this.item('town/stall-bench', bx, bz, face + (side * Math.PI) / 2, 0.55, { solid: true });
+        const [qx, qz] = at(0, side * 3.4);
+        this.item('suburb/planter', qx, qz, this.random() * 6, 0.7, { detail: true });
+      }
+      this.hangouts.push({ kind: 'sit', x: at(0, -2.6)[0], z: at(0, -2.6)[1], face });
+      this.critters.push({ kind: 'butterfly', x, y: 1.4, z, r: 2.4 });
+      return true;
+    }
+    const [tx, tz] = at(0, 0);
+    if (!this.item('nature/tent_smallOpen', tx, tz, face + Math.PI, 1.5, { solid: true, detail: true })) return false;
+    const [fx, fz] = at(0, -2.3);
+    this.model('nature/campfire_stones', fx, 0, fz, 0, 0.22, { detail: true });
+    this.reserve(fx, fz, 0.8);
+    this.smoke.push({ x: fx, y: 0.3, z: fz });
+    this.hangouts.push({ kind: 'sit', x: at(1.3, -2.3)[0], z: at(1.3, -2.3)[1], face: face - Math.PI / 2 });
+    const [lx, lz] = at(-1.5, -2.4);
+    this.item('nature/log', lx, lz, face + Math.PI / 2, 0.35, { solid: true, detail: true });
+    for (const [dx, dz, id, h] of [[2.4, 1.4, 'nature/tree_pineRoundA', 4.2], [-2.6, 1.2, 'nature/tree_fat', 3.4], [2.6, -0.8, 'nature/stump_round', 0.4]] as const) {
+      const [px, pz] = at(dx, dz);
+      this.item(id, px, pz, this.random() * 6, h, { solid: true, sway: id.includes('tree'), ...(id.includes('tree') ? { tint: LEAF_TINT } : { detail: true }) });
+    }
+    for (const [dx, dz] of [[-1.2, 1.8], [1.2, 2.1], [-2.2, -0.4]] as const) {
+      const [mx, mz] = at(dx, dz);
+      this.item(this.random() < 0.5 ? 'nature/mushroom_redGroup' : 'nature/mushroom_tanGroup', mx, mz, this.random() * 6, 0.35, { detail: true, minor: true });
+    }
+    return true;
+  }
+
+  /** Flat lighter, darker and meadow patches so no large plain lawn remains. */
+  private groundPatches(c: Circle, count: number): void {
+    const colours = [this.p.grassLight, 0x6aae4c, 0x9ccc5c, 0x88c46a, 0xb5d77a];
+    for (let i = 0; i < count; i++) {
+      const a = this.random() * 2 * Math.PI;
+      const r = Math.sqrt(this.random()) * (c.radius - 2.5);
+      const x = c.x + Math.cos(a) * r;
+      const z = c.z + Math.sin(a) * r;
+      if (this.onPlot(x, z, 2.5)) continue;
+      const size = 1.2 + this.random() * 2.2;
+      const g = new CylinderGeometry(size, size, 0.02, 9);
+      g.scale(1 + this.random() * 0.7, 1, 1);
+      this.terrain(g, this.pick(colours), x, 0.004 + (i % 4) * 0.002, z, this.random() * 6, false, true);
+    }
+  }
+
+  /** Rocks, reeds and lily pads along the waterline, ducks off the shore, a buoy or two. */
+  private shore(c: Circle): void {
+    const n = Math.round((2 * Math.PI * c.radius) / 2.4);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 2 * Math.PI + this.random() * 0.1;
+      const kind = this.random();
+      const out = c.radius + 0.4 + this.random() * 1.2;
+      const x = c.x + Math.cos(a) * out;
+      const z = c.z + Math.sin(a) * out;
+      if (this.nearBridge(x, z, DECK_HALF + 2.5) || this.occ.hits(x, z, 0.6)) continue;
+      if (kind < 0.45) this.model(this.pick(SHORE_ROCKS), x, WATER_Y - 0.25, z, this.random() * 6, 0.6 + this.random() * 0.7, { detail: true });
+      else if (kind < 0.8) {
+        for (let k = 0; k < 3; k++) {
+          this.model('nature/grass_leafsLarge', x + (this.random() - 0.5), WATER_Y - 0.05, z + (this.random() - 0.5), this.random() * 6, 0.9 + this.random() * 0.4, { sway: true, detail: true, minor: true, tint: 0x9bc46c });
+        }
+      } else {
+        const lx = c.x + Math.cos(a) * (out + 1.5);
+        const lz = c.z + Math.sin(a) * (out + 1.5);
+        this.model(this.random() < 0.5 ? 'nature/lily_large' : 'nature/lily_small', lx, WATER_Y + 0.03, lz, this.random() * 6, 0, { width: 0.9, detail: true, minor: true });
+      }
+    }
+    for (let tries = 0; tries < 12; tries++) {
+      const a = this.random() * 2 * Math.PI;
+      const x = c.x + Math.cos(a) * (c.radius + 5);
+      const z = c.z + Math.sin(a) * (c.radius + 5);
+      if (this.nearBridge(x, z, 6) || this.occ.hits(x, z, 2.5) || this.otherIsland(c, x, z, 4)) continue;
+      this.critters.push({ kind: 'duck', x, y: WATER_Y, z, r: 2.2 });
+      this.reserve(x, z, 2.5);
+      break;
+    }
+    for (let tries = 0; tries < 12; tries++) {
+      const a = this.random() * 2 * Math.PI;
+      const x = c.x + Math.cos(a) * (c.radius + 8);
+      const z = c.z + Math.sin(a) * (c.radius + 8);
+      if (this.nearBridge(x, z, 5) || this.occ.hits(x, z, 1) || this.otherIsland(c, x, z, 3)) continue;
+      this.life.push({ kind: 'buoy', id: 'buoy', x, y: WATER_Y, z, yaw: 0, height: 1 });
+      this.reserve(x, z, 1);
+      break;
+    }
+  }
+
+  private otherIsland(c: Circle, x: number, z: number, gap: number): boolean {
+    return [...this.layout.hubs, ...this.layout.zones].some((o) => o !== c && Math.hypot(x - o.x, z - o.z) < o.radius + gap);
+  }
+
+  /** A cat or dog idling on each island. */
+  private pets(c: Circle): void {
+    for (let tries = 0; tries < 20; tries++) {
+      const a = this.random() * 2 * Math.PI;
+      const r = Math.sqrt(this.random()) * (c.radius - 3);
+      const x = c.x + Math.cos(a) * r;
+      const z = c.z + Math.sin(a) * r;
+      if (!this.free(x, z, 3, 0)) continue;
+      this.reserve(x, z, 1.5);
+      this.critters.push({ kind: this.random() < 0.5 ? 'cat' : 'dog', x, y: 0, z, r: 1.2 });
+      return;
+    }
+  }
+
+  /** Rocky islets with grass between the islands, and the ships sailing round the archipelago. */
+  private sea(districts: readonly District[]): Sail[] {
+    const islands = [...this.layout.hubs, ...this.layout.zones];
+    const reach = Math.max(...islands.map((c) => Math.hypot(c.x, c.z) + c.radius));
+    const want = 2 + Math.round((reach * reach) / 4000);
+    const placed: { x: number; z: number }[] = [];
+    for (let tries = 0; tries < want * 40 && placed.length < want; tries++) {
+      const a = this.random() * 2 * Math.PI;
+      const r = 20 + this.random() * (reach + 6);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      if (islands.some((c) => Math.hypot(x - c.x, z - c.z) < c.radius + 9) || this.spans.some((s) => segmentDistance(x, z, s) < 9)) continue;
+      if (placed.some((p) => Math.hypot(x - p.x, z - p.z) < 16) || this.occ.hits(x, z, 4)) continue;
+      placed.push({ x, z });
+      this.reserve(x, z, 4);
+      const home = islands.reduce((best, c, i) => (Math.hypot(x - c.x, z - c.z) < Math.hypot(x - islands[best]!.x, z - islands[best]!.z) ? i : best), 0);
+      this.district = districts[home]!;
+      this.model(this.random() < 0.5 ? 'pirate/rocks-sand-a' : 'pirate/rocks-b', x, WATER_Y - 1.1, z, this.random() * 6, 2.6 + this.random(), {});
+      this.model('pirate/grass-plant', x + 0.4, WATER_Y + 1.2, z - 0.3, this.random() * 6, 0.8, { sway: true, detail: true, minor: true });
+      if (placed.length === 1) this.life.push({ kind: 'flag', id: 'pirate/flag-pennant', x, y: WATER_Y + 1.4, z, yaw: 0, height: 2.2 });
+    }
+    return [{ x: 0, z: 0, r: reach + 14 }, { x: 0, z: 0, r: reach + 26 }];
   }
 
   private terrain(g: BufferGeometry, color: number, x: number, y: number, z: number, yaw: number, solid: boolean, detail: boolean): void {
     this.district.terrain.push({ geometry: paintPlace(g, color, x, y, z, yaw), solid, detail });
   }
+}
+
+interface ModelOptions {
+  width?: number;
+  sway?: boolean;
+  tint?: number;
+  solid?: boolean;
+  detail?: boolean;
+  ground?: boolean;
+  minor?: boolean;
+  rich?: boolean;
+  roof?: number;
+  /** Footprint radius of an abutting wall piece (hedges, fences) instead of its full reach. */
+  wall?: number;
+  /** Extra clearance claimed round the footprint (default 0.2 m). */
+  margin?: number;
+}
+
+type Part = readonly [BufferGeometry, number, number, number, number];
+
+/** Blocky playground kit built here: 0 swing, 1 slide, 2 seesaw. Parts are (geometry, colour, x, y, z) in local space. */
+function playground(kind: number, main: number, second: number, wood: number): { r: number; parts: Part[] } {
+  if (kind === 0) {
+    const parts: Part[] = [];
+    for (const x of [-1.3, 1.3]) for (const z of [-0.5, 0.5]) parts.push([new BoxGeometry(0.14, 2.3, 0.14).rotateX(z > 0 ? -0.2 : 0.2), main, x, 1.1, z * 0.8]);
+    parts.push([new BoxGeometry(2.9, 0.14, 0.14), second, 0, 2.25, 0]);
+    for (const x of [-0.6, 0.6]) {
+      parts.push([new BoxGeometry(0.03, 1.6, 0.03), 0x555555, x - 0.2, 1.45, 0], [new BoxGeometry(0.03, 1.6, 0.03), 0x555555, x + 0.2, 1.45, 0]);
+      parts.push([new BoxGeometry(0.5, 0.06, 0.28), second, x, 0.62, 0]);
+    }
+    return { r: 1.6, parts };
+  }
+  if (kind === 1) {
+    return {
+      r: 1.9,
+      parts: [
+        [new BoxGeometry(0.9, 1.5, 0.9), main, -0.9, 0.75, 0],
+        [new BoxGeometry(1.0, 0.12, 1.0), second, -0.9, 1.56, 0],
+        [new BoxGeometry(0.7, 0.08, 2.3).rotateX(0.62).rotateY(Math.PI / 2), second, 0.45, 0.82, 0],
+        [new BoxGeometry(0.1, 0.3, 2.3).rotateX(0.62).rotateY(Math.PI / 2), main, 0.45, 1.0, 0.36],
+        [new BoxGeometry(0.1, 0.3, 2.3).rotateX(0.62).rotateY(Math.PI / 2), main, 0.45, 1.0, -0.36],
+      ],
+    };
+  }
+  return {
+    r: 1.6,
+    parts: [
+      [new BoxGeometry(0.3, 0.4, 0.4), wood, 0, 0.2, 0],
+      [new BoxGeometry(2.8, 0.08, 0.32).rotateZ(0.14), main, 0, 0.46, 0],
+      [new BoxGeometry(0.06, 0.32, 0.36), second, -1.2, 0.45, 0],
+      [new BoxGeometry(0.06, 0.32, 0.36), second, 1.2, 0.78, 0],
+    ],
+  };
 }
 
 function span(from: Circle, to: Circle): Segment {

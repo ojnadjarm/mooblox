@@ -87,7 +87,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const dress = (w: WorldData, l: WorldLayout) => {
     const group = new IslandBuilder(kit, look).build(w, l);
     const d = designWorld(l, w.courseId, look.palette);
-    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier]);
+    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier], { minor: tier !== 'low', rich: (tier as string) === 'xhigh' });
     group.add(scenery.group);
     const water = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
     return { group, dressing: d, solids: scenery.collision, water };
