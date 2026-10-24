@@ -60,7 +60,7 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
   build();
   view.onRebuild(build);
   const count = KID_COUNT[view.quality.tier] ?? 0;
-  if (avatars && count) movers.push(...(await kids(view, avatars, count, (view.quality.tier as string) === 'xhigh')));
+  if (avatars && count) movers.push(...(await kids(view, avatars, count, view.quality.tier === 'xhigh')));
   let t = 0;
   view.onFrame((dt) => {
     t += dt;

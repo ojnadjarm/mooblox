@@ -2,9 +2,10 @@ import { BufferAttribute, BufferGeometry, Color, Group, LOD, Matrix4, Mesh, Quat
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { District, Dressing, Placement } from './dressing';
 import type { ModelLibrary } from './model-library';
+import { tagSurface } from './surfaces';
 
 /** Distance past which a district drops its detail (flowers, bushes, hedges, lamps, small props) per tier. */
-export const DETAIL_DISTANCE = { low: 45, medium: 70, high: 90 } as const;
+export const DETAIL_DISTANCE = { low: 45, medium: 70, high: 90, xhigh: 130 } as const;
 
 /** Built dressing: one LOD per district (near = everything, far = the big shapes), one glow mesh, and the solid triangles. */
 export interface SceneryBuild {
@@ -83,10 +84,10 @@ interface Part {
 }
 
 function placed(d: District, lib: ModelLibrary, level: DressingLevel): Part[] {
-  const parts: Part[] = d.terrain.map((t) => ({ g: withSway(t.geometry, false, 1), solid: t.solid, detail: t.detail, small: false }));
+  const parts: Part[] = d.terrain.map((t) => ({ g: tagSurface(withSway(t.geometry, false, 1), ''), solid: t.solid, detail: t.detail, small: false }));
   for (const p of d.placements) {
     if ((p.minor && !level.minor) || (p.rich && !level.rich)) continue;
-    parts.push({ g: placeModel(p, lib), solid: p.solid, detail: p.detail, small: p.minor === true || p.rich === true });
+    parts.push({ g: tagSurface(placeModel(p, lib), p.id), solid: p.solid, detail: p.detail, small: p.minor === true || p.rich === true });
   }
   return parts;
 }

@@ -6,6 +6,7 @@ import {
   HemisphereLight,
   Mesh,
   ACESFilmicToneMapping,
+  PCFShadowMap,
   PCFSoftShadowMap,
   PerspectiveCamera,
   Scene,
@@ -21,6 +22,8 @@ export interface StageOptions {
   readonly antialias: boolean;
   readonly shadowMapSize: number;
   readonly post: boolean;
+  /** Ambient occlusion in the post chain and softer sun shadows (xhigh). */
+  readonly ao?: boolean;
 }
 
 const SUN_DISTANCE = 80;
@@ -57,12 +60,17 @@ export class Stage {
     this.scene.background = new Color(look.skyHorizon);
     this.scene.fog = new Fog(look.fog.color, look.fog.near, look.fog.far);
     this.scene.add(this.hemi, this.sun, this.sun.target, skyDome(kit, look));
-    this.post = options.post ? new PostChain(this.renderer, this.scene, this.camera, look) : null;
+    this.post = options.post ? new PostChain(this.renderer, this.scene, this.camera, look, options.ao === true) : null;
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(options.shadowMapSize, options.shadowMapSize);
     this.sun.shadow.bias = -0.0005;
     this.sun.shadow.normalBias = 0.03;
+    if (options.ao) {
+      this.renderer.shadowMap.type = PCFShadowMap;
+      this.sun.shadow.radius = 3;
+      this.sun.shadow.blurSamples = 16;
+    }
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = SUN_DISTANCE * 2.5;
   }

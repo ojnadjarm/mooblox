@@ -8,7 +8,8 @@ import { AccessClock } from '../state/access-clock';
 import { CourseSync } from '../state/course-sync';
 import { completionToggle } from '../ui/completion-toggle';
 import { FrameGate } from '../perf/frame-gate';
-import { QUALITY, pickTier } from '../perf/quality';
+import { gpuName } from '../perf/gpu';
+import { QUALITY, pickTier, type QualityTier } from '../perf/quality';
 import { QualityManager } from '../perf/quality-manager';
 import type { AvatarFactory, AvatarLook } from '../player/avatar-kit';
 import { BvhCollider } from '../player/collider';
@@ -70,24 +71,35 @@ export interface WorldView {
   onFrame(step: (dt: number) => void): () => void;
 }
 
+let pickedTier: QualityTier | null = null;
+
+/** The tier this page runs at: `?quality=` wins, else picked once from the device and its GPU. */
+export function bootTier(): QualityTier {
+  if (!pickedTier) {
+    const params = new URLSearchParams(location.search);
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    pickedTier = pickTier({ query: params.get('quality'), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse, gpu: gpuName() });
+  }
+  return pickedTier;
+}
+
 /** Builds the island scene for one course inside `root` (dressed with `models`) and starts the render loop. */
 export function startWorld(root: HTMLElement, world: WorldData, models: ModelLibrary, gateStrings?: GateStrings): WorldView {
   Object.assign(root.style, { position: 'fixed', inset: '0', overflow: 'hidden', touchAction: 'none' });
   const params = new URLSearchParams(location.search);
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  const tier = pickTier({ query: params.get('quality'), memoryGb: memory, cores: navigator.hardwareConcurrency || 4, coarse });
+  const tier = bootTier();
   const settings = QUALITY[tier];
   const kit = new MaterialKit(settings.materials);
   const look = CAMPUS;
-  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: tier === 'high' }, look);
+  const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: tier === 'high' || tier === 'xhigh', ao: tier === 'xhigh' }, look);
   const registry = createPropRegistry();
   const signs = new CanvasSignPainter(() => gate.invalidate());
   const policy = new IslandLayout(look.size);
   const dress = (w: WorldData, l: WorldLayout) => {
     const group = new IslandBuilder(kit, look).build(w, l);
     const d = designWorld(l, w.courseId, look.palette);
-    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier], { minor: tier !== 'low', rich: (tier as string) === 'xhigh' });
+    const scenery = buildScenery(d, models, kit.scenery, kit.glow, DETAIL_DISTANCE[tier], { minor: tier !== 'low', rich: tier === 'xhigh' });
     group.add(scenery.group);
     const water = (group.getObjectByName('water') as Mesh).material as ShaderMaterial;
     return { group, dressing: d, solids: scenery.collision, water };
@@ -220,7 +232,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
 }
 
 /** Prop LOD distances (from the camera, metres) per tier, and the course size up to which every prop always shows. */
-const PROP_LOD = { low: { near: 30, far: 80 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 } } as const;
+const PROP_LOD = { low: { near: 30, far: 80 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 }, xhigh: { near: 70, far: 200 } } as const;
 const PROPS_ALWAYS = 40;
 
 const SPAWN_HEIGHT = 2;

@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 const root = join(__dirname, '../../public/assets');
 const FIRST_ZONE_BUDGET = 3 * 1024 * 1024;
+const XHIGH_BUDGET = 12 * 1024 * 1024;
+const xhighOnly = (f: string) => f.startsWith('kit-hd/') || f.startsWith('detail/');
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -24,8 +26,15 @@ describe('shipped assets', () => {
     }
   });
 
-  it('fits the first-zone budget of 3 MB', () => {
-    const total = shipped.reduce((sum, f) => sum + statSync(join(root, f)).size, 0);
-    expect(total).toBeLessThanOrEqual(FIRST_ZONE_BUDGET);
+  const size = (list: string[]) => list.reduce((sum, f) => sum + statSync(join(root, f)).size, 0);
+
+  it('fits the first-zone budget of 3 MB (xhigh-only assets aside)', () => {
+    expect(size(shipped.filter((f) => !xhighOnly(f)))).toBeLessThanOrEqual(FIRST_ZONE_BUDGET);
+  });
+
+  it('keeps the xhigh-only assets (bevelled models, detail textures) within 12 MB', () => {
+    const extra = shipped.filter(xhighOnly);
+    expect(extra.length).toBeGreaterThan(0);
+    expect(size(extra)).toBeLessThanOrEqual(XHIGH_BUDGET);
   });
 });

@@ -1,6 +1,6 @@
 import type { MaterialTier } from '../world/material-kit';
 
-export type QualityTier = 'low' | 'medium' | 'high';
+export type QualityTier = 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface QualitySettings {
   /** Highest device pixel ratio the canvas renders at. */
@@ -15,6 +15,7 @@ export const QUALITY: Readonly<Record<QualityTier, QualitySettings>> = {
   low: { maxDpr: 1, shadows: false, shadowMapSize: 1024, antialias: false, materials: 'low' },
   medium: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, antialias: true, materials: 'standard' },
   high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, antialias: true, materials: 'standard' },
+  xhigh: { maxDpr: 2, shadows: true, shadowMapSize: 4096, antialias: true, materials: 'rich' },
 };
 
 export const TIERS = Object.keys(QUALITY) as QualityTier[];
@@ -25,9 +26,19 @@ export interface DeviceHints {
   readonly memoryGb: number | undefined;
   readonly cores: number;
   readonly coarse: boolean;
+  /** Unmasked WebGL renderer string, '' when the browser hides it. */
+  readonly gpu?: string;
 }
 
-/** Starting tier: `?quality=` wins; small devices start low, touch devices medium, the rest high. */
+const STRONG_GPU = /nvidia|geforce|rtx|quadro|radeon (rx|pro)|apple m\d+ (pro|max|ultra)|intel\(r\) arc|intel arc/i;
+const WEAK_GPU = /iris|uhd|hd graphics|mali|adreno|powervr|llvmpipe|swiftshader|software|microsoft basic/i;
+
+/** Whether the GPU string names a discrete-class desktop GPU. */
+export function strongGpu(gpu: string): boolean {
+  return STRONG_GPU.test(gpu) && !WEAK_GPU.test(gpu);
+}
+
+/** Starting tier: `?quality=` wins; small devices start low, touch devices medium, strong desktop GPUs xhigh, the rest high. */
 export function pickTier(h: DeviceHints): QualityTier {
   if (h.query && (TIERS as string[]).includes(h.query)) {
     return h.query as QualityTier;
@@ -35,7 +46,10 @@ export function pickTier(h: DeviceHints): QualityTier {
   if ((h.memoryGb !== undefined && h.memoryGb <= 4) || h.cores <= 4) {
     return 'low';
   }
-  return h.coarse ? 'medium' : 'high';
+  if (h.coarse) {
+    return 'medium';
+  }
+  return h.cores >= 8 && strongGpu(h.gpu ?? '') ? 'xhigh' : 'high';
 }
 
 /** Canvas pixel ratio for a tier at a dynamic-resolution scale. */

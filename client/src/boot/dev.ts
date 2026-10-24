@@ -19,7 +19,7 @@ import { decodeLook, encodeLook } from '../player/look';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { ScriptedTutor } from '../tutor/scripted-tutor';
-import { startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
+import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
 const FIXTURE_HOST = 'https://moodle.example';
@@ -44,8 +44,10 @@ async function boot(): Promise<void> {
   const store = new CourseStore();
   const shape = params.get('shape');
   store.set(shape ? shapeWorld(Number(params.get('course') ?? 7), parseShape(shape)) : await gateway.getWorld(fixture.courseid));
-  const models = await ModelLibrary.load(ASSETS, modelIds());
+  const xhigh = bootTier() === 'xhigh';
+  const models = await ModelLibrary.load(ASSETS, modelIds(), xhigh);
   const view = startWorld(root, store.world!, models);
+  if (xhigh) void view.kit.loadDetail(ASSETS);
   const avatars = await AvatarKit.load(ASSETS);
   await startLife(view, models, view.quality.tier === 'low' || params.has('nokids') ? null : avatars);
   const probe: Record<string, unknown> = {};

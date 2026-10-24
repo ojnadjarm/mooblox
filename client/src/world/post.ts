@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { Look } from './look';
 
@@ -33,14 +34,20 @@ const GRADE = {
     }`,
 };
 
-/** High-tier post chain: render (MSAA) → bloom on bright glows → colour grade → tone map + sRGB. */
+/** High-tier post chain: render (MSAA) → GTAO (xhigh only) → bloom on bright glows → colour grade → tone map + sRGB. */
 export class PostChain {
   private readonly composer: EffectComposer;
 
-  constructor(renderer: WebGLRenderer, scene: Scene, camera: Camera, look: Look) {
+  constructor(renderer: WebGLRenderer, scene: Scene, camera: Camera, look: Look, ao = false) {
     const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(scene, camera));
+    if (ao) {
+      const gtao = new GTAOPass(scene, camera, 1, 1);
+      gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.6, thickness: 1.5, scale: 1, samples: 12 });
+      gtao.blendIntensity = 0.75;
+      this.composer.addPass(gtao);
+    }
     const bloom = new UnrealBloomPass(new Vector2(1, 1), look.post.bloom, 0.5, 1.4);
     // One blur kernel on every mip: one shader program instead of five (lower mips still spread wider).
     const blur = bloom as unknown as { separableBlurMaterials: ShaderMaterial[]; _getSeparableBlurMaterial(radius: number): ShaderMaterial };

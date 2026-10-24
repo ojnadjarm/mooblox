@@ -13,12 +13,15 @@ export class ModelLibrary {
   private readonly models = new Map<string, BakedModel>();
   private readonly pixels = new Map<Texture, { data: Uint8ClampedArray; w: number; h: number }>();
 
-  static async load(base: string, ids: readonly string[]): Promise<ModelLibrary> {
+  /** `hd` loads the bevelled `kit-hd/` variants (xhigh), falling back to `kit/` for models that have none. */
+  static async load(base: string, ids: readonly string[], hd = false): Promise<ModelLibrary> {
     const lib = new ModelLibrary();
     const loader = new GLTFLoader();
     await Promise.all(
       ids.map(async (id) => {
-        const gltf = await loader.loadAsync(`${base}kit/${id}.glb`);
+        const gltf = hd
+          ? await loader.loadAsync(`${base}kit-hd/${id}.glb`).catch(() => loader.loadAsync(`${base}kit/${id}.glb`))
+          : await loader.loadAsync(`${base}kit/${id}.glb`);
         lib.models.set(id, lib.bake(gltf.scene));
       }),
     );
