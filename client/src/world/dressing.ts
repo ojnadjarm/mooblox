@@ -99,6 +99,8 @@ export interface District {
   readonly placements: Placement[];
   readonly terrain: TerrainPart[];
   readonly glow: BufferGeometry[];
+  /** Collision-only walls round low basins the capsule would otherwise step over (fountains). */
+  readonly blockers: BufferGeometry[];
 }
 
 /** A sailing ship looping a circle round the archipelago. */
@@ -274,7 +276,7 @@ class Designer {
   }
 
   private open(island: Circle): District {
-    this.district = { island, placements: [], terrain: [], glow: [] };
+    this.district = { island, placements: [], terrain: [], glow: [], blockers: [] };
     return this.district;
   }
 
@@ -649,6 +651,11 @@ class Designer {
       if (this.occ.hits(x, z, r)) return false;
       this.occ.add(x, z, r + (o.margin ?? (o.wall ? 0 : 0.2)));
       this.obstacles.push({ x, z, r });
+      if (id.includes('fountain')) {
+        const wall = new CylinderGeometry(r * 0.92, r * 0.92, 1.4, 20, 1, true);
+        wall.translate(x, y + 0.7, z);
+        this.district.blockers.push(wall);
+      }
     }
     this.district.placements.push({
       id, x, y, z, yaw, height, solid, detail: o.detail === true,

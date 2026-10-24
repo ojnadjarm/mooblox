@@ -31,6 +31,7 @@ export function buildScenery(dressing: Dressing, lib: ModelLibrary, solid: Mater
     const small = merge(parts.filter((p) => p.small).map((p) => p.g));
     const far = merge(parts.filter((p) => !p.detail).map((p) => p.g));
     for (const p of parts) if (p.solid) collision.push(positionsOnly(p.g));
+    for (const b of d.blockers) collision.push(positionsOnly(b.index ? b.toNonIndexed() : b));
     if (!near) continue;
     const lod = new LOD();
     lod.name = 'district';
