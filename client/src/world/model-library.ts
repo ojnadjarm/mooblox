@@ -76,7 +76,9 @@ export class ModelLibrary {
       const out = new BufferGeometry();
       out.setAttribute('position', pos);
       out.setAttribute('color', new BufferAttribute(colors, 3));
-      out.computeVertexNormals();
+      const normal = src.getAttribute('normal');
+      if (normal) out.setAttribute('normal', normal);
+      else out.computeVertexNormals();
       parts.push(out);
     });
     const merged = parts.length === 1 ? parts[0]! : mergeAll(parts);
@@ -105,19 +107,22 @@ function mergeAll(parts: BufferGeometry[]): BufferGeometry {
   const total = parts.reduce((n, p) => n + p.getAttribute('position').count, 0);
   const pos = new Float32Array(total * 3);
   const col = new Float32Array(total * 3);
+  const nor = new Float32Array(total * 3);
   let o = 0;
   for (const p of parts) {
     const a = p.getAttribute('position');
     const b = p.getAttribute('color');
+    const n = p.getAttribute('normal');
     for (let i = 0; i < a.count; i++, o++) {
       pos.set([a.getX(i), a.getY(i), a.getZ(i)], o * 3);
       col.set([b.getX(i), b.getY(i), b.getZ(i)], o * 3);
+      nor.set([n.getX(i), n.getY(i), n.getZ(i)], o * 3);
     }
   }
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(pos, 3));
   g.setAttribute('color', new BufferAttribute(col, 3));
-  g.computeVertexNormals();
+  g.setAttribute('normal', new BufferAttribute(nor, 3));
   return g;
 }
 

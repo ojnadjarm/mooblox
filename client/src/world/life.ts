@@ -19,6 +19,8 @@ import type { Avatar } from '../player/avatar';
 import type { AvatarFactory } from '../player/avatar-kit';
 import { paintPlace, type Critter, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
+import { GroundScatter, lawnTest } from './ground-scatter';
+import { CAMPUS } from './look';
 import type { ModelLibrary } from './model-library';
 import { hop, walkerAt } from './npc-schedule';
 import { seededRandom } from './random';
@@ -57,7 +59,7 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
       if (flutter.length) movers.push(butterflies(view, flutter, teardown));
       if (d.smoke.length) movers.push(smoke(view, d.smoke, teardown));
     }
-    movers.push(birds(view, teardown), petals(view, teardown));
+    movers.push(birds(view, teardown), petals(view, teardown), scatter(view, teardown));
   };
   build();
   view.onRebuild(build);
@@ -68,6 +70,28 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
     t += dt;
     for (const m of movers) m(t, dt);
   });
+}
+
+/** Grass tufts and pebbles on the open lawn ahead of the camera, one draw (low: fewer, nearer). */
+function scatter(view: WorldView, teardown: (() => void)[]): Mover {
+  const low = view.quality.tier === 'low';
+  const { layout, dressing } = view;
+  const open = lawnTest([...layout.hubs, ...layout.zones], layout.zones.flatMap((z) => z.plots), [...dressing.paths, ...dressing.bridges], dressing.occupancy, 8.5);
+  const p = CAMPUS.palette;
+  const s = new GroundScatter(view.kit.scenery, { grass: p.grass, stone: p.rock }, low ? 9 : 18, low ? 80 : 360, open);
+  view.stage.add(s.mesh);
+  teardown.push(() => {
+    s.mesh.removeFromParent();
+    s.dispose();
+  });
+  const cam = view.stage.camera;
+  return () => {
+    const e = cam.matrixWorld.elements;
+    const fx = -e[8]!;
+    const fz = -e[10]!;
+    const f = Math.hypot(fx, fz) || 1;
+    s.update(cam.position.x + (fx / f) * 7, cam.position.z + (fz / f) * 7);
+  };
 }
 
 function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly LifeSpot[], material: Material, teardown: (() => void)[]): Mover {

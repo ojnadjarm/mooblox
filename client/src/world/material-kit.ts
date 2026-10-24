@@ -12,9 +12,12 @@ import {
   RepeatWrapping,
   TextureLoader,
   type BufferGeometry,
+  type DataArrayTexture,
   type Material,
   type Texture,
 } from 'three';
+import { surfaceAtlas } from './surface-atlas';
+import { ATLAS_LAYERS } from './surfaces';
 
 /** Rendering tier the kit builds its materials for; `rich` adds world-space detail textures (xhigh). */
 export type MaterialTier = 'standard' | 'low' | 'rich';
@@ -35,15 +38,22 @@ export class MaterialKit {
   readonly time = { value: 0 };
   /** Packed greyscale detail atlases (rich tier); grey until `loadDetail` swaps the real ones in. */
   private readonly detail = { a: { value: flatDetail() as Texture }, b: { value: flatDetail() as Texture } };
+  /** The painted surface atlas every tier's plastic and scenery sample (`surface-atlas.ts`). */
+  private readonly atlas: { value: DataArrayTexture | null };
 
   constructor(private readonly tier: MaterialTier = 'standard') {
+    this.atlas = { value: typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined' ? null : surfaceAtlas(tier === 'low' ? 256 : 512, tier === 'low') };
     this.plastic = plasticMaterial(tier, null);
+    withAtlas(this.plastic, this.atlas, 'mooblox-plastic');
     this.studs = plasticMaterial(tier, studNormalMap());
+    withAtlas(this.studs, this.atlas, 'mooblox-plastic');
     if (tier === 'rich') withDetail(this.studs as MeshStandardMaterial, this.detail, 'mooblox-studs-rich', false);
     this.glow = new MeshBasicMaterial({ vertexColors: true, color: new Color().setScalar(tier === 'low' ? 1 : 2.5) });
     this.scenery = swayMaterial(tier, this.time);
+    withAtlas(this.scenery, this.atlas, 'mooblox-sway');
     if (tier === 'rich') withDetail(this.scenery as MeshStandardMaterial, this.detail, 'mooblox-sway-rich', true);
     this.sceneryInstanced = swayMaterial(tier, this.time);
+    withAtlas(this.sceneryInstanced, this.atlas, 'mooblox-sway');
     if (tier === 'rich') withDetail(this.sceneryInstanced as MeshStandardMaterial, this.detail, 'mooblox-sway-rich', true);
   }
 
@@ -82,6 +92,7 @@ export class MaterialKit {
     for (const m of [this.plastic, this.studs, this.glow, this.scenery, this.sceneryInstanced]) {
       m.dispose();
     }
+    this.atlas.value?.dispose();
   }
 }
 
@@ -222,4 +233,86 @@ diffuseColor.rgb *= 1.0 + (mbD - 0.5) * 1.3 * mbK;`,
       );
   };
   m.customProgramCacheKey = () => key;
+}
+
+const glslFloats = (k: 'metres' | 'strength'): string =>
+  ATLAS_LAYERS.map((l) => (k === 'metres' ? 1 / l.metres : l.strength).toFixed(4)).join(', ');
+
+/**
+ * The texture language on every tier: the vertex picks its atlas layer (the `surface` attribute where a builder tagged
+ * it, else from its colour and slope), maps it by the dominant axis of the object-space normal and fades it with distance;
+ * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it). No extra draws.
+ */
+function withAtlas(m: Material, atlas: { value: DataArrayTexture | null }, key: string): void {
+  if (!atlas.value) return;
+  const before = m.onBeforeCompile.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    before(shader, renderer);
+    shader.uniforms['uAtlas'] = atlas;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+attribute float surface;
+flat varying float vAtlasLayer;
+varying vec2 vAtlasUv;
+varying float vAtlasK;
+varying float vAtlasFade;
+const float ATLAS_SCALE[${ATLAS_LAYERS.length}] = float[${ATLAS_LAYERS.length}](${glslFloats('metres')});
+const float ATLAS_STRENGTH[${ATLAS_LAYERS.length}] = float[${ATLAS_LAYERS.length}](${glslFloats('strength')});
+float atlasLayer(vec3 lin, float ny) {
+  vec3 c = sqrt(max(lin, vec3(0.0)));
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  float sat = mx > 0.0 ? (mx - mn) / mx : 0.0;
+  bool up = ny > 0.7;
+  if (mx < 0.2) return 9.0;
+  if (c.g > c.r * 1.05 && c.g > c.b) return ny > 0.25 && ny < 0.92 && c.b > c.g * 0.7 ? 5.0 : up ? 1.0 : 2.0;
+  if (c.b >= c.r * 0.9 && sat < 0.35) return mx < 0.85 ? 4.0 : 9.0;
+  if (ny > 0.25 && ny < 0.92 && sat > 0.3) return 5.0;
+  if (c.b >= c.r) return sat < 0.2 && mx < 0.85 ? 4.0 : 9.0;
+  if (sat < 0.22) return mx > 0.8 ? (up ? 11.0 : 6.0) : 4.0;
+  if (mx > 0.8 && sat < 0.45) return up ? 10.0 : 6.0;
+  float hue = (c.g - c.b) / max(mx - mn, 1e-3) / 6.0;
+  if (hue < 0.075 && sat > 0.45 && mx > 0.75) return 7.0;
+  return 3.0;
+}`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+vAtlasLayer = surface > 0.5 ? surface : atlasLayer(color.rgb, normalize(objectNormal).y);
+int atlasI = int(vAtlasLayer + 0.5);
+vec3 atlasN = abs(objectNormal);
+vAtlasUv = (atlasN.y >= max(atlasN.x, atlasN.z) ? position.xz : (atlasN.x >= atlasN.z ? vec2(position.z, -position.y) : vec2(position.x, -position.y))) * ATLAS_SCALE[atlasI];
+vAtlasK = ATLAS_STRENGTH[atlasI];
+vec3 atlasW = (modelMatrix * vec4(position, 1.0)).xyz;
+vColor.xyz *= 1.0 + 0.07 * sin(atlasW.x * 0.13 + atlasW.z * 0.07) * cos(atlasW.z * 0.11 - atlasW.x * 0.05);`,
+      )
+      .replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+vAtlasFade = 1.0 - smoothstep(45.0, 130.0, -mvPosition.z);
+vAtlasK *= vAtlasFade;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+uniform highp sampler2DArray uAtlas;
+flat varying float vAtlasLayer;
+varying vec2 vAtlasUv;
+varying float vAtlasK;
+varying float vAtlasFade;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+vec4 atlasT = texture(uAtlas, vec3(vAtlasUv, vAtlasLayer));
+diffuseColor.rgb *= 1.0 + (atlasT.r - 0.5) * 2.0 * vAtlasK;
+diffuseColor.rgb = mix(diffuseColor.rgb, atlasT.rgb * atlasT.rgb, atlasT.a * vAtlasFade);`,
+      );
+  };
+  const prior = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key === 'mooblox-sway' ? prior() : key}-atlas`;
 }

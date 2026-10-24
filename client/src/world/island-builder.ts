@@ -1,6 +1,6 @@
 import {
-  BoxGeometry,
   BufferAttribute,
+  BufferGeometry,
   CircleGeometry,
   Color,
   CylinderGeometry,
@@ -8,11 +8,12 @@ import {
   Matrix4,
   Mesh,
   IcosahedronGeometry,
+  LatheGeometry,
   PlaneGeometry,
+  Vector2,
   Quaternion,
   RingGeometry,
   Vector3,
-  type BufferGeometry,
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -22,6 +23,7 @@ import type { Circle, WorldLayout } from './layout';
 import { paint, type MaterialKit } from './material-kit';
 import { Palette, PurposeColor } from './palette';
 import { seededRandom } from './random';
+import { Surface, type SurfaceId } from './surfaces';
 import { bakedWaterGeometry, waterMaterial } from './water';
 
 /** World units per stud on baseplate tops. */
@@ -30,6 +32,8 @@ const WATER_Y = -3;
 const PLAZA = 7;
 const PAD = 3.6;
 const PAD_H = 0.3;
+/** Ground decals sit just under the 6 cm walks and every pad, plaza and building, so only open lawn shows them. */
+const DECAL_Y = 0.025;
 
 /** Static island scene: land, studded tops, water and clouds, a few merged meshes in total. */
 export class IslandBuilder {
@@ -40,6 +44,8 @@ export class IslandBuilder {
   private landOwner: number[] = [];
   private topsOwner: number[] = [];
   private owner = 0;
+  /** Atlas layer the next added part is tagged with. */
+  private surface: SurfaceId = Surface.plain;
   private readonly p: LookPalette;
 
   constructor(
@@ -64,15 +70,19 @@ export class IslandBuilder {
     layout.hubs.forEach((hub, i) => {
       this.owner = i;
       this.island(hub);
+      this.decals(hub, world.courseId * 31 + i, [{ x: 0, z: 0, r: PLAZA + 2 }, { x: hub.x, z: hub.z, r: Math.min(hub.radius * 0.45, 9) }]);
     });
     this.owner = 0;
     this.plaza();
     layout.zones.forEach((zone, i) => {
       this.owner = layout.hubs.length + i;
       this.island(zone);
+      this.decals(zone, world.courseId * 31 + 1000 + i, zone.plots.map((p) => ({ x: p.x, z: p.z, r: PAD })));
       for (const p of zone.plots) {
         const color = PurposeColor[purposes.get(p.activityId) ?? 'other'] ?? Palette.pink;
-        this.box(PAD, PAD_H, PAD, this.p.trim, p.x, PAD_H / 2, p.z, p.facing);
+        this.surface = Surface.paving;
+        this.add(this.land, roundedPad(PAD, PAD_H), this.p.trim, p.x, 0, p.z, p.facing);
+        this.surface = Surface.plain;
         this.top(new PlaneGeometry(PAD - 0.3, PAD - 0.3), color, p.x, PAD_H + 0.01, p.z, p.facing);
       }
     });
@@ -125,25 +135,60 @@ export class IslandBuilder {
 
   /** The spawn plaza: radial terracotta paving in a cream trim ring, a cream ring round a round, stepped blue spawn pad. */
   private plaza(): void {
+    this.surface = Surface.paving;
     this.add(this.land, new CylinderGeometry(PLAZA + 0.5, PLAZA + 0.6, 0.12, 48), this.p.trimShade, 0, 0.06, 0);
     this.add(this.land, new CylinderGeometry(PLAZA + 0.3, PLAZA + 0.3, 0.04, 48), this.p.trim, 0, 0.1, 0);
+    this.surface = Surface.brick;
     const wedges = 16;
     for (let i = 0; i < wedges; i++) {
       const g = new CylinderGeometry(PLAZA, PLAZA, 0.1, 3, 1, false, (i / wedges) * Math.PI * 2, (Math.PI * 2) / wedges);
       this.add(this.land, g, i % 2 ? this.p.path[0]! : this.p.path[2]!, 0, 0.08, 0);
     }
+    this.surface = Surface.paving;
     this.add(this.land, new CylinderGeometry(3, 3, 0.16, 32), this.p.trim, 0, 0.08, 0);
     this.add(this.land, new CylinderGeometry(2.1, 2.3, 0.32, 24), this.p.trimShade, 0, 0.16, 0);
+    this.surface = Surface.plain;
     this.top(new CircleGeometry(1.85, 24), Palette.blue, 0, 0.325, 0);
   }
 
   private island(c: Circle): void {
     const seg = Math.max(this.low ? 24 : 32, Math.round(c.radius * this.rimDetail));
     this.lawn(c, seg);
-    this.add(this.land, new CylinderGeometry(c.radius, c.radius, 0.4, seg, 1, true), this.p.grassLight, c.x, -0.2, c.z);
+    this.surface = Surface.grass;
+    this.add(this.land, lip(c.radius, seg), this.p.grassLight, c.x, 0, c.z);
+    this.surface = Surface.cliff;
     this.add(this.land, new CylinderGeometry(c.radius, c.radius * 0.93, 0.9, seg, 1, true), this.p.dirt, c.x, -0.85, c.z);
     this.add(this.land, new CylinderGeometry(c.radius * 0.93, c.radius * 0.85, 3, seg, 1, true), this.p.dirtDark, c.x, -2.8, c.z);
+    this.surface = Surface.sand;
     this.add(this.land, new CylinderGeometry(c.radius + 0.9, c.radius + 1.6, 0.3, seg), this.p.sand, c.x, WATER_Y + 0.12, c.z);
+    this.surface = Surface.plain;
+  }
+
+  /**
+   * Painted ground decals on open lawn: flower meadows, worn dirt patches and puddles, seeded per island, kept off the plaza,
+   * the pads and the rim. Merged into the land (no draw of their own); anything built on top hides them.
+   */
+  private decals(c: Circle, seed: number, keepOut: readonly { x: number; z: number; r: number }[]): void {
+    const random = seededRandom(seed);
+    const count = Math.round((c.radius * c.radius) / 22);
+    const kinds = [
+      { surface: Surface.meadow, colour: this.p.grass, r: [2, 3.4], share: 0.55 },
+      { surface: Surface.ground, colour: this.p.dirt, r: [0.9, 1.7], share: 0.3 },
+      { surface: Surface.metal, colour: 0x8fb6cf, r: [0.45, 0.85], share: 0.15 },
+    ] as const;
+    for (let i = 0; i < count; i++) {
+      const a = random() * Math.PI * 2;
+      const d = Math.sqrt(random()) * (c.radius - 3);
+      const x = c.x + Math.cos(a) * d;
+      const z = c.z + Math.sin(a) * d;
+      const roll = random();
+      const kind = roll < kinds[0].share ? kinds[0] : roll < kinds[0].share + kinds[1].share ? kinds[1] : kinds[2];
+      const r = kind.r[0] + random() * (kind.r[1] - kind.r[0]);
+      if (keepOut.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r)) continue;
+      this.surface = kind.surface;
+      this.add(this.land, blobGeometry(r, random), kind.colour, x, DECAL_Y, z, random() * 6);
+    }
+    this.surface = Surface.plain;
   }
 
   /** The island's lawn: flat-coloured (no studs), with a soft warm-to-cool gradient across it. */
@@ -162,7 +207,7 @@ export class IslandBuilder {
       colors.set([k.r, k.g, k.b], i * 3);
     }
     g.setAttribute('color', new BufferAttribute(colors, 3));
-    this.land.push(g);
+    this.land.push(tag(g, Surface.grass));
     this.landOwner.push(this.owner);
   }
 
@@ -188,9 +233,6 @@ export class IslandBuilder {
     return paint(g, Palette.water);
   }
 
-  private box(w: number, h: number, d: number, color: number, x: number, y: number, z: number, yaw = 0): void {
-    this.add(this.land, new BoxGeometry(w, h, d), color, x, y, z, yaw);
-  }
 
   /** A flat studded top: horizontal, uv in studs from world x/z. */
   private top(g: BufferGeometry, color: number, x: number, y: number, z: number, yaw = 0): void {
@@ -202,7 +244,7 @@ export class IslandBuilder {
     for (let i = 0; i < pos.count; i++) {
       uv.setXY(i, pos.getX(i) / STUD, pos.getZ(i) / STUD);
     }
-    this.tops.push(paint(g, color));
+    this.tops.push(tag(paint(g, color), Surface.metal, true));
     this.topsOwner.push(this.owner);
   }
 
@@ -218,7 +260,7 @@ export class IslandBuilder {
   ): void {
     const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), yaw);
     g.applyMatrix4(new Matrix4().compose(new Vector3(x, y, z), q, scale));
-    into.push(paint(g, color));
+    into.push(tag(paint(g, color), this.surface));
     if (into === this.land) this.landOwner.push(this.owner);
   }
 
@@ -237,4 +279,70 @@ export class IslandBuilder {
     mesh.matrixAutoUpdate = false;
     return mesh;
   }
+}
+
+/** Tags every vertex with one atlas layer (`surface` attribute, the same set on every merged part). */
+function tag(geometry: BufferGeometry, surface: SurfaceId, keepUv = false): BufferGeometry {
+  if (!geometry.index) geometry.setIndex(Array.from({ length: geometry.getAttribute('position').count }, (_, i) => i));
+  if (!keepUv) geometry.deleteAttribute('uv');
+  geometry.setAttribute('surface', new BufferAttribute(new Float32Array(geometry.getAttribute('position').count).fill(surface), 1));
+  return geometry;
+}
+
+/** The island's grass edge: a rounded lip rolling over from the lawn down into the cliff (soft rim, no hard corner). */
+function lip(radius: number, seg: number): BufferGeometry {
+  const pts: Vector2[] = [];
+  for (let i = 0; i <= 5; i++) {
+    const a = (i / 5) * (Math.PI / 2);
+    pts.push(new Vector2(radius - 0.35 + Math.sin(a) * 0.45, -0.35 + Math.cos(a) * 0.35));
+  }
+  pts.push(new Vector2(radius, -0.4));
+  return new LatheGeometry(pts.reverse(), seg);
+}
+
+/** A plot pad: a cream slab with rounded corners and a chamfered top edge. */
+function roundedPad(size: number, height: number): BufferGeometry {
+  const half = size / 2;
+  const r = 0.45;
+  const pts: Vector2[] = [];
+  for (const [cx, cz, a0] of [[half - r, half - r, 0], [-half + r, half - r, Math.PI / 2], [-half + r, -half + r, Math.PI], [half - r, -half + r, Math.PI * 1.5]] as const) {
+    for (let k = 0; k <= 3; k++) {
+      const a = a0 + (k / 3) * (Math.PI / 2);
+      pts.push(new Vector2(cx + Math.cos(a) * r, cz + Math.sin(a) * r));
+    }
+  }
+  const ring = (inset: number, y: number) => pts.map((p) => new Vector3(p.x * (1 - inset / half), y, p.y * (1 - inset / half)));
+  const rings = [ring(0, 0), ring(0, height - 0.08), ring(0.08, height)];
+  const pos: number[] = [];
+  const quad = (a: Vector3, b: Vector3, c: Vector3, d: Vector3) => pos.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+  const n = pts.length;
+  for (let k = 0; k < 2; k++) {
+    for (let i = 0; i < n; i++) quad(rings[k]![i]!, rings[k]![(i + 1) % n]!, rings[k + 1]![i]!, rings[k + 1]![(i + 1) % n]!);
+  }
+  const top = rings[2]!;
+  for (let i = 1; i < n - 1; i++) pos.push(top[0]!.x, top[0]!.y, top[0]!.z, top[i + 1]!.x, top[i + 1]!.y, top[i + 1]!.z, top[i]!.x, top[i]!.y, top[i]!.z);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A soft irregular flat blob (decal), facing up. */
+function blobGeometry(r: number, random: () => number): BufferGeometry {
+  const n = 9;
+  const pos: number[] = [];
+  const rim = Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2;
+    const k = r * (0.75 + random() * 0.4);
+    return [Math.cos(a) * k, Math.sin(a) * k] as const;
+  });
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = rim[i]!;
+    const [bx, bz] = rim[(i + 1) % n]!;
+    pos.push(0, 0, 0, bx, 0, bz, ax, 0, az);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.computeVertexNormals();
+  return g;
 }

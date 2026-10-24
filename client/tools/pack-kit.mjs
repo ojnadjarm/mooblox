@@ -1,4 +1,5 @@
-// Packs the kit into one file: node tools/pack-kit.mjs
+// Packs the kit into one file: node tools/pack-kit.mjs [srcdir] (default kit-src; the shipped kit is the rounded set from
+// tools/round-kit.py).
 // Every kit-src/<pack>/<name>.glb becomes one node `<pack>__<name>` of public/assets/kit.glb (tangents dropped: the plastic needs
 // none; one buffer, shared colormaps, meshopt-compressed). One request instead of ~100 on first load.
 import { readdirSync, writeFileSync } from 'node:fs';
@@ -8,7 +9,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, mergeDocuments, meshopt, prune, unpartition } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
-const src = new URL('../kit-src', import.meta.url).pathname;
+const src = process.argv[2] ?? new URL('../kit-src', import.meta.url).pathname;
 const out = new URL('../public/assets/kit.glb', import.meta.url).pathname;
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;

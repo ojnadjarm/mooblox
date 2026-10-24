@@ -287,6 +287,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `characterMaterial` = Lambert with the sun wrapped past the terminator (`WRAP` 0.55, own program key); `grid.html` and the
     creator preview use `CAMPUS` light + Neutral tone mapping (`?turn=<rad>`, `tools/characters.mjs --turn=`). 12 kids 12 draws,
     639 tris per kid. Dist not rebuilt in this round (T1369 work in progress in the tree).
+  - Round 7 (surface detail + roundness, owner: "everything is plain"; "not everything needs to be rounded"): `world/surface-atlas.ts`
+    paints one 14-layer greyscale `DataArrayTexture` at boot (512 px, 256 on low; grass, meadow flowers in alpha, foliage, wood
+    planks, rock, shingles, plaster, brick, dirt pebbles, sand ripples, flagstones, cliff strata); `surfaces.ts` `Surface` gains
+    sand/paving/meadow/cliff + `ATLAS_LAYERS` (metres per tile, strength). `material-kit.ts` `withAtlas` on plastic, scenery and
+    sceneryInstanced (every tier): layer from a `surface` attribute, else from vertex colour + slope in the vertex shader;
+    object-space planar mapping, multiplies the colour, fades 45-130 m. `IslandBuilder` tags land parts, rolls a grass lip on
+    every rim, rounded pads, merges ground decals (meadows, dirt, puddles). `world/ground-scatter.ts` (pure `groundSpots`/`lawnTest`,
+    cell-stable) fills one preallocated mesh of tufts + pebbles ahead of the camera (`life.ts`, 360 within 18 m; low 80/9 m).
+    Kit: `blender -b -P tools/round-kit.py -- kit-src <dir>` then `node tools/pack-kit.mjs <dir>` (per-object soft/round/eaves/
+    crisp rules, ART-BIBLE §5); `ModelLibrary` keeps the glb normals. Low: atlas `LinearMipmapNearest`, anisotropy 1; scatter
+    uploads only the filled range (`addUpdateRange`). Gate 76 pass / 0 fail (baseline 75/1); low demo 22 -> 24 draws, 39k -> 48k
+    tris, programs 11 = 11, 60 fps all shapes. Dist not rebuilt (T1369 WIP).
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

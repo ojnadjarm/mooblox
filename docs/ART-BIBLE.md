@@ -9,13 +9,13 @@ premium, not textures"; "this should run effortless on pretty much any device". 
 Low-poly is the style itself, not a compromise. We aim for the family of Monument Valley, A Short Hike, Townscaper, Alto,
 Polytopia and Islanders, with the blocky Roblox-like avatars we already have.
 
-1. **Clean faceted shapes.** Every face is one flat colour. Trees are faceted cones and icosphere canopies, rocks are big
+1. **Clean faceted shapes.** Every face is one palette colour under a hand-painted pattern (8.2). Tree crowns are puffy (smooth-shaded) canopies, rocks are big
    angular chunks, roofs are clean prisms. Strong silhouettes that read at 400 px wide.
 2. **Light lives in the colours.** Lit faces warm, shaded faces cool, baked ambient occlusion darkens bases and corners, soft
    gradients run across the ground. One soft sun shadow on top, never required for the image to read.
 3. **Beauty from colour, shape and composition.** A confident limited palette, a focal point per view, scale contrast, curated
    clusters with breathing room.
-4. **Never imitate high detail.** No photo textures, no noise, no fake grime, no bloom or lens effects to "add quality".
+4. **Never imitate high detail.** Hand-painted pattern only (Section 8.2), no photo textures, no noise, no fake grime, no bloom or lens effects to "add quality".
 5. **The avatars stay.** Kenney blocky kids, cube heads, simple faces (T1365 owns hair, skin and eyes).
 
 **Anti-example: today's xhigh tier.** It puts bevels, ambientCG detail textures and GTAO onto the same shapes and the same
@@ -100,8 +100,19 @@ saturated things in a view; everything else sits a step calmer.
 
 - **Friendly places** (plazas, kiosks, pads): rounded squares, soft arches, chamfered corners.
 - **Landmarks**: one vertical, pointed or domed silhouette per district, unique in the world.
-- **Nature**: faceted cones (conifers), faceted spheres (round trees, bushes), angular chunks (rocks). Trees in clumps of
+- **Nature**: puffy smooth-shaded cones (conifers) and spheres (round trees, bushes), angular chunks (rocks). Trees in clumps of
   3-5 with mixed sizes, never a single lonely tree on open lawn except as a deliberate accent.
+
+### Soft and crisp, per object (round 7, owner: "Not everything needs to be rounded ... depends on the object")
+
+The contrast between soft and crisp is the point. Baked into the shared models for every tier (`tools/round-kit.py`):
+
+| Rule | Objects | How |
+| --- | --- | --- |
+| Soft | tree crowns, bushes | smooth-shaded normals (puffy), no extra triangles |
+| Round | hedges, signs, lamps, barrels, pots, planters, fountains, mushrooms, tents, boats; island rims; plot pads | one bevel + smooth normals; rims a rolled grass lip; pads rounded corners |
+| Soft edges | buildings, market stalls, roofs | one chamfer on long edges only (wall corners, eaves, ridges) |
+| Crisp | planks, bridges, docks, fences, stone steps, crates, logs, carts, windows, doors, rocks, small dressing | left sharp |
 
 Districts get a theme (from the section's dominant activity purpose, else in order) with a hand-made landmark:
 
@@ -147,8 +158,14 @@ above are what make it premium, and they cost almost nothing to render.
 
 1. **Every tier shares the same designed world**: same terrain, landmarks, clusters, palette and composition. Tiers differ only
    in cost: shadows (off on low), density of minor dressing, life count and effects.
-2. **Colour by vertex, not by texture.** World geometry uses vertex colours with baked lighting and AO, one shared material
-   for static scenery. At most one small shared palette or gradient texture (256 px) if a shader needs it. No detail maps.
+2. **Colour by vertex, painted surface by one atlas** (round 7, owner: "everything is plain, the floor is just plain
+   colours"). Vertex colours carry the palette and baked AO; one hand-painted greyscale array texture (`world/surface-atlas.ts`,
+   14 layers of 512 px, 256 px on low, painted at boot, mip-mapped) adds the texture language on every tier: grass tufts and
+   clover, flower meadows, brick courses, flagstones with cracks, plank seams and nails, shingles, plaster, rock facets, cliff
+   strata, sand ripples, dirt pebbles. The layer comes from a `surface` tag where a builder knows it (island land), else from
+   the vertex colour and slope; it multiplies the colour (never replaces the palette) and fades to plain with distance. No
+   photo textures, no noise; no extra draws or materials. Ground decals (meadows, worn dirt, puddles) merge into the land;
+   grass tufts and pebbles scatter near the player in one draw.
 3. **Lighting is baked in.** Lit/shade per face and AO are written by the generator; real-time light is one hemisphere plus one
    sun. Shadow maps are a tier extra.
 4. **No post-processing in the look.** The image is finished before any post pass; bloom, GTAO and DoF are never needed.
