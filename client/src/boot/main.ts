@@ -1,6 +1,7 @@
 import { AjaxGateway } from '../moodle/ajax-gateway';
 import { keepSessionAlive } from '../moodle/session-keeper';
 import { CourseStore } from '../state/course-store';
+import { startWorld } from './app';
 import { readConfig } from './config';
 
 const SESSION_TOUCH_MS = 5 * 60 * 1000;
@@ -17,6 +18,7 @@ async function boot(): Promise<void> {
   keepSessionAlive(gateway, SESSION_TOUCH_MS, (e) => console.error('mooblox: session touch failed', e));
   store.set(await gateway.getWorld(config.courseid));
   root.dataset['courseid'] = String(config.courseid);
+  startWorld(root, store.world!);
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));
