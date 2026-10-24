@@ -2,7 +2,8 @@ import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quatern
 import type { Landmark } from './landmarks/landmarks';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { box } from './landmarks/shapes';
-import { cliffWall, TERRACE_CLIFF, type CliffToe } from './cliff-wall';
+import { cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
+import { outlinePrism, shelfArcs, shelfCentre, shelfOutline, shelfSamples, shelfSite, type Shelf } from './shelf';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
@@ -41,6 +42,10 @@ const FRAME: FrameRing = { r0: PLAZA + 0.1, r1: PLAZA + 1.25, h: 0.48 };
 const FRAME_OPEN = 2.5;
 const FRAME_RUN = 4.6;
 const FRAME_GAP = 1.8;
+/** A shelf's outer face over the island cliff: no toe rocks (they would hang over the water), shallow steps. */
+const SHELF_RIM: CliffSize = { ...TERRACE_CLIFF, toe: 0, step: [0.03, 0.08] };
+/** Clearance kept between a shelf and bridge lines, path centre lines and plot rims. */
+const SHELF_CLEAR = { bridge: 2.2, path: 1.7, plot: 0.8 } as const;
 
 export interface Segment {
   readonly ax: number;
@@ -278,6 +283,8 @@ class Designer {
   /** Waterline rocks of the current island's cliff, laid in `shore` once its bridges and dock are known. */
   private toes: CliffToe[] = [];
   private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
+  /** Islands that got a broad shelf (they need fewer raised lawns). */
+  private readonly shelves = new Set<Circle>();
   private readonly random: () => number;
   private district!: District;
 
@@ -419,14 +426,17 @@ class Designer {
     const lx = Math.cos(back) * lr;
     const lz = Math.sin(back) * lr;
     const face = Math.atan2(-lx, -lz);
-    this.terrace(lx, lz, 3.8, 1.6, face);
+    const shelf = this.shelf(hub, back, FRAME.r1 + 2.5, lr - 4, 1.6);
+    if (!shelf) this.terrace(lx, lz, 3.8, 1.6, face);
     this.theme = HUB_THEME;
     this.landmark(HUB_THEME, lx, 1.6, lz, face);
     this.focus = { x: lx, z: lz };
+    if (shelf) this.shelfTop(hub, shelf, 1.6, { x: lx, z: lz, r: 3.8 });
     const ux = Math.cos(back);
     const uz = Math.sin(back);
-    this.avenue(hub, ux, uz, PLAZA, lr - 3.6, this.p.path[1] ?? this.p.stone, 2.4);
-    this.walks.push({ ax: hub.x, az: hub.z, bx: hub.x + ux * (lr - 3.6), bz: hub.z + uz * (lr - 3.6) });
+    const end = shelf ? shelf.edge + 0.2 : lr - 3.6;
+    this.avenue(hub, ux, uz, PLAZA, end, this.p.path[1] ?? this.p.stone, 2.4);
+    this.walks.push({ ax: hub.x, az: hub.z, bx: hub.x + ux * end, bz: hub.z + uz * end });
     this.plazaFrame(hub, [...bearings, back]);
     gaps(bearings).forEach(([a, width], i) => {
       if (Math.abs(wrap(a - back)) < 0.8 || width * (hub.radius - 4.4) < 16) return;
@@ -515,8 +525,10 @@ class Designer {
     return null;
   }
 
-  /** A further plaza: paving, a fountain in the middle and lamps between its bridges. */
+  /** A further plaza: paving, a fountain in the middle, lamps between its bridges and a shelf over its widest gap. */
   private plaza(hub: Circle, index: number): void {
+    const shelf = this.shelf(hub, widestGap(this.bearingsAt(index), 0), SMALL_PLAZA + 2.5, hub.radius - 4, 1.2);
+    if (shelf) this.shelfTop(hub, shelf, 1.2, { x: 0, z: 0, r: 0 });
     this.terrain(new CylinderGeometry(SMALL_PLAZA, SMALL_PLAZA, 0.1, 40), this.p.path[1] ?? this.p.stone, hub.x, 0.03, hub.z, 0, false, false);
     this.model('town/fountain-round-detail', hub.x, 0.05, hub.z, this.random() * 6, 1.3, { solid: true });
     this.hangouts.push({ kind: 'sit', x: hub.x + 3.2, z: hub.z, face: Math.PI / 2 });
@@ -533,7 +545,15 @@ class Designer {
     const grow = Math.min(1.5, Math.max(1, z.radius / 18));
     const tr = Math.max(3.4, lm.radius * grow + 0.5);
     const h = 1.8 + (i % 2) * 0.8;
-    for (const r of [z.radius - tr - 0.6, z.radius - 4]) {
+    const d = z.radius - tr - 0.6;
+    const shelf = this.shelf(z, out, z.radius * 0.15, d - tr + 0.2, h);
+    if (shelf) {
+      const mx = z.x + Math.cos(out) * d;
+      const mz = z.z + Math.sin(out) * d;
+      this.placeLandmark(lm, mx, h, mz, Math.atan2(z.x - mx, z.z - mz), grow);
+      this.shelfTop(z, shelf, h, { x: mx - z.x, z: mz - z.z, r: tr });
+    }
+    for (const r of shelf ? [] : [z.radius - tr - 0.6, z.radius - 4]) {
       const mx = z.x + Math.cos(out) * r;
       const mz = z.z + Math.sin(out) * r;
       const face = Math.atan2(z.x - mx, z.z - mz);
@@ -568,6 +588,79 @@ class Designer {
     this.hedgeRing(z);
     this.lampsAlongPaths(z);
     this.dock(z, false);
+  }
+
+  /**
+   * The island's broad upper shelf (art bible §3, district concept) towards bearing `at`: the broadest clear cap with its wall
+   * `near`..`far` metres from the centre, `h` high, on cut stone with a rock stair facing the centre; null when none is clear.
+   */
+  private shelf(c: Circle, at: number, near: number, far: number, h: number): Shelf | null {
+    const main = c === this.layout.hub;
+    const plaza = this.layout.hubs.includes(c) ? (main ? FRAME.r1 + 1.2 : SMALL_PLAZA + 0.8) : 0;
+    const s = shelfSite(c.radius, at, near, far, (lx, lz) => {
+      const x = c.x + lx;
+      const z = c.z + lz;
+      return (
+        Math.hypot(lx, lz) < plaza || this.onPlot(x, z, SHELF_CLEAR.plot) || this.nearBridge(x, z, DECK_HALF + SHELF_CLEAR.bridge) ||
+        this.pathIndex.within(x, z, SHELF_CLEAR.path) || this.near(x, z, 0.3)
+      );
+    });
+    if (!s) return null;
+    this.shelves.add(c);
+    const centre = shelfCentre(s);
+    const arcs = shelfArcs(s);
+    const stair = FOOT['nature/cliff_steps_rock']!;
+    const half = (stair.w * (h + 0.05)) / stair.h / 2;
+    const top = (g: BufferGeometry) => this.district.terrain.push({ geometry: g.translate(c.x, 0, c.z), solid: true, detail: false });
+    top(outlinePrism(shelfOutline(s, -0.1, -0.1), -0.05, h - TERRACE_LIP, this.p.grass));
+    top(outlinePrism(shelfOutline(s, 0.12, 0.06), h - TERRACE_LIP, h, this.p.grass));
+    const back = s.at + Math.PI;
+    const inner = cliffWall(s.radius, -0.05, h - 0.1, 0, this.p, this.random, TERRACE_CLIFF, { at: s.at, half: Math.PI - arcs.wall + 0.6 / s.radius }, [{ at: back, half: (half + 0.05) / s.radius }]);
+    top(inner.wall.translate(centre.x, 0, centre.z));
+    for (const t of inner.toes) {
+      const lx = centre.x + t.x;
+      const lz = centre.z + t.z;
+      if (Math.hypot(lx, lz) > c.radius - 1 || Math.abs(wrap(Math.atan2(t.z, t.x) - back)) < (half + t.r + 0.4) / s.radius) t.geometry.dispose();
+      else this.district.terrain.push({ geometry: t.geometry.translate(c.x + centre.x, 0, c.z + centre.z), solid: false, detail: true });
+    }
+    const outer = cliffWall(c.radius, -0.05, h - 0.1, 0, this.p, this.random, SHELF_RIM, { at: back, half: Math.PI - arcs.rim + 0.5 / c.radius });
+    top(outer.wall);
+    const sx = c.x + Math.cos(s.at) * (s.edge - 0.4);
+    const sz = c.z + Math.sin(s.at) * (s.edge - 0.4);
+    this.model('nature/cliff_steps_rock', sx, 0, sz, Math.atan2(-Math.cos(s.at), -Math.sin(s.at)), h + 0.05, {});
+    // Obstacles tile the top edge to edge (touching, never overlapping) wherever earlier things left it free.
+    const tiles = shelfSamples(s, 1.4, 0.3).filter((p) => !this.near(c.x + p.x, c.z + p.z, 0.7));
+    for (const p of tiles) {
+      this.reserve(c.x + p.x, c.z + p.z, 1);
+      this.obstacles.push({ x: c.x + p.x, z: c.z + p.z, r: 0.7 });
+    }
+    this.reserve(sx, sz, 1.4);
+    return s;
+  }
+
+  /** Dressing on a shelf's top at `h`: a lamp pair at the stair head and up to three clusters, clear of the landmark `keep`. */
+  private shelfTop(c: Circle, s: Shelf, h: number, keep: { x: number; z: number; r: number }): void {
+    const ux = Math.cos(s.at);
+    const uz = Math.sin(s.at);
+    const head = { x: ux * (s.edge + 1.3), z: uz * (s.edge + 1.3) };
+    for (const side of [-1, 1]) {
+      const x = c.x + head.x - uz * side * 1.7;
+      const z = c.z + head.z + ux * side * 1.7;
+      this.model('town/lantern', x, h, z, 0, 2.6, { detail: true });
+      this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, x, h + 2.6 * 0.875, z, 0));
+    }
+    const taken = [keep, { ...head, r: 2.2 }];
+    for (const kind of ['treeClump', 'gardenBed', 'readingNook'] as const) {
+      const rec = recipe(kind, this.random);
+      const spots = shelfSamples(s, 1, rec.radius + 0.4);
+      for (let k = 0; k < 12 && spots.length; k++) {
+        const p = spots[Math.floor(this.random() * spots.length)]!;
+        if (taken.some((t) => Math.hypot(t.x - p.x, t.z - p.z) < t.r + rec.radius + 0.4)) continue;
+        this.stamp(rec, c.x + p.x, h, c.z + p.z, Math.atan2(-p.x, -p.z), true);
+        taken.push({ ...p, r: rec.radius });
+        break;
+      }
+    }
   }
 
   /** A raised grass terrace on the terrace cliff with rock stairs facing `face`. */
@@ -707,7 +800,7 @@ class Designer {
   private fillIsland(c: Circle, inner: number): void {
     const k = (c.radius * c.radius) / HUB_AREA;
     const landmark = this.landmarks.some((l) => Math.hypot(l.x - c.x, l.z - c.z) < c.radius) ? 1 : 0;
-    this.lawnTerraces(c, inner, (k < 1.3 ? 2 : 3) - landmark);
+    this.lawnTerraces(c, inner, (k < 1.3 ? 2 : 3) - landmark - (this.shelves.has(c) ? 1 : 0));
     this.clusters(c, inner, 'treeClump', Math.max(2, Math.round(5 * k)));
     this.clusters(c, inner, 'gardenBed', Math.max(1, Math.round(3 * k)));
     this.clusters(c, inner, 'rockGroup', Math.max(1, Math.round(2.5 * k)));
@@ -772,7 +865,7 @@ class Designer {
         const h = 0.9 + this.random() * 0.5;
         const face = Math.atan2(c.x - x, c.z - z);
         this.raisedLawn(x, z, r, h, face);
-        const kinds = r >= 2.7 ? (['readingNook', 'gardenBed', 'rockGroup'] as const) : (['readingNook', 'rockGroup'] as const);
+        const kinds = r >= 2.7 ? (['readingNook', 'gardenBed'] as const) : (['readingNook'] as const);
         this.stamp(recipe(this.pick(kinds), this.random), x, h, z, face + Math.PI, false);
         placed++;
       }

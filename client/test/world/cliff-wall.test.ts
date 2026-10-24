@@ -116,4 +116,14 @@ describe('terrace cliff', () => {
       expect(pos.getY(i)).toBeLessThanOrEqual(h + 0.1);
     }
   });
+
+  it('leaves a further stair cut open and keeps the columns on either side of it', () => {
+    const cut = { at: 4, half: 0.9 / r };
+    const withCut = cliffColumns(r, -0.05, h, seededRandom(3), TERRACE_CLIFF, gap, [cut]);
+    expect(withCut.length).toBeLessThan(cols.length);
+    for (const c of withCut) {
+      const mid = (c.a0 + c.a1) / 2;
+      expect(Math.abs(Math.atan2(Math.sin(mid - cut.at), Math.cos(mid - cut.at)))).toBeGreaterThanOrEqual(cut.half + (c.a1 - c.a0) / 2);
+    }
+  });
 });
