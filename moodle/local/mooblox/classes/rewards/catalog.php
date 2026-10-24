@@ -50,4 +50,17 @@ final class catalog {
     public static function ids(): array {
         return array_merge(self::HATS, self::OUTFITS, self::PETS, self::TROPHIES);
     }
+
+    /**
+     * Item a level-up unlocks: a pet every 5 levels, else a hat or outfit, seeded by course and level.
+     *
+     * @param int $courseid course id
+     * @param int $level level reached
+     * @param string[] $owned item ids the user already has
+     * @return string|null null when every item of the pool is owned
+     */
+    public static function level_reward(int $courseid, int $level, array $owned): ?string {
+        $pool = array_values(array_diff($level % 5 === 0 ? self::PETS : array_merge(self::HATS, self::OUTFITS), $owned));
+        return $pool ? $pool[crc32("$courseid:level:$level") % count($pool)] : null;
+    }
 }

@@ -140,7 +140,7 @@ the client builds no HUD, gems, hall or monument. Turning rewards on later back-
 | `xp_rules` | Pure: facts + the manualxp switch → desired ledger rows (source, sourceid, kind, xp) |
 | `level_curve` | Pure: XP ↔ level (level n needs 25·n·(n+1) XP) |
 | `reconciler` | `sync(courseid, userid)`: desired vs stored ledger diff in one transaction; rewrites the cache, adds day rows, grants unlocks; returns the change count; idempotent |
-| `catalog` | Cosmetic ids (hats, outfits, pets, trophy styles), mirrored by the client art keys |
+| `catalog` | Cosmetic ids (hats, outfits, pets, trophy styles), mirrored by the client art keys; seeded level-up pick |
 | `quest_generator` | Pure: course structure → quests with deterministic ids |
 | `collectible_catalog` | Pure: facts → unlocked collectible keys (`gem:<cmid>`, `crystal:<sectionid>`, `star:<n>`) |
 
