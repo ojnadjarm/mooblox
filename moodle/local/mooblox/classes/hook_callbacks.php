@@ -77,4 +77,15 @@ class hook_callbacks {
             $PAGE->add_body_class('local-mooblox-framed');
         }
     }
+
+    /**
+     * Queues a rewards sync for the user whose activity completion changed, bulk updates included.
+     *
+     * @param \core_completion\hook\after_cm_completion_updated $hook
+     */
+    public static function after_cm_completion_updated(
+        \core_completion\hook\after_cm_completion_updated $hook
+    ): void {
+        rewards\sync_queue::user((int) $hook->cm->course, (int) $hook->data->userid);
+    }
 }
