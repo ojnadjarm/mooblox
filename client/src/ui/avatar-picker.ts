@@ -17,7 +17,7 @@ const CSS = `
   grid-template-columns: minmax(0, 1fr);
   padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   background: linear-gradient(#a9dcff, #e8f6ff 60%); font: 700 16px/1.3 ${UI_FONT}; color: #2b2f3a; overflow: hidden; }
-.mooblox-creator[hidden] { display: none; }
+.mooblox-creator[hidden] { visibility: hidden; }
 .mooblox-creator * { box-sizing: border-box; }
 .mooblox-creator-bar { width: min(1500px, 100%); margin: 0 auto 10px; display: flex; align-items: center; gap: 10px; }
 .mooblox-creator-title { flex: 1; min-width: 0; margin: 0; font: 900 clamp(20px, 2.4vw, 32px) ${UI_FONT}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -132,6 +132,8 @@ export class AvatarPicker {
   private readonly options: HTMLElement;
   private readonly undoButton: HTMLButtonElement;
   private tab: string = 'hair';
+  /** The built-in tab whose options are in the panel (laid out while hidden, so opening on it only repaints). */
+  private rendered: string | null = null;
   private readonly extra: CreatorTab[] = [];
   private readonly tabsElement: HTMLElement;
   private keptLook: CharacterLook;
@@ -174,9 +176,11 @@ export class AvatarPicker {
     );
     const stage = this.element.querySelector<HTMLElement>('.mooblox-creator-stage')!;
     this.preview = new CreatorPreview(stage, factory);
+    this.preview.warm(this.keptLook);
     this.tabsElement = this.element.querySelector<HTMLElement>('.mooblox-creator-tabs')!;
     for (const t of TABS) this.tabButton(t.id, strings[`creator_${t.id}`]);
     this.options = this.element.querySelector('.mooblox-creator-options')!;
+    this.selectTab(this.tab);
     this.element.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -216,7 +220,8 @@ export class AvatarPicker {
     this.button.setAttribute('aria-expanded', 'true');
     this.actions.opened();
     this.preview.start();
-    this.selectTab(this.tab);
+    if (this.rendered === this.tab) this.mark();
+    else this.selectTab(this.tab);
     void this.preview.show(this.current);
     this.tabButtons.get(this.tab)?.focus();
   }
@@ -239,6 +244,7 @@ export class AvatarPicker {
       this.actions.picked(look);
     }
     this.history.reset(this.keptLook);
+    this.preview.warm(this.keptLook);
     this.actions.closed();
   }
 
@@ -270,6 +276,7 @@ export class AvatarPicker {
     for (const [t, b] of this.tabButtons) b.setAttribute('aria-selected', String(t === id));
     this.options.replaceChildren();
     const extra = this.extra.find((t) => t.id === id);
+    this.rendered = extra ? null : id;
     if (extra) {
       extra.render(this.options, () => void this.preview.show(this.current));
       this.undoButton.disabled = !this.history.canUndo;

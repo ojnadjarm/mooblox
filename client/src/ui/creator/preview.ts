@@ -65,7 +65,15 @@ export class CreatorPreview {
     this.scene.add(next.root);
   }
 
-  /** Starts the loop; the renderer is made in its first frame, so the frame that opens the creator only lays out the page. */
+  /** Makes the renderer, compiles `look` and uploads it with one 1 px draw, ahead of the next open (at boot, then on each close). */
+  warm(look: CharacterLook): void {
+    if (!this.renderer) this.create();
+    void this.show(look).then(() => {
+      if (this.handle === null) this.renderer?.render(this.scene, this.camera);
+    });
+  }
+
+  /** Starts the loop; without `warm` the renderer is made in its first frame, so the frame that opens the creator only lays out the page. */
   start(): void {
     if (this.handle !== null) return;
     this.frames = 0;
@@ -78,6 +86,7 @@ export class CreatorPreview {
         this.create();
         return;
       }
+      if (!this.resize) this.observe();
       if (!this.drag) this.yaw += SPIN * dt;
       if (this.avatar && this.avatar === this.compiled) {
         this.avatar.root.rotation.y = this.yaw;
@@ -96,28 +105,30 @@ export class CreatorPreview {
     r.toneMappingExposure = CAMPUS.exposure;
     this.host.appendChild(r.domElement);
     this.renderer = r;
-    this.resize = new ResizeObserver(() => this.fit());
-    this.resize.observe(this.host);
-    this.fit();
+    if (this.handle !== null) this.observe();
+    else r.setSize(1, 1);
     for (const resolve of this.waiting.splice(0)) resolve(r);
   }
 
-  /** The renderer, once the loop has made it; null while stopped. */
+  private observe(): void {
+    this.resize = new ResizeObserver(() => this.fit());
+    this.resize.observe(this.host);
+    this.fit();
+  }
+
+  /** The renderer, once made; null while stopped and never warmed. */
   private rendererReady(): Promise<WebGLRenderer | null> {
     if (this.renderer || this.handle === null) return Promise.resolve(this.renderer);
     return new Promise((resolve) => this.waiting.push(resolve));
   }
 
-  /** Stops the loop and frees the GPU context (the world keeps the only one while playing). */
+  /** Stops the loop and shrinks the canvas to 1 px; the context and its compiled programs stay for the next open. */
   stop(): void {
     if (this.handle !== null) cancelAnimationFrame(this.handle);
     this.handle = null;
     this.resize?.disconnect();
     this.resize = null;
-    this.renderer?.dispose();
-    this.renderer?.forceContextLoss();
-    this.renderer?.domElement.remove();
-    this.renderer = null;
+    this.renderer?.setSize(1, 1);
     this.compiled = null;
     for (const resolve of this.waiting.splice(0)) resolve(null);
   }
