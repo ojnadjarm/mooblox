@@ -1,10 +1,10 @@
-import { BoxGeometry, Group, Mesh, PlaneGeometry, TorusGeometry, type Material } from 'three';
+import { BoxGeometry, Group, Mesh, PlaneGeometry, TorusGeometry, type Material, type Texture } from 'three';
 import { CompletionTracking, isDone, type Activity } from '../../domain/types';
 import type { Plot } from '../layout';
 import { paint } from '../material-kit';
 import { Palette } from '../palette';
 import { Parts } from './parts';
-import type { Prop, PropContext, PropState } from './prop';
+import type { Prop, PropContext, PropState, SignPainter } from './prop';
 
 /** Top of the plot pad the props stand on. */
 export const PAD_TOP = 0.3;
@@ -34,6 +34,8 @@ export class ActivityProp implements Prop {
   readonly activityId: number;
   readonly root = new Group();
   readonly detail = new Group();
+  readonly sign: Texture;
+  private readonly signs: SignPainter;
   private readonly flag: Mesh;
   private readonly lock: Mesh;
   private readonly materials: Material[] = [];
@@ -83,7 +85,9 @@ export class ActivityProp implements Prop {
       };
     }
 
-    const signMaterial = ctx.kit.textured(ctx.signs.paint(a));
+    this.signs = ctx.signs;
+    this.sign = ctx.signs.paint(a);
+    const signMaterial = ctx.kit.textured(this.sign);
     this.materials.push(signMaterial);
     const board = new Mesh(new PlaneGeometry(sign.w, sign.h), signMaterial);
     board.name = 'prop-sign';
@@ -121,6 +125,7 @@ export class ActivityProp implements Prop {
     for (const m of this.materials) {
       m.dispose();
     }
+    this.signs.forget(this.sign);
   }
 }
 

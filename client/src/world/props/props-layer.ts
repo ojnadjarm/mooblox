@@ -4,6 +4,9 @@ import type { WorldLayout } from '../layout';
 import type { Prop, PropContext } from './prop';
 import type { PropRegistry } from './prop-registry';
 
+/** Metres before `near` a sign is wanted (painted ahead of the walk). */
+const SIGN_AHEAD = 15;
+
 /** Every activity's prop on its plot; keeps them in step with the course. */
 export class PropsLayer {
   readonly group = new Group();
@@ -53,7 +56,8 @@ export class PropsLayer {
 
   /**
    * Distance LOD for large courses: past `near` a prop drops its sign, flag and padlock, past `far` it is hidden and its
-   * coloured pad stands in. Courses with up to `keep` props always show everything.
+   * coloured pad stands in. Courses with up to `keep` props always show everything. A sign is painted from `SIGN_AHEAD` m
+   * before it shows and freed past twice that.
    */
   cull(x: number, z: number, near: number, far: number, keep: number): void {
     const all = this.props.size <= keep;
@@ -63,6 +67,9 @@ export class PropsLayer {
       const d = Math.sqrt(dx * dx + dz * dz);
       prop.root.visible = all || d < far;
       prop.detail.visible = all || d < near;
+      if (!prop.sign) continue;
+      if (all || d < near + SIGN_AHEAD) this.ctx.signs.want(prop.sign);
+      else if (d > near + SIGN_AHEAD * 2) this.ctx.signs.release(prop.sign);
     }
   }
 

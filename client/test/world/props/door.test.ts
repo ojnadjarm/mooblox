@@ -13,7 +13,7 @@ import { PropsLayer } from '../../../src/world/props/props-layer';
 const world = toWorld(fixture);
 const layout = new IslandLayout().layout(world);
 const plot = layout.zones[1]!.plots[0]!;
-const ctx: PropContext = { kit: new MaterialKit('low'), signs: { paint: () => new Texture() } };
+const ctx: PropContext = { kit: new MaterialKit('low'), signs: { paint: () => new Texture(), want: () => undefined, release: () => undefined, forget: () => undefined } };
 const base = world.sections[1]!.activities[0]!;
 const activity = (over: Partial<Activity>): Activity => ({ ...base, ...over });
 

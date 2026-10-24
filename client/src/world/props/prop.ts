@@ -16,6 +16,8 @@ export interface Prop {
   readonly root: Object3D;
   /** The near-only parts (name sign, completion flag, padlock), hidden at a distance. */
   readonly detail: Object3D;
+  /** The name sign's texture, painted while the player is near. */
+  readonly sign?: Texture;
   readonly state: PropState;
   /** Re-reads availability and completion from the activity. */
   update(a: Activity): void;
@@ -27,6 +29,12 @@ export interface Prop {
 /** Paints an activity's name sign (icon + name) as a texture. */
 export interface SignPainter {
   paint(a: Activity): Texture;
+  /** Asks for a sign's pixels (painted soon, a few per frame). */
+  want(texture: Texture): void;
+  /** Frees a sign's pixels until it is wanted again. */
+  release(texture: Texture): void;
+  /** Frees a sign for good (its prop is gone). */
+  forget(texture: Texture): void;
 }
 
 /** Shared services every factory builds with. */

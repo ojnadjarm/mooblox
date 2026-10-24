@@ -146,7 +146,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const look = CAMPUS;
   const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: settings.post, ao: settings.ao }, look);
   const registry = createPropRegistry();
-  const signs = new CanvasSignPainter(() => gate.invalidate());
+  const signs = new CanvasSignPainter(() => gate.invalidate(), true);
   const policy = new IslandLayout(look.size);
   const level = { minor: tier !== 'low', rich: tier === 'xhigh', detailShadows: tier === 'high' || tier === 'xhigh', minorDistance: MINOR_DISTANCE[tier] };
   const collider = new CompositeCollider();
@@ -299,6 +299,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   steps.add((dt) => {
     clock += dt;
     if (warmup.step(budget)) gate.invalidate();
+    if (signs.step(budget)) gate.invalidate();
     sparkles.update(dt);
     const eye = stage.camera.position;
     props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
