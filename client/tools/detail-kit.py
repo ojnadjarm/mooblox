@@ -2,13 +2,15 @@
 #   blender -b -P tools/round-kit.py -- kit-src <a>; blender -b -P tools/detail-kit.py -- <a> <b>; node tools/pack-kit.mjs <b>
 # Per object recipes (ART-BIBLE.md soft/crisp rules): wood tops split into planks with dark seams, crates and carts planked,
 # barrel staves seamed and the lid sunk in its rim, house doors in vertical boards, stall tables and sign boards in planks,
-# fence posts pointed, lamp posts with two collars. Seams and sunk walls use a darker copy
+# fence posts pointed, lamp posts with two collars, leaf clumps on broadleaf crowns and hedge tops, sunlit pine tiers,
+# moss pads and pebbles on rocks, blossom window boxes under house windows. Seams and sunk walls use a darker copy
 # of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
 import bpy, colorsys, math, os, sys
 
 import bmesh
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 args = sys.argv[sys.argv.index('--') + 1:]
 src, dst = os.path.abspath(args[0]), os.path.abspath(args[1])
@@ -16,6 +18,7 @@ src, dst = os.path.abspath(args[0]), os.path.abspath(args[1])
 SEAM = 0.55   # seam and sunk-wall colour factor
 WIDTH = 0.012  # seam width, fraction of the model's size
 DEPTH = 0.008  # seam depth, fraction of the model's size
+MOSS = (0.16, 0.38, 0.05, 1.0)  # linear moss green on rock tops
 
 
 def texel(img, mats):
@@ -160,6 +163,148 @@ def collars(bm, post, zs, band, out, slot, uv):
                 lo[uv].uv = luv
 
 
+def lighter(mat):
+    """A sunlit copy of an untextured leaf material: brighter and a little warmer."""
+    m = mat.copy()
+    m.name = mat.name + '-sun'
+    b = next(n for n in m.node_tree.nodes if n.type == 'BSDF_PRINCIPLED').inputs['Base Color']
+    c = b.default_value
+    b.default_value = (min(1, c[0] * 1.45), min(1, c[1] * 1.12), min(1, c[2] * 0.85), c[3])
+    return m
+
+
+def texel_uv(x, y):
+    """UV of colormap pixel (x, y) (512 px Kenney colormaps)."""
+    return Vector(((x + 0.5) / 512, 1 - (y + 0.5) / 512))
+
+
+def dome(bm, base, d, r, h, mi, uv, luv=None, smooth=True, sides=6, rot=0.0):
+    """An open low-poly dome (one ring of `sides` tris) from `base` along d: a leaf clump when smooth, a pebble when flat."""
+    d = d.normalized()
+    m = Matrix.Translation(base + d * h / 2) @ d.to_track_quat('Z', 'Y').to_matrix().to_4x4() @ Matrix.Rotation(rot, 4, 'Z')
+    res = bmesh.ops.create_cone(bm, cap_ends=False, cap_tris=False, segments=sides, radius1=r, radius2=0, depth=h, matrix=m)
+    kn, flat = bm.loops.layers.float_vector.get('kn'), bm.faces.layers.int.get('flat')
+    for f in {f for v in res['verts'] for f in v.link_faces}:
+        f.material_index = mi
+        f[flat] = 0 if smooth else 1
+        for lo in f.loops:
+            if luv is not None:
+                lo[uv].uv = luv
+            if kn is not None:
+                out = lo.vert.co - base - d * (lo.vert.co - base).dot(d)
+                lo[kn] = (out.normalized() * 0.75 + d).normalized() if out.length > 1e-6 else d
+
+
+def block(bm, lo_, hi_, n, mi, uv, luv):
+    """A crisp box between corners lo_ and hi_ in the frame (across = n x z, out = n, up = z)."""
+    across = Vector((n.y, -n.x, 0)).normalized()
+    c = (lo_ + hi_) / 2
+    d = hi_ - lo_
+    basis = Matrix((across, n, Vector((0, 0, 1)))).transposed().to_4x4()
+    m = Matrix.Translation(c) @ basis @ Matrix.Diagonal((abs(d.dot(across)), abs(d.dot(n)), abs(d.z), 1))
+    res = bmesh.ops.create_cube(bm, size=1, matrix=m)
+    flat = bm.faces.layers.int.get('flat')
+    for f in {f for v in res['verts'] for f in v.link_faces}:
+        f.material_index = mi
+        f[flat] = 1
+        for lo in f.loops:
+            lo[uv].uv = luv
+
+
+def crown(bm, leaves, count, rel, mi, seed):
+    """Leaf clusters bulging out of the upper crown, placed by casting at the crown from evenly spread directions."""
+    if not leaves:
+        return
+    vs = list({v for f in leaves for v in f.verts})
+    tree = BVHTree.FromPolygons([v.co for v in vs], [[vs.index(v) for v in f.verts] for f in leaves])
+    c = sum((v.co for v in vs), Vector()) / len(vs)
+    reach = max((v.co - c).length for v in vs)
+    r = rel * reach
+    for k in range(count):
+        z = 0.25 + 0.7 * (k + 0.5) / count
+        a = seed + k * 2.39996
+        d = Vector((math.cos(a) * math.sqrt(1 - z * z), math.sin(a) * math.sqrt(1 - z * z), z))
+        hit = tree.ray_cast(c + d * reach * 2, -d)[0]
+        if hit is not None:
+            dome(bm, hit - d * r * 0.25, d, r * (0.85 + 0.3 * ((k * 7) % 3) / 2), r * 0.55, mi, None, rot=k)
+
+
+def windows(bm, col, uv, top, size):
+    """Window boxes under every glass pane group: a terracotta box heaped with blossom clusters (green would be repainted as roof)."""
+    glass = [f for f in bm.faces if abs(f.normal.z) < 0.1 and (lambda c: c[2] > 0.9 and c[2] - c[0] > 0.1 and c[0] > 0.6)(col(f, uv))]
+    groups = []
+    for f in glass:
+        n = f.normal.copy()
+        across = Vector((n.y, -n.x, 0)).normalized()
+        ps = [v.co for v in f.verts]
+        box = [min(p.dot(across) for p in ps), max(p.dot(across) for p in ps), min(p.z for p in ps), max(p.z for p in ps)]
+        off = n.dot(f.calc_center_median())
+        gap = 0.06 * top
+        for g in groups:
+            if (g['n'] - n).length < 0.1 and abs(g['off'] - off) < 0.05 * size and box[0] < g['box'][1] + gap and g['box'][0] < box[1] + gap \
+                    and box[2] < g['box'][3] + gap and g['box'][2] < box[3] + gap:
+                g['box'] = [min(g['box'][0], box[0]), max(g['box'][1], box[1]), min(g['box'][2], box[2]), max(g['box'][3], box[3])]
+                break
+        else:
+            groups.append({'n': n, 'across': across, 'off': off, 'box': box})
+    tree = BVHTree.FromBMesh(bm)
+    pot = texel_uv(324, 260)
+    blooms = [texel_uv(196, 132), texel_uv(68, 132), texel_uv(452, 132), texel_uv(196, 260)]
+    count = 0
+    for g in groups:
+        a0, a1, z0, z1 = g['box']
+        n, across, wh = g['n'], g['across'], g['box'][3] - g['box'][2]
+        if wh < 0.05 * top or a1 - a0 < 0.05 * top:
+            continue
+        pad = 0.2 * wh
+        mid = (a0 + a1) / 2
+        base = across * mid + n * g['off']
+        wall = tree.ray_cast(base + Vector((0, 0, z0 - pad * 1.6)) + n * size, -n)[0]
+        frame = tree.ray_cast(base + Vector((0, 0, z0 - pad * 0.5)) + n * size, -n)[0]
+        if wall is None:
+            continue
+        w0 = n.dot(wall)
+        out = max(0.0, (n.dot(frame) - w0) if frame is not None else 0.0) + 0.24 * wh
+        zt = z0 - pad * 0.9
+        half = (a1 - a0) / 2 + pad * 0.7
+        lo_ = across * (mid - half) + n * w0 + Vector((0, 0, zt - 0.3 * wh))
+        hi_ = across * (mid + half) + n * (w0 + out) + Vector((0, 0, zt))
+        block(bm, lo_, hi_, n, 0, uv, pot)
+        k = max(3, round(2 * half / (0.34 * wh)))
+        r = 0.6 * (2 * half) / k
+        for i in range(k):
+            p = across * (mid - half + r * 0.9 + (2 * half - 1.8 * r) * i / max(1, k - 1)) + n * (w0 + out * 0.5) + Vector((0, 0, zt + r * 0.15))
+            dome(bm, p - Vector((0, 0, r * 0.2)), Vector((0, 0, 1)), r * 1.05, r * 0.6, 0, uv, blooms[(i + count) % len(blooms)], sides=5, rot=i)
+        count += 1
+    print(f'  windows {count}')
+
+
+def rock(bm, size, mats, slot, seed):
+    """Moss pads inset on the upward dirt faces (the old grass bits turn moss too), two crisp pebbles at the foot."""
+    dirt = next((i for i, m in enumerate(mats) if 'dirt' in m.name.lower()), 0)
+    grass = {i for i, m in enumerate(mats) if 'grass' in m.name.lower()}
+    tops = [f for f in bm.faces if f.normal.z > 0.75 and f.material_index == dirt and f.calc_area() > 0.01 * size * size]
+    if tops:
+        moss = mats[dirt].copy()
+        moss.name = 'moss'
+        next(n for n in moss.node_tree.nodes if n.type == 'BSDF_PRINCIPLED').inputs['Base Color'].default_value = MOSS
+        mats.append(moss)
+        for f in tops:
+            t = 0.22 * min(e.calc_length() for e in f.edges)
+            bmesh.ops.inset_individual(bm, faces=[f], thickness=t, depth=0.004 * size, use_even_offset=False)
+            f.material_index = len(mats) - 1
+        for f in bm.faces:
+            if f.material_index in grass:
+                f.material_index = len(mats) - 1
+    vs = [v.co for v in bm.verts]
+    cx, cy = sum(v.x for v in vs) / len(vs), sum(v.y for v in vs) / len(vs)
+    rr = max(Vector((v.x - cx, v.y - cy)).length for v in vs)
+    for k in range(2):
+        a = seed + k * 2.6
+        dome(bm, Vector((cx + math.cos(a) * rr * 0.95, cy + math.sin(a) * rr * 0.95, 0)), Vector((0, 0, 1)), (0.05 + 0.02 * k) * size,
+             (0.04 + 0.015 * k) * size, slot(dirt), None, smooth=False, sides=5, rot=a)
+
+
 def plane_groups(faces, size):
     """Faces grouped by plane (normal and offset)."""
     out = {}
@@ -190,6 +335,14 @@ def recipe(name):
         return 'fence'
     if name == 'lantern':
         return 'lamp'
+    if name in ('tree_oak', 'tree_detailed', 'tree_default', 'tree_fat'):
+        return 'tree'
+    if name == 'tree_pineRoundA':
+        return 'pine'
+    if name in ('hedge-large', 'hedge'):
+        return 'hedge'
+    if name.startswith('rock_'):
+        return 'rock'
     return None
 
 
@@ -278,6 +431,7 @@ def detail(o, kind):
             if h > 0.12 * top and h > 1.2 * w:
                 print(f'  door {w:.2f} x {h:.2f}')
                 boards(bm, door, across, 3, size * 0.5, slot)
+        windows(bm, col, uv, top, size)
     elif kind == 'sign':
         board = [f for f in bm.faces if abs(f.normal.y) > 0.97 and f.material_index == 1]
         for side in plane_groups(board, size):
@@ -291,6 +445,36 @@ def detail(o, kind):
         post = [f for f in bm.faces if abs(f.normal.z) < 0.3 and all(Vector((v.co.x, v.co.y)).length < 0.045 * s for v in f.verts)
                 and all(0.6 * s < v.co.z < 1.32 * s for v in f.verts) and extent([f], Vector((0, 0, 1))) > 0.3 * s]
         collars(bm, post, (0.74 * s, 1.15 * s), 0.035 * s, 0.01 * s, slot, uv)
+    elif kind in ('tree', 'pine'):
+        li = next(i for i, m in enumerate(me.materials) if m.name.startswith('leafs'))
+        me.materials.append(lighter(me.materials[li]))
+        sun = len(me.materials) - 1
+        leaves = [f for f in bm.faces if f.material_index == li]
+        if kind == 'pine':
+            for f in leaves:
+                if f.normal.z > 0.35:
+                    f.material_index = sun
+        else:
+            crown(bm, leaves, 9 if o.name.endswith('detailed') else 7, 0.26, sun, len(o.name))
+    elif kind == 'hedge':
+        green = [f for f in bm.faces if f.normal.z > 0.7 and (lambda c: c[1] > c[0] + 0.25)(col(f, uv))]
+        if green:
+            vs = [v.co for f in green for v in f.verts]
+            ax = Vector((1, 0, 0)) if max(v.x for v in vs) - min(v.x for v in vs) > max(v.y for v in vs) - min(v.y for v in vs) else Vector((0, 1, 0))
+            side = Vector((ax.y, ax.x, 0))
+            lo_, hi_ = min(v.dot(ax) for v in vs), max(v.dot(ax) for v in vs)
+            mid = sum((v.dot(side) for v in vs)) / len(vs)
+            w = max(v.co.dot(side) for v in bm.verts) - min(v.co.dot(side) for v in bm.verts)
+            tree = BVHTree.FromBMesh(bm)
+            k = max(2, min(4, round((hi_ - lo_) / w * 1.6)))
+            for i in range(k):
+                t = lo_ + (hi_ - lo_) * (i + 0.5) / k
+                p = ax * t + side * (mid + w * 0.12 * (1 if i % 2 else -1)) + Vector((0, 0, top + 1))
+                hit = tree.ray_cast(p, Vector((0, 0, -1)))[0]
+                if hit is not None:
+                    dome(bm, hit - Vector((0, 0, 0.04 * w)), Vector((0, 0, 1)), 0.32 * w, 0.14 * w, green[0].material_index, uv, texel_uv(484, 264), rot=i)
+    elif kind == 'rock':
+        rock(bm, size, me.materials, slot, len(o.name))
     bm.to_mesh(me)
     bm.free()
     if keep:
