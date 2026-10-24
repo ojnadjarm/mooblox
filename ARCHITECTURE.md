@@ -110,7 +110,97 @@ Student in course → "MOOBLOX" tab → play.php (session, cap) → HTML shell +
 - I: small interfaces (Gateway, Tutor, Presence, Opener); the plugin's service lists only the functions used.
 - D: world, UI and tutor depend on interfaces; only `main.ts` knows the concrete classes.
 
+## Rewards (gamification)
+
+XP, levels, quests, collectibles, cosmetics and trophies come only from what Moodle already knows: activity
+completion, final grades, course badges and course completion. The server derives everything from core tables;
+no client call can add XP. Rewards switch off per course (`local_mooblox_course.enabled`) and site-wide
+(`local_mooblox/gamification`); fully off, `get_rewards` returns `{enabled: false}`, observers return at once and
+the client builds no HUD, gems, hall or monument. Turning rewards on later back-fills from Moodle state.
+
+### Rewards tables
+
+| Table | Role |
+|---|---|
+| `local_mooblox_course` | Per-course switches: enabled, manualxp, goaltarget, weekdays |
+| `local_mooblox_ledger` | One row per earned fact (source cm/grade/badge/course + sourceid + kind): the truth |
+| `local_mooblox_xp` | Cache per course and user: xp, level, peaklevel (never goes down), rulesversion |
+| `local_mooblox_day` | Learning days (yyyymmdd in the user's timezone) for streaks and class goals |
+| `local_mooblox_unlock` | Cosmetics per user, global across courses: once unlocked, never re-locked |
+| `local_mooblox_found` | Collectibles picked up in the world |
+| `local_mooblox_goal` | Weekly class goal per course: aggregate only, no user ids |
+
+### Rewards classes (`classes/rewards/`, pure core + one Moodle adapter)
+
+| Class | One job |
+|---|---|
+| `fact_source` (interface) | Reads the facts of one user in one course: completions, grades, badges, course completion |
+| `moodle_fact_source` | The Moodle adapter of `fact_source`: one query per fact kind |
+| `facts` | Value object: the facts one sync works on |
+| `xp_rules` | Pure: facts + the manualxp switch → desired ledger rows (source, sourceid, kind, xp) |
+| `level_curve` | Pure: XP ↔ level (level n needs 25·n·(n+1) XP) |
+| `reconciler` | `sync(courseid, userid)`: desired vs stored ledger diff in one transaction; rewrites the cache, adds day rows, grants unlocks; returns the change count; idempotent |
+| `catalog` | Cosmetic ids (hats, outfits, pets, trophy styles), mirrored by the client art keys |
+| `quest_generator` | Pure: course structure → quests with deterministic ids |
+| `collectible_catalog` | Pure: facts → unlocked collectible keys (`gem:<cmid>`, `crystal:<sectionid>`, `star:<n>`) |
+
+Interfaces:
+
+```php
+interface fact_source { public function load(int $courseid, int $userid): facts; }
+final class xp_rules { public function __construct(bool $manualxp = true); public function desired(facts $facts): array;
+  public function version(): string; }
+final class level_curve { public static function level(int $xp): int; public static function threshold(int $level): int; }
+final class reconciler { public function __construct(fact_source $source); public function sync(int $courseid, int $userid): int; }
+```
+
+XP defaults (`xp_rules`): automatic completion 10, view-only completion 5, manual completion 3 (0 with manualxp off),
+completed with pass +10, grade ≥ 50 % +5 / ≥ 80 % +10 / 100 % +15, badge 25, course completed 50. A failed
+completion keeps its completion XP: trying counts.
+
+### Rewards data flow
+
+```
+Moodle fact changes (completion hook, user_graded, badge_awarded/revoked, course_completed)
+  → observer (one cached settings read; returns at once when rewards are off)
+  → deduped adhoc task sync_user(courseid, userid)        nightly task reconcile: users active in 7 days
+  → reconciler.sync: moodle_fact_source.load → xp_rules.desired → diff vs ledger
+  → one transaction: insert/delete ledger rows, rewrite xp cache (level_curve), day rows, unlocks
+client get_rewards (syncs inline for the caller) → HUD, quests, wardrobe, collectibles, trophies
+client claim_collectible / set_look → validated by recomputation, idempotent
+```
+
+The ledger is derived, so recalculation, restore, course reset and anti-cheat are one code path: toggling a manual
+completion or retaking a quiz re-derives the same rows; unticking removes the XP while peaklevel and unlocks stay.
+A rules or settings change bumps `rulesversion` (a hash) and the next read re-syncs.
+
+### Rewards patterns and SOLID
+
+- Adapter: `moodle_fact_source`. Strategy: `fact_source` (tests use an in-memory source). Observer: event observers
+  and the completion hook. Command: the `sync_user` adhoc task. Value objects: `facts`, ledger rows.
+- S: reading facts, scoring, levelling, persisting and scheduling are separate classes.
+- O: a new XP source is a new fact kind plus a rule; the reconciler does not change.
+- L: any `fact_source` gives the same reconciler behaviour.
+- I: `fact_source` has one method; the client gets one read and two validated writes.
+- D: `reconciler` depends on `fact_source` and the pure rules, not on Moodle tables.
+
+### Motivation rules for ages 8-12
+
+1. No shame: never a loss, a "behind", a red number or anyone else's score. A failed quiz keeps its completion XP.
+2. No rankings: no leaderboard, no per-kid numbers visible to other kids. Class goals show one shared bar, hidden
+   below 5 enrolled students.
+3. No loot boxes, no random rewards, no currency, no shop, no paid items, no ads. Every unlock is named in advance;
+   quest item picks are seeded.
+4. Gentle streaks: a learning week = at least `weekdays` (default 2) learning days Mon-Sun in the kid's timezone.
+   One freeze every 4 learning weeks (max 2), spent automatically. A break shows "Welcome back!" and starts at 1,
+   never "streak lost". No notifications or emails.
+5. Level-up moment: 2.5 s confetti + chime, skippable; `prefers-reduced-motion` gets a static card; at most one per
+   panel close. The 3-hour break reminder stays.
+6. Class goals: weekly "Together finish {target} activities"; a missed week resets quietly.
+
 ## Kids' safety (v1)
 
 One world per course behind the Moodle login; no kid-to-kid text; first name only; preset avatars;
-no plugin tables, one user preference; progress lives in Moodle core.
+progress lives in Moodle core. Rewards add 5 per-user tables (ledger, xp, day, unlock, found) and one more
+preference (`local_mooblox_look`), all exported and deleted by the privacy provider. No dark patterns: no loot boxes,
+no ads, no guilt streaks (gentle learning weeks only, see the motivation rules), and the 3-hour break reminder.
