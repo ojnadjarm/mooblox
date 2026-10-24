@@ -141,6 +141,67 @@ const modes = {
     check((await off.locator('.mooblox-creator-tab[data-tab="wardrobe"]').count()) === 0, 'rewards off: no Wardrobe tab');
     await off.close();
   },
+  async pet() {
+    const pets = (page) => page.evaluate(() => {
+      let n = 0;
+      window.mooblox.view.stage.scene.traverse((o) => { if (o.name.startsWith('pet:')) n++; });
+      return n;
+    });
+    const page = await open(1366, 768, 'pet=pet-dog&quality=medium');
+    await page.waitForFunction(() => !!window.mooblox.rewards.pet.pet, null, { timeout: 20000 });
+    const shape = await page.evaluate(() => {
+      const p = window.mooblox.rewards.pet.pet;
+      const meshes = [];
+      p.root.traverse((o) => o.isMesh && meshes.push(o));
+      return { draws: meshes.length, shadow: meshes.some((m) => m.castShadow), skinned: meshes.every((m) => m.isSkinnedMesh) };
+    });
+    check(shape.draws === 1 && shape.skinned && !shape.shadow, `medium: pet is 1 skinned draw, no shadow (${JSON.stringify(shape)})`);
+    await page.screenshot({ path: join(out, 'pet-idle-1366.png') });
+    const gap = () => page.evaluate(() => {
+      const a = window.mooblox.player.avatar.root.position;
+      const b = window.mooblox.rewards.pet.pet.root.position;
+      return { d: Math.hypot(a.x - b.x, a.z - b.z), x: a.x, z: a.z };
+    });
+    const start = await gap();
+    let worst = 0;
+    await page.keyboard.down('KeyW');
+    for (let i = 0; i < 12; i++) {
+      await page.waitForTimeout(250);
+      worst = Math.max(worst, (await gap()).d);
+      if (i === 8) await page.screenshot({ path: join(out, 'pet-walk-1366.png') });
+    }
+    await page.keyboard.down('ShiftLeft');
+    for (let i = 0; i < 8; i++) {
+      await page.waitForTimeout(250);
+      worst = Math.max(worst, (await gap()).d);
+    }
+    await page.keyboard.up('ShiftLeft');
+    await page.keyboard.up('KeyW');
+    const end = await gap();
+    const walked = Math.hypot(end.x - start.x, end.z - start.z);
+    check(walked > 8, `the kid walked and ran ${walked.toFixed(1)} m`);
+    check(worst <= 2, `pet stays within 2 m of the kid (max ${worst.toFixed(2)} m)`);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: join(out, 'pet-stop-1366.png') });
+    await page.close();
+    const high = await open(1366, 768, 'pet=pet-cat&quality=high');
+    await high.waitForFunction(() => !!window.mooblox.rewards.pet.pet, null, { timeout: 20000 });
+    check(await high.evaluate(() => window.mooblox.rewards.pet.pet.mesh.castShadow), 'high: the pet casts a shadow');
+    await high.evaluate(() => window.mooblox.player.faceCamera());
+    await high.waitForTimeout(2000);
+    await high.screenshot({ path: join(out, 'pet-high-1366.png') });
+    await high.close();
+    const low = await open(400, 860, 'pet=pet-dog&quality=low');
+    await low.waitForTimeout(1500);
+    const badge = await box(low, '.mooblox-hud-pet');
+    check((await pets(low)) === 0 && !!badge, `low: no pet in the world, HUD badge instead (${badge && Math.round(badge.w)} px)`);
+    await low.screenshot({ path: join(out, 'pet-low-400.png') });
+    await low.close();
+    const off = await open(1366, 768, 'pet=pet-dog&off');
+    await off.waitForTimeout(1500);
+    check((await pets(off)) === 0 && !(await box(off, '.mooblox-hud-pet')), 'rewards off: no pet, no badge');
+    await off.close();
+  },
   async levelup() {
     for (const [w, h] of [[1366, 768], [400, 860]]) {
       const page = await open(w, h);

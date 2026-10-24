@@ -20,6 +20,10 @@ const CSS = `
   background: #e3f3d9; color: #2f8466; font-size: 13px; white-space: nowrap; }
 .mooblox-hud-leaf[hidden] { display: none; }
 .mooblox-hud-leaf svg { width: 20px; height: 20px; flex: none; }
+.mooblox-hud-pet { position: absolute; left: 34px; top: 32px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff;
+  box-sizing: border-box; background: #ef7d57; display: grid; place-items: center; }
+.mooblox-hud-pet[hidden] { display: none; }
+.mooblox-hud-pet svg { width: 14px; height: 14px; }
 .mooblox-hud-quest { grid-area: quest; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; }
 .mooblox-hud-quest svg { width: 20px; height: 20px; flex: none; color: #e0844f; }
 .mooblox-hud-quest span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -32,6 +36,8 @@ const CSS = `
 
 const LEAF =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19c0-8 5-14 15-15-1 10-7 15-15 15z" fill="#5db761"/><path d="M5 19c0-8 5-14 15-15L5 19z" fill="#2f8466"/><path d="M4 20l9-9" stroke="#2f8466" stroke-width="2" stroke-linecap="round"/></svg>';
+const PAW =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="#fff"><ellipse cx="12" cy="16" rx="5.5" ry="4.5"/><circle cx="5" cy="10" r="2.4"/><circle cx="9.5" cy="5.5" r="2.4"/><circle cx="14.5" cy="5.5" r="2.4"/><circle cx="19" cy="10" r="2.4"/></svg>';
 const FLAG =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M6 3h2v18H6z"/><path d="M8 4h11l-3 4 3 4H8z"/></svg>';
 
@@ -44,6 +50,7 @@ export class HudRewards {
   private readonly leaf: HTMLElement;
   private readonly quest: HTMLElement;
   private readonly progress: HTMLElement;
+  private readonly paw: HTMLElement;
 
   constructor(host: HTMLElement) {
     injectStyle('mooblox-hud-rewards-style', CSS);
@@ -54,7 +61,8 @@ export class HudRewards {
     this.element.innerHTML = `<div class="mooblox-hud-chip"></div>
       <div class="mooblox-hud-bar"><div class="mooblox-hud-track"><div class="mooblox-hud-fill"></div></div><div class="mooblox-hud-xp"></div></div>
       <div class="mooblox-hud-leaf">${LEAF}<span></span></div>
-      <div class="mooblox-hud-quest">${FLAG}<span></span><b></b></div>`;
+      <div class="mooblox-hud-quest">${FLAG}<span></span><b></b></div>
+      <div class="mooblox-hud-pet" hidden>${PAW}</div>`;
     const q = (s: string) => this.element.querySelector<HTMLElement>(s)!;
     this.chip = q('.mooblox-hud-chip');
     this.fill = q('.mooblox-hud-fill');
@@ -62,6 +70,7 @@ export class HudRewards {
     this.leaf = q('.mooblox-hud-leaf');
     this.quest = q('.mooblox-hud-quest span');
     this.progress = q('.mooblox-hud-quest b');
+    this.paw = q('.mooblox-hud-pet');
     host.appendChild(this.element);
   }
 
@@ -82,6 +91,13 @@ export class HudRewards {
     this.leaf.setAttribute('aria-label', view.weeks ?? '');
     this.quest.textContent = view.quest;
     this.progress.textContent = view.progress;
+  }
+
+  /** The worn pet as a badge on the level chip (low tier, where no pet walks); null hides it. */
+  showPet(name: string | null): void {
+    this.paw.hidden = !name;
+    this.paw.title = name ?? '';
+    this.paw.setAttribute('aria-label', name ?? '');
   }
 
   dispose(): void {

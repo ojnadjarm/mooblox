@@ -61,6 +61,10 @@ async function boot(): Promise<void> {
     rewards.look.hat = params.get('hat')!;
     rewards.unlocks.push(rewards.look.hat);
   }
+  if (params.has('pet')) {
+    rewards.look.pet = params.get('pet')!;
+    rewards.unlocks.push(rewards.look.pet);
+  }
   const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp));
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));

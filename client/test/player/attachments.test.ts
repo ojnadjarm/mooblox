@@ -66,6 +66,6 @@ describe('hatWearable', () => {
     const w = hatWearable('hat-cap', library)!;
     const parts = composeParts({ ...DEFAULT_LOOK, hair: 'spiky' }, [w]);
     expect(parts.filter((p) => p.kind === 'mesh')).toHaveLength(1);
-    expect(parts.some((p) => p.tag === 'crown')).toBe(false);
+    expect(parts.some((p) => 'tag' in p && p.tag === 'crown')).toBe(false);
   });
 });

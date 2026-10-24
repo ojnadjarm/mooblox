@@ -3,7 +3,10 @@ import type { ActivityInteraction } from '../interaction/activity-interaction';
 import type { MoodleGateway } from '../moodle/gateway';
 import type { Outfitter } from '../player/attachments';
 import { HatLibrary } from '../player/hats';
+import { PetFollower } from '../player/pet';
+import { PetLibrary } from '../player/pets';
 import type { Player } from '../player/player';
+import { itemName } from '../rewards/item-names';
 import { levelUp } from '../rewards/level-up';
 import { RewardsStore } from '../rewards/rewards-store';
 import type { AvatarPicker } from '../ui/avatar-picker';
@@ -34,6 +37,8 @@ export interface RewardsRuntime {
   readonly levelUp: LevelUpMoment;
   /** What the player wears now. */
   readonly worn: Look;
+  /** The pet walking after the player. */
+  readonly pet: PetFollower;
   /** Re-reads the rewards from Moodle. */
   refresh(): Promise<void>;
 }
@@ -48,6 +53,35 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
   let worn: Look = NO_LOOK;
   let dressing: Promise<void> | null = null;
   const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe') });
+  const pet = new PetFollower(
+    () => ({ position: deps.player.avatar.root.position, yaw: deps.player.avatar.root.rotation.y }),
+    (o) => view.stage.add(o),
+  );
+  let pets: Promise<PetLibrary> | null = null;
+  let shownPet = '';
+  /** Walks the worn pet in the world (shadow on high and xhigh); on low only the HUD badge shows it. */
+  const syncPet = async (): Promise<void> => {
+    const tier = view.quality.tier;
+    const key = `${worn.pet ?? ''}|${tier}`;
+    if (key === shownPet) return;
+    shownPet = key;
+    const low = tier === 'low';
+    hud?.showPet(worn.pet && low ? itemName(worn.pet, deps.strings) : null);
+    if (!worn.pet || low) {
+      pet.wear(null);
+      return;
+    }
+    const id = worn.pet;
+    const library = await (pets ??= PetLibrary.load(deps.assets));
+    if (shownPet !== key || !library.has(id)) return;
+    pet.wear(library.create(id), tier === 'high' || tier === 'xhigh');
+    view.gate.invalidate();
+  };
+  const showPet = (): void => void syncPet().catch((e: unknown) => console.error('mooblox: loading the pet failed', e));
+  view.onFrame((dt) => {
+    if (`${worn.pet ?? ''}|${view.quality.tier}` !== shownPet) showPet();
+    pet.step(dt);
+  });
   const redress = async (): Promise<void> => {
     deps.outfitter.worn = worn;
     deps.player.setAvatar(await deps.outfitter.create(deps.picker.current)).dispose();
@@ -58,6 +92,7 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
     deps.outfitter.hats = await HatLibrary.load(deps.assets);
     worn = look;
     if (look.hat || look.outfit) await redress();
+    showPet();
     deps.picker.addTab(
       new WardrobeTab(
         {
@@ -69,10 +104,12 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
           keep: (draft) => {
             const before = worn;
             worn = draft;
+            showPet();
             deps.gateway.setLook(draft).catch((e: unknown) => {
               console.error('mooblox: saving the look failed', e);
               worn = before;
               void redress();
+              showPet();
             });
           },
         },
@@ -104,6 +141,7 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
     get worn() {
       return worn;
     },
+    pet,
     refresh,
   };
 }
