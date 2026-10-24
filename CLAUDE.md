@@ -70,3 +70,23 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `fixed-step.ts`, `input.ts` (keyboard, combined), `follow-camera.ts`, `player.ts`; `ui/touch-controls.ts`
     (joystick + jump); `perf/quality*.ts` + `ui/perf-overlay.ts`. `boot/app.ts`: `startWorld` + `startPlayer`.
   - vitest 14 files 57 tests; bundle 194 KB gz. Draw calls 19 with one avatar.
+- Phase E (T1295-T1302), 2026-10-24, activities in the world:
+  - Props: `world/props/` Factory + Registry (`catalog.ts`: Signpost (no url), BookStand (page), Cinema (playable video
+    file or YouTube link), ArenaGate (quiz), Door fallback). Each prop: purpose-coloured body, canvas sign (icon + name),
+    completion flag white/green, padlock when restricted; `PropsLayer.update(world)` on every store change. Not solid.
+  - `get_world` returns `media` {type file|link, mimetype, src} per cm (resource main file, url externalurl).
+  - Interaction: `interaction/proximity.ts` (enter 3.2 m, exit 3.8 m), `ui/prompt.ts` (E or tap), `OpenerRegistry`
+    (`VideoOpener` native video / youtube-nocookie + `view_activity`, then `FrameOpener` iframe of the cm url),
+    `ui/panel.ts` (dialog, focus trap, Esc, inert world, render paused). Each close → `CourseSync.refresh` → store →
+    props + prompt. Manual-completion toggle in the panel bar.
+  - Book: `ui/book-model.ts` + `ui/book.ts` (HUD button, key B), "Go there" → `goToPlot` (`Player.teleport`).
+  - Guide NPC: `tutor/` (`Tutor` interface, `ScriptedTutor`: greeting by first name, next step, all done) +
+    `tutor/guide.ts` (bubble over the head, Show me). Strings from lang via play config `strings`.
+  - Avatar picker: `ui/avatar-picker.ts` (HUD "My avatar", bottom sheet: `AvatarFactory.bodies` faces × 9 shirt
+    colours from `player/look.ts`, live swap via `Player.setAvatar`), saved on close as preference
+    `local_mooblox_avatar` = `<body>` or `<body>_<colour>` through `core_user_update_user_preferences`. A new
+    character set only has to implement `AvatarFactory` (bodies + create).
+  - Tests: vitest 23 files 83 tests; dev e2e `node tools/{open,manual,book,guide,picker}.mjs`; live e2e on 5.2:
+    `mfixture with 5.2 moodle/local/mooblox -- bash -c "cd ~/moodle-envs/5.2/www && mphp <repo>/.research/testdata/reset.php
+    && cd <repo>/client && node tools/moodle.mjs video|quiz|avatar [outdir]"` (reset.php clears the student's attempts,
+    completion and avatar). mci quick 7 ok 0 red. Bundle 205 KB gz.
