@@ -20,6 +20,7 @@ import type { AvatarFactory } from '../player/avatar-kit';
 import { paintPlace, type Critter, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import type { ModelLibrary } from './model-library';
+import { hop, walkerAt } from './npc-schedule';
 import { seededRandom } from './random';
 import { sceneryGeometry, singleModel } from './scenery';
 
@@ -358,15 +359,20 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
 function hangout(avatar: Avatar, h: Hangout, i: number): Mover {
   if (h.kind === 'sit') {
     avatar.root.position.set(h.x, 0.06, h.z);
-    avatar.root.rotation.y = h.face;
     avatar.play('idle');
-    return (_t, dt) => avatar.update(dt);
+    return (t, dt) => {
+      avatar.root.rotation.y = h.face + 0.35 * Math.sin(t * 0.4 + i);
+      avatar.update(dt);
+    };
   }
   avatar.play('run');
+  const period = 3.5 + (i % 3) * 1.3;
   return (t, dt) => {
     const a = t * 1.4 + i;
-    avatar.root.position.set(h.x + Math.cos(a) * 1.3, 0.06, h.z + Math.sin(a) * 1.3);
+    const y = hop(t + i, period);
+    avatar.root.position.set(h.x + Math.cos(a) * 1.3, 0.06 + y, h.z + Math.sin(a) * 1.3);
     avatar.root.rotation.y = -a + Math.PI;
+    avatar.play(y > 0 ? 'jump' : 'run');
     avatar.update(dt);
   };
 }
@@ -375,14 +381,13 @@ function walker(avatar: Avatar, path: Segment, i: number): Mover {
   avatar.play('walk');
   const len = Math.hypot(path.bx - path.ax, path.bz - path.az);
   return (t, dt) => {
-    const s = (t * 1.3 + i * 3) % (2 * len);
-    const k = s < len ? s / len : 2 - s / len;
-    const back = s >= len;
+    const { k, back, walking } = walkerAt(t + i * 3, len, 1.3, 2 + (i % 2));
+    avatar.play(walking ? 'walk' : 'idle');
     const side = 0.5 * (back ? -1 : 1);
     const nx = (path.bz - path.az) / len;
     const nz = -(path.bx - path.ax) / len;
     avatar.root.position.set(path.ax + (path.bx - path.ax) * k + nx * side, 0.06, path.az + (path.bz - path.az) * k + nz * side);
-    avatar.root.rotation.y = Math.atan2((path.bx - path.ax) * (back ? -1 : 1), (path.bz - path.az) * (back ? -1 : 1));
+    avatar.root.rotation.y = Math.atan2((path.bx - path.ax) * (back ? -1 : 1), (path.bz - path.az) * (back ? -1 : 1)) + (walking ? 0 : 0.7 * Math.sin(t * 1.6 + i));
     avatar.update(dt);
   };
 }

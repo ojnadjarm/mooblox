@@ -54,7 +54,11 @@ describe('PropsLayer', () => {
       ...fixture,
       sections: fixture.sections.map((s) => ({ ...s, modules: s.modules.map((m) => ({ ...m, state: 1 })) })),
     });
-    props.update(done);
+    const wasOpen = props.all.filter((p) => p.state.done === false);
+    const finished = props.update(done);
     expect(props.get(base.id)!.state.done).toBe(true);
+    expect(finished.length).toBeGreaterThan(0);
+    expect(finished).toEqual(wasOpen.filter((p) => p.state.done === true));
+    expect(props.update(done)).toEqual([]);
   });
 });

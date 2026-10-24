@@ -260,6 +260,12 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     (`clusters`, `stamp`: one footprint per cluster, trunk-sized obstacles) instead of uniform scatter; raised 1 m lawns
     (`lawnTerraces`, `raisedLawn`: faceted banded sides, stone steps, a cluster on top) where an island has room; shore rock
     groups + one cove (sand bulge, reeds, lilies); path lamps in pairs. Gate 76 pass / 8 fail (same 8 as round 1).
+  - Round 3 (game feel): `player/game-feel.ts` (pure: `accelerate`, `JumpGate` coyote 0.1 s + buffer 0.12 s, `squash`,
+    `landing`, `stepPuffs`/`puffScale`, `zoom`, `damp`); `stepBody` now jumps whenever `input.jump` (the gate decides).
+    `Player` eases velocity, squashes the avatar on landing, `onFeet` -> `player/dust.ts` (instanced puffs; off on low).
+    `FollowCamera`: pitch 0.38 (drag tilts), wheel zoom, look-ahead, sight-line probes against `view.collider` (10 Hz,
+    nearest 4.5 m). Prompt pops in; `PropsLayer.update` returns newly done props -> gold sparkles. `world/npc-schedule.ts`
+    (walkers pause at path ends, players hop). Gate 78 pass / 6 fail. Door open animation not done.
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import type { Collider } from './collider';
 
-/** World-space move intent: x/z with length ≤ 1, plus the run and jump buttons. */
+/** World-space move intent: x/z with length ≤ 1, the run button, and `jump`: start a jump this step (the caller decides when one is allowed). */
 export interface MoveInput {
   readonly x: number;
   readonly z: number;
@@ -35,8 +35,10 @@ export function stepBody(body: Body, input: MoveInput, dt: number, collider: Col
   const speed = (input.run ? Physics.run : Physics.walk) * Math.min(1, len);
   const k = len === 0 ? 0 : speed / len;
   const v = body.velocity;
-  if (body.onGround) {
-    v.y = input.jump ? Physics.jump : Physics.gravity * dt;
+  if (input.jump) {
+    v.y = Physics.jump;
+  } else if (body.onGround) {
+    v.y = Physics.gravity * dt;
   } else {
     v.y += Physics.gravity * dt;
   }

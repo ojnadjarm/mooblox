@@ -52,15 +52,19 @@ export class PropsLayer {
     }
   }
 
-  /** Re-reads availability and completion of every prop from a fresh world. */
-  update(world: WorldData): void {
+  /** Re-reads availability and completion of every prop from a fresh world; returns the props that just became done. */
+  update(world: WorldData): Prop[] {
     const activities = activityMap(world);
+    const done: Prop[] = [];
     for (const [id, prop] of this.props) {
       const a = activities.get(id);
       if (a) {
+        const before = prop.state;
         prop.update(a);
+        if (before.done === false && prop.state.done === true) done.push(prop);
       }
     }
+    return done;
   }
 }
 

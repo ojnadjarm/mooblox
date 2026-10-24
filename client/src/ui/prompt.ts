@@ -7,6 +7,10 @@ const CSS = `
   padding: 10px 12px 10px 18px; border-radius: 999px; background: #fff; border: 4px solid #1e88e5;
   box-shadow: 0 6px 18px rgba(0, 40, 80, .3); font: 700 17px/1.25 ${UI_FONT}; color: #2b2f3a; }
 .mooblox-prompt[hidden] { display: none; }
+.mooblox-prompt:not([hidden]) { animation: mooblox-prompt-pop .3s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes mooblox-prompt-pop { from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(.7); }
+  to { opacity: 1; transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .mooblox-prompt:not([hidden]) { animation: none; } }
 .mooblox-prompt.locked { border-color: #6e6d72; }
 .mooblox-prompt-text { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .mooblox-prompt-go { flex: none; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: #1e88e5; color: #fff;

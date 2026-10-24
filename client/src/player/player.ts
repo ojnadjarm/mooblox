@@ -3,23 +3,52 @@ import type { Avatar } from './avatar';
 import type { Collider } from './collider';
 import { Physics, stepBody, type Body } from './controller';
 import { FixedStep } from './fixed-step';
+import { accelerate, Feel, JumpGate, landing, squash } from './game-feel';
 import type { FollowCamera } from './follow-camera';
 import type { InputSource } from './input';
 
 const KILL_Y = -6;
 const TURN = 12;
 
-/** The local player: fixed-step capsule body, interpolated avatar, follow camera. */
+/** Where the feet kicked up dust: a footstep (n = 1), a jump or a landing (more puffs, stronger). */
+export type FeetListener = (x: number, y: number, z: number, n: number, strength: number) => void;
+
+/** The local player: fixed-step capsule body with eased speed and forgiving jumps, squashing avatar, follow camera. */
 export class Player {
   readonly body: Body;
+  /** Called when the feet kick up dust. */
+  onFeet: FeetListener | null = null;
   private readonly prev = new Vector3();
   private readonly fixed = new FixedStep(Physics.step);
   private facing = Math.PI;
   private readonly move = { x: 0, z: 0, run: false, jump: false };
+  /** What stepBody gets: the eased velocity as a run-speed fraction, and the gate's jump. */
+  private readonly step = { x: 0, z: 0, run: true, jump: false };
+  private readonly velocity = { x: 0, z: 0 };
+  private readonly gate = new JumpGate();
+  private jumpHeld = false;
+  private sinceLand = Infinity;
+  private landStrength = 0;
+  private stride = 0;
   private readonly tick = (): void => {
-    this.prev.copy(this.body.position);
-    stepBody(this.body, this.move, Physics.step, this.collider);
-    if (this.body.position.y < KILL_Y) {
+    const b = this.body;
+    this.prev.copy(b.position);
+    const want = this.move.run ? Physics.run : Physics.walk;
+    accelerate(this.velocity, this.move.x * want, this.move.z * want, b.onGround, Physics.step);
+    const st = this.step;
+    st.x = this.velocity.x / Physics.run;
+    st.z = this.velocity.z / Physics.run;
+    st.jump = this.gate.step(Physics.step, b.onGround);
+    const wasGround = b.onGround;
+    const fall = -b.velocity.y;
+    stepBody(b, st, Physics.step, this.collider);
+    if (st.jump) this.onFeet?.(b.position.x, b.position.y, b.position.z, 3, 0.4);
+    if (!wasGround && b.onGround) {
+      this.landStrength = landing(fall);
+      this.sinceLand = 0;
+      if (this.landStrength > 0) this.onFeet?.(b.position.x, b.position.y, b.position.z, 4 + Math.round(this.landStrength * 4), this.landStrength);
+    }
+    if (b.position.y < KILL_Y) {
       this.respawn();
     }
   };
@@ -64,7 +93,8 @@ export class Player {
     move.x = dir.x;
     move.z = dir.z;
     move.run = raw.run;
-    move.jump = raw.jump;
+    if (raw.jump && !this.jumpHeld) this.gate.press();
+    this.jumpHeld = raw.jump;
     const alpha = this.fixed.advance(dt, this.tick);
     const root = this.avatar.root;
     root.position.lerpVectors(this.prev, this.body.position, alpha);
@@ -75,15 +105,26 @@ export class Player {
       this.facing += delta * Math.min(1, TURN * dt);
     }
     root.rotation.y = this.facing;
-    this.avatar.play(!this.body.onGround ? 'jump' : moving ? (move.run ? 'run' : 'walk') : 'idle');
+    this.sinceLand += dt;
+    const s = squash(this.sinceLand, this.landStrength);
+    root.scale.set(s.xz, s.y, s.xz);
+    const speed = Math.hypot(this.velocity.x, this.velocity.z);
+    const running = speed > Physics.walk + 0.5;
+    this.avatar.play(!this.body.onGround ? 'jump' : speed > 0.4 ? (running ? 'run' : 'walk') : 'idle');
+    this.stride += running && this.body.onGround ? dt : 0;
+    if (this.stride >= Feel.stride) {
+      this.stride = 0;
+      this.onFeet?.(root.position.x - Math.sin(this.facing) * 0.4, root.position.y, root.position.z - Math.cos(this.facing) * 0.4, 1, 0.2);
+    }
     this.avatar.update(dt);
-    this.camera.follow(root.position, dt);
+    this.camera.follow(root.position, dt, false, this.velocity);
   }
 
   /** Moves the player to (x, z), facing `facing`, with the camera snapped behind. */
   teleport(x: number, z: number, facing: number): void {
     this.body.position.set(x, this.spawn.y, z);
     this.body.velocity.set(0, 0, 0);
+    this.velocity.x = this.velocity.z = 0;
     this.prev.copy(this.body.position);
     this.facing = facing;
     this.camera.yaw = facing + Math.PI;
@@ -106,6 +147,7 @@ export class Player {
   respawn(): void {
     this.body.position.copy(this.spawn);
     this.body.velocity.set(0, 0, 0);
+    this.velocity.x = this.velocity.z = 0;
     this.prev.copy(this.spawn);
   }
 }

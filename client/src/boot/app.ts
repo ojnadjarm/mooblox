@@ -14,6 +14,7 @@ import { QualityManager } from '../perf/quality-manager';
 import type { AvatarFactory, AvatarLook } from '../player/avatar-kit';
 import { BvhCollider } from '../player/collider';
 import { FencedCollider } from '../player/fenced-collider';
+import { Dust } from '../player/dust';
 import { FollowCamera } from '../player/follow-camera';
 import { CombinedInput, KeyboardInput, type InputSource } from '../player/input';
 import { Player } from '../player/player';
@@ -184,8 +185,11 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const steps = new Set<(dt: number) => void>();
   let clock = 0;
   const lod = PROP_LOD[tier];
+  const sparkles = new Dust(0xffd65a, 2.4, 0.6);
+  stage.add(sparkles.mesh);
   steps.add((dt) => {
     clock += dt;
+    sparkles.update(dt);
     const eye = stage.camera.position;
     props.cull(eye.x, eye.z, lod.near, lod.far, PROPS_ALWAYS);
     if (built.streamer.pump(eye.x, eye.z, overview)) {
@@ -279,7 +283,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
         key = nextKey;
         rebuild(next);
       } else {
-        props.update(next);
+        for (const p of props.update(next)) sparkles.kick(p.root.position.x, p.root.position.y + 1.2, p.root.position.z, 18, 1);
         gates.update(next);
       }
       gate.invalidate();
@@ -334,7 +338,7 @@ export async function startPlayer(
   const avatar = await avatars.create(look);
   view.stage.add(avatar.root);
   const collider = new FencedCollider(view.collider, view.fence);
-  const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement);
+  const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement, view.collider);
   const spawn = new Vector3(view.layout.spawn.x, SPAWN_HEIGHT, view.layout.spawn.z);
   view.stopOverview();
   const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
@@ -348,8 +352,15 @@ export async function startPlayer(
     const shift = shiftFor(before, after, p.x, p.z);
     player.shift(shift.x, shift.z);
   });
+  // Footstep dust is an effect: off on the low tier.
+  const dust = view.quality.tier === 'low' ? null : new Dust();
+  if (dust) {
+    view.stage.add(dust.mesh);
+    player.onFeet = (x, y, z, n, strength) => dust.kick(x, y, z, n, strength);
+  }
   view.onFrame((dt) => {
     player.update(dt);
+    dust?.update(dt);
     view.stage.focusShadow(player.body.position.x, player.body.position.z, SHADOW_RADIUS);
   });
   return player;
