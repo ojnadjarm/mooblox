@@ -7,7 +7,8 @@ import type { Player } from '../player/player';
 import { Palette } from '../world/palette';
 import { createPropRegistry } from '../world/props/catalog';
 import { CanvasSignPainter } from '../world/props/sign-painter';
-import { startPlayer, startWorld, type WorldView } from './app';
+import { createOpenerRegistry } from '../interaction/catalog';
+import { startActivities, startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
 const FIXTURE_HOST = 'https://moodle.example';
@@ -29,7 +30,8 @@ async function boot(): Promise<void> {
     const walk = Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
     const player = await startPlayer(view, ASSETS, { skin: 'b', tint: Palette.red }, [pilot]);
-    Object.assign(window, { mooblox: { ...view, probe, player } });
+    const interaction = startActivities(view, player, createOpenerRegistry());
+    Object.assign(window, { mooblox: { ...view, probe, player, interaction } });
     if (walk) {
       pilot.drive(view, player, walk, probe);
     }

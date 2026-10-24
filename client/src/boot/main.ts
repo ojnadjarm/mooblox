@@ -1,7 +1,8 @@
 import { AjaxGateway } from '../moodle/ajax-gateway';
 import { keepSessionAlive } from '../moodle/session-keeper';
 import { CourseStore } from '../state/course-store';
-import { startPlayer, startWorld } from './app';
+import { createOpenerRegistry } from '../interaction/catalog';
+import { startActivities, startPlayer, startWorld } from './app';
 import { readConfig } from './config';
 
 const SESSION_TOUCH_MS = 5 * 60 * 1000;
@@ -19,7 +20,8 @@ async function boot(): Promise<void> {
   store.set(await gateway.getWorld(config.courseid));
   root.dataset['courseid'] = String(config.courseid);
   const view = startWorld(root, store.world!);
-  await startPlayer(view, new URL(/* @vite-ignore */ './assets/', import.meta.url).href, { skin: config.avatar || 'a', tint: null });
+  const player = await startPlayer(view, new URL(/* @vite-ignore */ './assets/', import.meta.url).href, { skin: config.avatar || 'a', tint: null });
+  startActivities(view, player, createOpenerRegistry(), () => store.world!);
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));
