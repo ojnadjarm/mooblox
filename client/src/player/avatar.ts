@@ -1,6 +1,7 @@
 import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Mesh, type Object3D } from 'three';
 import { sense } from './attention';
 import { CLIP_FOR, type AvatarState } from './clips';
+import { A, actState, IDLE_ACTS, KEEP, STOP, stepActs } from './idle-acts';
 import { Layered } from './layered';
 import { IDLE, JUMP, M, motionState, RUN, stepMotion, WALK, type MotionCode } from './motion';
 
@@ -8,7 +9,7 @@ const FADE = 0.15;
 const CODE: Readonly<Record<AvatarState, MotionCode>> = { idle: IDLE, walk: WALK, run: RUN, jump: JUMP };
 let created = 0;
 
-/** One character in the world: its model, the clip for each state, and a procedural motion layer on top. */
+/** One character in the world: its model, the clip for each state, idle acts now and then, and a procedural motion layer on top. */
 export class Avatar {
   readonly mixer: AnimationMixer;
   /** Per-kid seed: clip phase, playback rate, glances and breathing. */
@@ -18,6 +19,11 @@ export class Avatar {
   private readonly torso: Layered | null;
   private readonly head: Layered | null;
   private readonly m: Float64Array;
+  /** Idle acts the clips include (null = missing), the act state, and the act playing. */
+  private readonly acts: (AnimationAction | null)[];
+  private readonly a: Float64Array;
+  private act: AnimationAction | null = null;
+  private readonly hasAct = (i: number): boolean => this.acts[i] !== null;
 
   constructor(
     readonly root: Object3D,
@@ -39,6 +45,15 @@ export class Avatar {
       }
       this.actions.set(state, action);
     }
+    this.a = actState(this.seed);
+    this.acts = IDLE_ACTS.map(({ clip }) => {
+      const c = clips.find((x) => x.name === clip);
+      if (!c) return null;
+      const action = this.mixer.clipAction(c);
+      action.setLoop(LoopOnce, 1);
+      action.clampWhenFinished = true;
+      return action;
+    });
     const bone = (name: string): Layered | null => {
       const o = root.getObjectByName(name);
       return o ? new Layered(o) : null;
@@ -63,7 +78,7 @@ export class Avatar {
     return names;
   }
 
-  /** Cross-fades to the clip of `state`; a repeated state keeps playing. Loops start at this kid's own phase. */
+  /** Cross-fades to the clip of `state` (from an act if one plays); a repeated state keeps playing. Loops start at this kid's own phase. */
   play(state: AvatarState): void {
     if (state === this.current) {
       return;
@@ -71,10 +86,16 @@ export class Avatar {
     const next = this.actions.get(state)!;
     next.reset().play();
     if (state !== 'jump') next.time = this.m[M.phase]! * next.getClip().duration;
-    if (this.current) {
-      this.actions.get(this.current)!.crossFadeTo(next, FADE, false);
-    }
+    const from = this.act ?? (this.current ? this.actions.get(this.current)! : null);
+    from?.crossFadeTo(next, FADE, false);
+    this.act = null;
+    this.a[A.playing] = -1;
     this.current = state;
+  }
+
+  /** The idle act playing (its clip name), or null. */
+  get acting(): string | null {
+    return this.act?.getClip().name ?? null;
   }
 
   /** Ground speed (m/s; NaN = as authored) and turn rate (rad/s, + = towards +x) for stride rate, lean and bank. */
@@ -90,10 +111,33 @@ export class Avatar {
     this.head?.restore();
     sense(m, this.root, this);
     stepMotion(m, CODE[state], dt);
+    this.stepAct(state, dt);
     this.actions.get(state)!.timeScale = m[M.rate]!;
     this.mixer.update(dt);
     this.torso?.apply(m, M.torsoPitch, M.torsoStretch);
     this.head?.apply(m, M.headPitch, -1);
+  }
+
+  /** Starts an idle act or fades it back to the idle clip, as the act step says. */
+  private stepAct(state: AvatarState, dt: number): void {
+    this.a[A.attend] = this.m[M.attend]!;
+    const next = stepActs(this.a, this.seed, state === 'idle', dt, this.hasAct);
+    if (next === KEEP) return;
+    const idle = this.actions.get('idle')!;
+    if (next === STOP) {
+      if (this.act && state === 'idle') {
+        idle.reset().play();
+        idle.time = this.m[M.phase]! * idle.getClip().duration;
+        this.act.crossFadeTo(idle, FADE, false);
+      }
+      this.act = null;
+      return;
+    }
+    const act = this.acts[next]!;
+    act.reset().play();
+    (this.act ?? idle).crossFadeTo(act, FADE, false);
+    this.act = act;
+    this.a[A.left] = act.getClip().duration - FADE;
   }
 
   /** Frees this avatar's geometry; materials are shared by its kit. */

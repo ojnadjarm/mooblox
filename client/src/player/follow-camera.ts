@@ -19,7 +19,7 @@ const NEAREST = 2.2;
 const SIDE = 1.2;
 /** Radius of the camera itself, pushed out of anything it touches every frame. */
 const BODY = 0.25;
-/** Seconds between sight-line probes (10 a second is plenty for an eased camera). */
+/** Seconds between sight-line probes (10 a second is plenty for an eased camera); a blocked one checks one side line per frame after. */
 const PROBE_EVERY = 0.1;
 
 /** Third-person camera behind the player: drag turns and tilts it, the wheel zooms, it looks ahead and stays out of walls. */
@@ -31,6 +31,9 @@ export class FollowCamera {
   private reach = DISTANCE;
   private clear = DISTANCE;
   private sinceProbe = 0;
+  /** Probe in progress: 0 = none, 1 / 2 = the centre line was blocked at `centre`, the +SIDE / -SIDE line is next. */
+  private pending = 0;
+  private centre = 0;
   private aheadX = 0;
   private aheadZ = 0;
   private readonly goal = new Vector3();
@@ -81,9 +84,15 @@ export class FollowCamera {
     this.aheadZ += ((velocity ? velocity.z * Feel.lookAhead : 0) - this.aheadZ) * k;
     this.look.set(target.x + this.aheadX, target.y + LOOK_HEIGHT, target.z + this.aheadZ);
     this.sinceProbe += dt;
-    if (snap || this.sinceProbe >= PROBE_EVERY) {
+    if (snap) {
+      this.pending = 0;
       this.sinceProbe = 0;
       this.clear = this.clearDistance(this.distance);
+    } else if (this.pending > 0) {
+      this.probeSide();
+    } else if (this.sinceProbe >= PROBE_EVERY) {
+      this.sinceProbe = 0;
+      this.probeCentre();
     }
     const clear = this.clear;
     this.reach = snap || clear < this.reach ? clear : damp(this.reach, clear, EASE_OUT, dt);
@@ -102,8 +111,37 @@ export class FollowCamera {
     this.camera.lookAt(this.look);
   }
 
+  /** First step of a spread-out probe: the centre line; a blocked one leaves the side lines to the next frames. */
+  private probeCentre(): void {
+    if (!this.collider) return;
+    const d = this.distance;
+    const centre = this.lineClear(d, 0);
+    if (centre >= d) {
+      this.clear = d;
+    } else if (centre >= (d * (PROBES - 1)) / PROBES) {
+      this.clear = Math.max(NEAREST, centre);
+    } else {
+      this.centre = centre;
+      this.pending = 1;
+    }
+  }
+
+  /** Next step of a spread-out probe: one side line; a clear one means a thin occluder (stay out), both blocked pull in. */
+  private probeSide(): void {
+    const d = this.distance;
+    if (this.lineClear(d, this.pending === 1 ? SIDE : -SIDE) >= d) {
+      this.clear = d;
+      this.pending = 0;
+    } else if (this.pending === 1) {
+      this.pending = 2;
+    } else {
+      this.clear = Math.max(NEAREST, this.centre);
+      this.pending = 0;
+    }
+  }
+
   /**
-   * How far back the camera can sit before a solid. A blocked sight line pulls it in unless the line SIDE metres to either
+   * How far back the camera can sit before a solid, all lines at once. A blocked sight line pulls it in unless the line SIDE metres to either
    * side is clear all the way (a lamp post or thin trunk the player stays visible past) and the camera spot is clear.
    */
   private clearDistance(distance: number): number {
