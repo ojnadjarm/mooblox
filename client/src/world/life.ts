@@ -287,13 +287,18 @@ function birds(view: WorldView, teardown: (() => void)[]): Mover {
   view.stage.add(flock);
   teardown.push(() => flock.removeFromParent());
   const m = new Object3D();
-  const e = Math.min(view.layout.extent, 120);
-  return (t) => {
+  // The flock wheels over wherever the player is (eased after the camera), so the sky above every island has gulls.
+  const centre = { x: view.layout.spawn.x, z: view.layout.spawn.z };
+  return (t, dt) => {
+    const eye = view.stage.camera.position;
+    const k = 1 - Math.exp(-dt / 4);
+    centre.x += (eye.x - centre.x) * k;
+    centre.z += (eye.z - centre.z) * k;
     for (let i = 0; i < n; i++) {
-      const r = e * (0.45 + (i % 3) * 0.12);
-      const a = t * (0.12 + (i % 2) * 0.03) + (i * 2 * Math.PI) / n;
-      m.position.set(Math.cos(a) * r, 14 + (i % 4) * 2 + Math.sin(t + i) * 0.6, Math.sin(a) * r);
-      m.rotation.set(0, -a, 0);
+      const r = 14 + (i % 3) * 7 + (i % 5);
+      const a = t * (0.16 + (i % 2) * 0.04) * (i % 4 === 3 ? -1 : 1) + (i * 2 * Math.PI) / n;
+      m.position.set(centre.x + Math.cos(a) * r, 11 + (i % 4) * 2.2 + Math.sin(t + i) * 0.6, centre.z + Math.sin(a) * r);
+      m.rotation.set(0, i % 4 === 3 ? Math.PI - a : -a, 0);
       m.scale.set(1.4, 1.4 * (0.4 + Math.abs(Math.sin(t * 6 + i))), 1.4);
       m.updateMatrix();
       flock.setMatrixAt(i, m.matrix);

@@ -33,7 +33,7 @@ async function boot(): Promise<void> {
   root.dataset['courseid'] = String(config.courseid);
   const assets = new URL(/* @vite-ignore */ './assets/', import.meta.url).href;
   const xhigh = bootTier() === 'xhigh';
-  const models = await ModelLibrary.load(assets, modelIds(), xhigh);
+  const models = await ModelLibrary.load(assets, modelIds());
   const view = startWorld(root, store.world!, models, { ...DEFAULT_GATE_STRINGS, ...config.strings });
   if (xhigh) void view.kit.loadDetail(assets);
   const avatars = await AvatarKit.load(assets);

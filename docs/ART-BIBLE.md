@@ -74,13 +74,27 @@ Each colour has a lit and a shade value; the generator writes lit on up-facing a
 | Foliage | `#5DB761` | `#2F8466` | canopy lit / under-canopy |
 | Sand | `#F7E2AE` | `#E0C38A` | coves and beaches |
 | Water | `#5ED8D2` shallow | `#1F5FA8` deep | `#1FA4C9` mid; foam `#FFFFFF` |
-| Sky | `#4FA3E0` top | `#FBE3C2` horizon | smooth gradient, a few faceted clouds |
+| Sky | `#3A8FDB` zenith, `#7DBDEB` upper | `#FBE3C2` horizon | warm `#FFD39A` glow under and round the sun, `#FFF6DF` sun disc |
+| Far sea | `#3F86C6` at the horizon | `#1F5FA8` below | thin `#F3EBD9` line where sea meets sky |
+| Clouds | `#FFFBF2` lit, `#FFE2B8` sun side | `#C9C6E0` underside | faceted cumulus, 3-5 lumps, flat bottoms, drifting |
 | Shadow tint | `#4B5A8C` | | hemisphere ground colour and baked AO tint |
 | Ink | `#2B2F3A` | | sign text, window frames only |
 
 Activity purpose colours stay (they carry meaning): content `#2F7FE0`, assessment `#E5484D`, communication `#F6C445`,
 collaboration `#FF9A3C`, interactive `#8E5AD8`. Saturation rule: purpose colours and the district accent are the most
 saturated things in a view; everything else sits a step calmer.
+
+### Atmosphere (round 5, the owner's "warm place, alive")
+
+1. **The haze is the sky behind it.** Distance fades every object to the colour the sky dome draws along the same view ray
+   (`skyColour`): above the horizon the warm cream, below it the far sea. Far islands melt into the view instead of a
+   milky wall; never a flat fog colour.
+2. **The sea reaches the horizon** in cobalt, with one bright line at the horizon; the cream lives only in the sky.
+3. **Clouds are always in view**: a ring just above an eye-level horizon (4-15 degrees) plus a few higher, drifting slowly.
+   Sky and clouds are one mesh, one draw, one program on every tier.
+4. **Warm key, cool-violet bounce**: sun `#FFE6BF` from about 38 degrees, hemisphere sky `#DCE8F8` over a violet bounce
+   `#8A7290`, so faces turned from the sun stay warm-violet, never grey. Neutral tone mapping keeps the palette's hue.
+5. **Life in every view**: gulls wheel over the player's island, water twinkles on the sun side, flags and trees sway.
 
 ## 5. Shape language and landmarks
 

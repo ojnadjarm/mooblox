@@ -24,12 +24,28 @@ export interface LookPalette {
   readonly wall: number;
 }
 
+/** The colour script's sky (sRGB hex): dome gradient, sun, far sea below the horizon, cloud paint. */
+export interface SkyScript {
+  readonly zenith: number;
+  readonly upper: number;
+  readonly horizon: number;
+  /** Warm glow on the horizon under the sun and round it. */
+  readonly glow: number;
+  /** Thin bright line where sea meets sky. */
+  readonly line: number;
+  readonly seaHorizon: number;
+  readonly sea: number;
+  readonly disc: number;
+  readonly cloudLit: number;
+  readonly cloudWarm: number;
+  readonly cloudShade: number;
+}
+
 /** Lighting, sky, water, post and sizes of one art direction. */
 export interface Look {
   readonly name: string;
   readonly palette: LookPalette;
-  readonly skyTop: number;
-  readonly skyHorizon: number;
+  readonly sky: SkyScript;
   readonly fog: { readonly color: number; readonly near: number; readonly far: number };
   readonly sun: { readonly color: number; readonly intensity: number; readonly dir: readonly [number, number, number] };
   readonly hemi: { readonly sky: number; readonly ground: number; readonly intensity: number };
@@ -62,11 +78,22 @@ export const CAMPUS: Look = {
     rock: 0xc7bbc9,
     wall: 0xf6ead3,
   },
-  skyTop: 0x4fa3e0,
-  skyHorizon: 0xfbe3c2,
-  fog: { color: 0xf3e3cf, near: 170, far: 620 },
-  sun: { color: 0xfff0d8, intensity: 2.5, dir: [0.65, 0.85, 0.5] },
-  hemi: { sky: 0xfff4e2, ground: 0x4b5a8c, intensity: 1.35 },
+  sky: {
+    zenith: 0x3a8fdb,
+    upper: 0x7dbdeb,
+    horizon: 0xfbe3c2,
+    glow: 0xffd39a,
+    line: 0xf3ebd9,
+    seaHorizon: 0x3f86c6,
+    sea: 0x1f5fa8,
+    disc: 0xfff6df,
+    cloudLit: 0xfffbf2,
+    cloudWarm: 0xffe2b8,
+    cloudShade: 0xc9c6e0,
+  },
+  fog: { color: 0xfbe3c2, near: 170, far: 620 },
+  sun: { color: 0xffe6bf, intensity: 2.8, dir: [0.6, 0.62, 0.5] },
+  hemi: { sky: 0xdce8f8, ground: 0x8a7290, intensity: 1.45 },
   exposure: 1.02,
   water: { shallow: 0x5ed8d2, mid: 0x1fa4c9, deep: 0x1f5fa8, foam: 0xffffff, glint: 0xfff4e0 },
   post: { bloom: 0.08, saturation: 1.04, contrast: 1.04, warmth: 0.03, vignette: 0.18 },

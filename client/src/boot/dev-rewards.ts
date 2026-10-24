@@ -16,7 +16,7 @@ import { CourseStore } from '../state/course-store';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { modelIds } from '../world/dressing';
 import { ModelLibrary } from '../world/model-library';
-import { bootTier, startActivities, startAvatarPicker, startPlayer, startWorld, type WorldView } from './app';
+import { startActivities, startAvatarPicker, startPlayer, startWorld, type WorldView } from './app';
 import { startRewards } from './rewards';
 
 const ASSETS = '/assets/';
@@ -121,7 +121,7 @@ async function boot(): Promise<void> {
   const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp), params.get('collect') === 'all', devGoal(params.get('goal')));
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));
-  const models = await ModelLibrary.load(ASSETS, modelIds(), bootTier() === 'xhigh');
+  const models = await ModelLibrary.load(ASSETS, modelIds());
   const view = startWorld(root, store.world!, models);
   const avatars = await AvatarKit.load(ASSETS);
   if (params.get('scene') === 'hats') {

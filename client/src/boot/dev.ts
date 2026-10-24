@@ -19,6 +19,7 @@ import { decodeLook, encodeLook } from '../player/look';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { ScriptedTutor } from '../tutor/scripted-tutor';
+import { conceptShot } from './dev-shots';
 import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
@@ -45,7 +46,7 @@ async function boot(): Promise<void> {
   const shape = params.get('shape');
   store.set(shape ? shapeWorld(Number(params.get('course') ?? 7), parseShape(shape)) : await gateway.getWorld(fixture.courseid));
   const xhigh = bootTier() === 'xhigh';
-  const models = await ModelLibrary.load(ASSETS, modelIds(), xhigh);
+  const models = await ModelLibrary.load(ASSETS, modelIds());
   const view = startWorld(root, store.world!, models);
   if (xhigh) void view.kit.loadDetail(ASSETS);
   const avatars = await AvatarKit.load(ASSETS);
@@ -57,6 +58,15 @@ async function boot(): Promise<void> {
     await avatarLineup(view, probe);
   } else if (scene === 'props') {
     propLineup(view, probe);
+  } else if (scene === 'shot') {
+    const name = params.get('cam');
+    const shot = conceptShot(name === 'district' || name === 'shore' ? name : 'hub', view.layout, view.dressing);
+    view.stopOverview();
+    // The island looked at is the live one (the camera itself may hover over the water).
+    view.follow({ x: shot.at.x, z: shot.at.z });
+    view.stage.camera.position.set(shot.eye.x, shot.eye.y, shot.eye.z);
+    view.stage.camera.lookAt(shot.at.x, shot.at.y, shot.at.z);
+    view.stage.focusShadow(shot.at.x, shot.at.z, 40);
   } else if (scene !== 'overview') {
     const walk = params.get('walk') === 'far' ? farthestPlot(view) : Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();

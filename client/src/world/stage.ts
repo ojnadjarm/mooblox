@@ -1,23 +1,20 @@
 import {
-  BufferAttribute,
   Color,
   DirectionalLight,
   Fog,
   HemisphereLight,
-  Mesh,
-  ACESFilmicToneMapping,
+  NeutralToneMapping,
   PCFShadowMap,
   PCFSoftShadowMap,
   PerspectiveCamera,
-  SRGBColorSpace,
   Scene,
-  SphereGeometry,
   WebGLRenderer,
   type Object3D,
 } from 'three';
-import type { MaterialKit } from './material-kit';
 import type { Look } from './look';
+import type { MaterialKit } from './material-kit';
 import { PostChain } from './post';
+import { Sky } from './sky';
 
 export interface StageOptions {
   readonly antialias: boolean;
@@ -29,6 +26,9 @@ export interface StageOptions {
 
 const SUN_DISTANCE = 80;
 
+/** Seed of the cloud layer: one designed sky for every course. */
+const SKY_SEED = 7;
+
 /** One WebGL2 renderer, scene, camera and the fixed light set (sky, sun with one shadow, fog). */
 export class Stage {
   readonly renderer: WebGLRenderer;
@@ -36,13 +36,14 @@ export class Stage {
   readonly camera = new PerspectiveCamera(55, 1, 0.1, 900);
   readonly sun: DirectionalLight;
   readonly hemi: HemisphereLight;
+  readonly sky: Sky;
   private post: PostChain | null;
   private readonly sunDir: { x: number; y: number; z: number };
   private readonly vignetteStrength: number;
 
   constructor(
     readonly canvasHost: HTMLElement,
-    kit: MaterialKit,
+    _kit: MaterialKit,
     options: StageOptions,
     look: Look,
   ) {
@@ -51,7 +52,8 @@ export class Stage {
     const [sx, sy, sz] = look.sun.dir;
     this.sunDir = { x: sx, y: sy, z: sz };
     this.renderer = new WebGLRenderer({ antialias: options.antialias && !options.post, powerPreference: 'high-performance' });
-    this.renderer.toneMapping = ACESFilmicToneMapping;
+    // Neutral keeps the palette's hue and saturation (ACES greyed the sky and the cream horizon).
+    this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.toneMappingExposure = look.exposure;
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
@@ -59,9 +61,10 @@ export class Stage {
     this.renderer.domElement.style.display = 'block';
     canvasHost.appendChild(this.renderer.domElement);
 
-    this.scene.background = new Color(look.skyHorizon);
+    this.scene.background = new Color(look.sky.horizon);
     this.scene.fog = new Fog(look.fog.color, look.fog.near, look.fog.far);
-    this.scene.add(this.hemi, this.sun, this.sun.target, skyDome(kit, look));
+    this.sky = new Sky(look, SKY_SEED);
+    this.scene.add(this.hemi, this.sun, this.sun.target, this.sky.mesh);
     this.post = options.post ? new PostChain(this.renderer, this.scene, this.camera, look, options.ao === true) : null;
     this.vignetteStrength = look.post.vignette;
     if (!this.post) vignette(this.renderer.domElement, look.post.vignette);
@@ -80,6 +83,9 @@ export class Stage {
   }
 
   add(object: Object3D): void {
+    // The island builder's static cloud bank is replaced by the sky's drifting layer.
+    const old = object.getObjectByName('clouds');
+    if (old) old.visible = false;
     this.scene.add(object);
   }
 
@@ -114,6 +120,7 @@ export class Stage {
   }
 
   render(): void {
+    this.sky.update();
     this.renderer.info.reset();
     if (this.post) {
       this.post.render();
@@ -123,6 +130,7 @@ export class Stage {
   }
 
   dispose(): void {
+    this.sky.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -141,27 +149,4 @@ function vignette(canvas: HTMLElement, strength: number): void {
     background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(20,10,0,${(strength * 0.9).toFixed(3)}) 100%)`,
   });
   canvas.after(v);
-}
-
-/** Unlit gradient dome, horizon to zenith. */
-function skyDome(kit: MaterialKit, look: Look): Mesh {
-  const g = new SphereGeometry(800, 24, 12);
-  // Blended in sRGB (a linear blend of cream and blue greys out in the middle); the sky material skips tone mapping.
-  const top = new Color(look.skyTop).getRGB({ r: 0, g: 0, b: 0 }, SRGBColorSpace);
-  const horizon = new Color(look.skyHorizon).getRGB({ r: 0, g: 0, b: 0 }, SRGBColorSpace);
-  const pos = g.getAttribute('position');
-  const colors = new Float32Array(pos.count * 3);
-  const c = new Color();
-  for (let i = 0; i < pos.count; i++) {
-    const t = Math.pow(Math.max(0, pos.getY(i) / 800), 0.45);
-    c.setRGB(horizon.r + (top.r - horizon.r) * t, horizon.g + (top.g - horizon.g) * t, horizon.b + (top.b - horizon.b) * t, SRGBColorSpace);
-    colors.set([c.r, c.g, c.b], i * 3);
-  }
-  g.setAttribute('color', new BufferAttribute(colors, 3));
-  const dome = new Mesh(g, kit.sky);
-  dome.name = 'sky';
-  // Drawn after every opaque part: depth test rejects the covered pixels before shading.
-  dome.renderOrder = 2;
-  dome.frustumCulled = false;
-  return dome;
 }

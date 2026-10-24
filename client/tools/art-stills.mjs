@@ -1,5 +1,6 @@
-// Art-round stills and walk clip: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--video]
-// Same cameras every round: overview 1366 (high), play 1366 (high), play 400 (low); JPEGs `<prefix>-<shape>-<view>.jpg`.
+// Art-round stills and walk clip: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--video]
+// Same cameras every round: overview 1366 (high), play 1366 (high), play 400 (low), plus the concept cameras hub, district and
+// shore 1366 (high, `?scene=shot&cam=`, kids on); JPEGs `<prefix>-<shape>-<view>.jpg`.
 // --video records `walk.webm` (12 s, 1366x768 high, autopilot to the farthest demo plot) from the canvas stream.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { loadChromium } from './playwright.mjs';
 const args = process.argv.slice(2);
 const out = args[0];
 if (!out || out.startsWith('--')) {
-  console.error('usage: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--video]');
+  console.error('usage: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--video]');
   process.exit(2);
 }
 const opt = (name, fallback) => {
@@ -26,7 +27,12 @@ const VIEWS = [
   { name: 'overview-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=overview' },
   { name: 'play-1366', w: 1366, h: 768, tier: 'high', extra: 'nokids' },
   { name: 'play-400', w: 400, h: 800, tier: 'low', extra: 'nokids' },
+  { name: 'hub-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=hub' },
+  { name: 'district-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=district' },
+  { name: 'shore-1366', w: 1366, h: 768, tier: 'high', extra: 'scene=shot&cam=shore' },
 ];
+const only = opt('views', '');
+const views = only ? VIEWS.filter((v) => only.split(',').includes(v.name)) : VIEWS;
 const query = (shape, tier, extra) => `${shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}&`}quality=${tier}&${extra}`;
 
 const dist = mkdtempSync(join(tmpdir(), 'mooblox-art-'));
@@ -47,7 +53,7 @@ async function open(w, h, q) {
 
 try {
   for (const shape of shapes) {
-    for (const v of VIEWS) {
+    for (const v of views) {
       const page = await open(v.w, v.h, query(shape, v.tier, v.extra));
       await page.waitForTimeout(1200);
       const n = await page.evaluate(() => {

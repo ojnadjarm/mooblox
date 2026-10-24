@@ -1,4 +1,5 @@
 import { ShaderChunk, ShaderLib, UniformsLib, type Fog } from 'three';
+import { SKY_GLSL, SKY_UNIFORMS } from './sky';
 
 /**
  * The haze centre (world x, z) every fogged program reads. A plain object, not a Vector3: three clones its own math types
@@ -9,24 +10,68 @@ let installed = false;
 
 /**
  * Turns three's camera-depth fog into a world-space haze bubble: fog grows with the horizontal distance from one moving
- * centre (per pixel, so huge triangles like the water stay right), `fog.near` and `fog.far` are distances from it.
- * Call before the first material compiles; idempotent.
+ * centre (per pixel, so huge triangles like the water stay right), `fog.near` and `fog.far` are distances from it. The haze
+ * colour is the sky's background along the view ray (`skyColour`), so far things melt into the sky or the far sea behind
+ * them instead of a flat wall. Call before the first material compiles; idempotent.
  */
 export function installHaze(): void {
   if (installed) return;
   installed = true;
-  (UniformsLib.fog as Record<string, { value: unknown }>)['hazeCentre'] = { value: CENTRE };
+  const shared = { hazeCentre: { value: CENTRE }, ...SKY_UNIFORMS };
+  Object.assign(UniformsLib.fog, shared);
   for (const shader of Object.values(ShaderLib)) {
-    const u = shader.uniforms as Record<string, { value: unknown }>;
-    if ('fogNear' in u) u['hazeCentre'] = { value: CENTRE };
+    if ('fogNear' in shader.uniforms) Object.assign(shader.uniforms, shared);
   }
-  ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n\tvarying float vFogDepth;\n\tvarying vec2 vHazeXZ;\n#endif\n';
-  // World x/z from view space: the view matrix is rigid, so its inverse rotation is the transpose.
-  ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = - mvPosition.z;\n\tvHazeXZ = (cameraPosition + mvPosition.xyz * mat3( viewMatrix )).xz;\n#endif\n';
-  ShaderChunk.fog_pars_fragment =
-    '#ifdef USE_FOG\n\tuniform vec3 fogColor;\n\tuniform vec3 hazeCentre;\n\tvarying float vFogDepth;\n\tvarying vec2 vHazeXZ;\n\tuniform float fogNear;\n\tuniform float fogFar;\n\tuniform float fogDensity;\n#endif\n';
-  ShaderChunk.fog_fragment =
-    '#ifdef USE_FOG\n\tfloat fogFactor = smoothstep( fogNear, fogFar, length( vHazeXZ - hazeCentre.xz ) );\n\tgl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );\n#endif\n';
+  // Haze colour per vertex (small triangles, cheap on weak GPUs); `HAZE_PER_PIXEL` (the water: huge triangles) per pixel.
+  ShaderChunk.fog_pars_vertex = `#ifdef USE_FOG
+\tvarying float vFogDepth;
+\tvarying vec3 vHazeWorld;
+\t#ifndef HAZE_PER_PIXEL
+\tvarying vec3 vHazeSky;
+\tuniform vec3 hazeCentre;
+\tuniform float fogNear;
+${SKY_GLSL}
+\t#endif
+#endif
+`;
+  // World position from view space: the view matrix is rigid, so its inverse rotation is the transpose.
+  ShaderChunk.fog_vertex = `#ifdef USE_FOG
+\tvFogDepth = - mvPosition.z;
+\tvHazeWorld = cameraPosition + mvPosition.xyz * mat3( viewMatrix );
+\t#ifndef HAZE_PER_PIXEL
+\tvHazeSky = length( vHazeWorld.xz - hazeCentre.xz ) > fogNear - 30.0 ? pow( skyColour( normalize( vHazeWorld - cameraPosition ) ), vec3( 2.2 ) ) : vec3( 0.0 );
+\t#endif
+#endif
+`;
+  ShaderChunk.fog_pars_fragment = `#ifdef USE_FOG
+\tuniform vec3 fogColor;
+\tuniform vec3 hazeCentre;
+\tvarying float vFogDepth;
+\tvarying vec3 vHazeWorld;
+\t#define vHazeXZ vHazeWorld.xz
+\tuniform float fogNear;
+\tuniform float fogFar;
+\tuniform float fogDensity;
+\t#ifdef HAZE_PER_PIXEL
+${SKY_GLSL}
+\t#else
+\tvarying vec3 vHazeSky;
+\t#endif
+#endif
+`;
+  // The sky colour is sRGB: to linear, then into whatever space the fragment already wrote (screen sRGB or a linear target).
+  ShaderChunk.fog_fragment = `#ifdef USE_FOG
+\tfloat fogFactor = smoothstep( fogNear, fogFar, length( vHazeWorld.xz - hazeCentre.xz ) );
+\tif ( fogFactor > 0.0 ) {
+\t\t#ifdef HAZE_PER_PIXEL
+\t\tvec3 hazeSky = pow( skyColour( normalize( vHazeWorld - cameraPosition ) ), vec3( 2.2 ) );
+\t\t#else
+\t\tvec3 hazeSky = vHazeSky;
+\t\t#endif
+\t\tgl_FragColor.rgb = mix( gl_FragColor.rgb, linearToOutputTexel( vec4( hazeSky, 1.0 ) ).rgb, fogFactor );
+\t}
+#endif
+`;
 }
 
 /** Clear and fully hazed distances past the bubble's edge, metres. */

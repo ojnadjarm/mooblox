@@ -15,6 +15,7 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
   const sun = new Vector3(...look.sun.dir).normalize();
   return new ShaderMaterial({
     fog: true,
+    defines: { HAZE_PER_PIXEL: '' },
     uniforms: UniformsUtils.merge([
       UniformsLib.fog,
       {
@@ -26,7 +27,7 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
         uDeep: { value: new Color(look.water.deep) },
         uFoam: { value: new Color(look.water.foam) },
         uGlint: { value: new Color(look.water.glint) },
-        uSky: { value: new Color(look.skyHorizon) },
+        uSky: { value: new Color(look.sky.seaHorizon) },
         uSun: { value: sun },
       },
     ]),
@@ -74,8 +75,13 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
         float fres = pow(1.0 - max(view.y, 0.0), 4.0);
         col = mix(col, uSky, fres * 0.35);
         vec3 h = normalize(view + uSun);
-        float glint = pow(max(h.y + (n - 0.5) * 0.04, 0.0), 900.0) * 2.5;
-        col += uGlint * glint;
+        float glint = pow(max(h.y + (n - 0.5) * 0.04, 0.0), 900.0) * 1.1;
+        // Sparkles: a few cells twinkle, most of them on the sun's side of the water.
+        vec2 q = p * 1.4;
+        float r = hash(floor(q));
+        float twinkle = step(0.97, r) * pow(max(sin(uTime * 2.6 + r * 60.0), 0.0), 6.0);
+        float spark = twinkle * smoothstep(0.32, 0.05, length(fract(q) - 0.5)) * (0.25 + pow(max(h.y, 0.0), 30.0)) * smoothstep(2.0, 6.0, shore);
+        col += uGlint * (glint + spark * 1.3);
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

@@ -1,5 +1,4 @@
 import {
-  BackSide,
   BufferAttribute,
   Color,
   DataTexture,
@@ -26,8 +25,6 @@ export class MaterialKit {
   readonly plastic: Material;
   /** Plastic with the stud normal map, for baseplate tops (uv in studs). */
   readonly studs: Material;
-  /** Unlit gradient for the sky dome. */
-  readonly sky: Material;
   /** Unlit, over-bright vertex colour for lamps and lanterns (bloom source on the high tier). */
   readonly glow: Material;
   /** Kit-model dressing: vertex colours plus a wind sway in the vertex shader, weighted by the `sway` attribute. */
@@ -43,7 +40,6 @@ export class MaterialKit {
     this.plastic = plasticMaterial(tier, null);
     this.studs = plasticMaterial(tier, studNormalMap());
     if (tier === 'rich') withDetail(this.studs as MeshStandardMaterial, this.detail, 'mooblox-studs-rich', false);
-    this.sky = new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, depthWrite: false, toneMapped: false });
     this.glow = new MeshBasicMaterial({ vertexColors: true, color: new Color().setScalar(tier === 'low' ? 1 : 2.5) });
     this.scenery = swayMaterial(tier, this.time);
     if (tier === 'rich') withDetail(this.scenery as MeshStandardMaterial, this.detail, 'mooblox-sway-rich', true);
@@ -83,7 +79,7 @@ export class MaterialKit {
   }
 
   dispose(): void {
-    for (const m of [this.plastic, this.studs, this.sky, this.glow, this.scenery, this.sceneryInstanced]) {
+    for (const m of [this.plastic, this.studs, this.glow, this.scenery, this.sceneryInstanced]) {
       m.dispose();
     }
   }

@@ -270,6 +270,17 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `mesh(name, mat, tail)` -> `userData.head`: the body draws without the merged leaf only while it swings; `Prop.swing`,
     `PropsLayer.swing(nearId)`, `ActivityInteraction.nearId`). Creator kids: `CLOTH` in the bible palette, baked shade-tint AO
     in `character/mesh.ts`; NPC shirts in the same palette. Gate 76 pass / 8 fail under machine load.
+  - Round 5 (atmosphere, owner: "a warm place, alive"): `world/sky.ts` `Sky` = gradient dome (zenith, upper, warm horizon,
+    sun glow and disc, far sea below the horizon) + faceted drifting clouds (`world/sky-data.ts` `cloudPuffs`, pure, tested) in
+    one mesh, one draw, one program, centred on the camera in the vertex shader; colours in `Look.sky` (`SkyScript`). The haze
+    (`world/haze.ts`) now fades to `skyColour(view ray)` (shared `SKY_UNIFORMS`/`SKY_GLSL`), varying `vHazeWorld` (vec3; `vHazeXZ`
+    kept as a define for `island-fade.ts`). Neutral tone mapping, sun `#FFE6BF` 2.8 at about 38 degrees, hemisphere `#DCE8F8`
+    over `#8A7290` 1.45. `Stage.add` hides the island builder's static `clouds` mesh; `kit.sky` removed. Water sparkles twinkle
+    on the sun side; gulls wheel over the player (eased camera centre). Xhigh: no GTAO, no bevelled kit (kit-hd assets now unused).
+    Dev `?scene=shot&cam=hub|district|shore` (`boot/dev-shots.ts` `conceptShot`, the bible's concept cameras on any course);
+    `tools/art-stills.mjs` renders them too (`--views` filter).
+    Numbers: demo low 60 fps (clean A/B vs HEAD: +3.4k tris of clouds, programs 10 = 10, 1 draw fewer), xhigh 28 -> 56 fps;
+    gate 76 pass / 8 fail under load 8-11 with T1369's WIP in the tree.
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.
