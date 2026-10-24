@@ -82,6 +82,7 @@ $placeholders = [
     'hud_progress' => (object) ['done' => '{done}', 'total' => '{total}'],
     'hud_week' => null,
     'hud_weeks' => '{weeks}',
+    'hud_welcome' => null,
     'hud_xp' => (object) ['xp' => '{xp}', 'next' => '{next}'],
     'levelup_skip' => null,
     'levelup_title' => '{level}',

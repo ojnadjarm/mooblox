@@ -229,5 +229,16 @@
       "image": "https://moodle.example/pluginfile.php/163/badges/badgeimage/1/f3",
       "timeissued": 1792847382
     }
-  ]
+  ],
+  "weeks": {
+    "weeks": 0,
+    "welcomeback": false
+  },
+  "goal": {
+    "week": 0,
+    "target": 0,
+    "progress": 0,
+    "reached": false,
+    "timereached": 0
+  }
 }

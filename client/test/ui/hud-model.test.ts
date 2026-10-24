@@ -49,8 +49,14 @@ describe('hudView', () => {
   });
 
   it('uses the lang strings it is given', () => {
-    const v = hudView(demo(), 2, { hud_level: 'Nivel {level}', hud_xp: '{xp}/{next}', hud_progress: '{done} de {total}', hud_alldone: '!', hud_week: '1 semana', hud_weeks: '{weeks} semanas' })!;
+    const v = hudView(demo(), 2, { hud_level: 'Nivel {level}', hud_xp: '{xp}/{next}', hud_progress: '{done} de {total}', hud_alldone: '!', hud_week: '1 semana', hud_weeks: '{weeks} semanas', hud_welcome: '¡Hola!' })!;
     expect([v.levelLabel, v.xpLabel, v.progress, v.weeks]).toEqual(['Nivel 0', '45/50', '3 de 4', '2 semanas']);
+  });
+
+  it('greets a returning kid on the first week after a break', () => {
+    const back = { ...demo(), weeks: { count: 1, welcomeBack: true } };
+    expect(hudView(back, 1)!.weeks).toBe('Welcome back!');
+    expect(hudView({ ...back, weeks: { count: 2, welcomeBack: false } }, 2)!.weeks).toBe('2 learning weeks');
   });
 });
 

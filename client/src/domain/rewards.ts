@@ -38,6 +38,21 @@ export interface Trophy {
   readonly timeIssued: number;
 }
 
+/** Learning weeks in a row (the leaf counter); `welcomeBack` on the first week after a break. */
+export interface LearningWeeks {
+  readonly count: number;
+  readonly welcomeBack: boolean;
+}
+
+/** The class's shared weekly goal (yyyyww week). */
+export interface ClassGoal {
+  readonly week: number;
+  readonly target: number;
+  readonly progress: number;
+  readonly reached: boolean;
+  readonly timeReached: number;
+}
+
 export interface Rewards {
   readonly enabled: boolean;
   readonly xp: number;
@@ -51,6 +66,9 @@ export interface Rewards {
   readonly unlocks: readonly string[];
   readonly look: Look;
   readonly trophies: readonly Trophy[];
+  readonly weeks: LearningWeeks;
+  /** Null when the goal is off or the class is too small. */
+  readonly goal: ClassGoal | null;
 }
 
 export const NO_LOOK: Look = { hat: null, outfit: null, pet: null };

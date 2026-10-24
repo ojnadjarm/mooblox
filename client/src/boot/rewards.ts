@@ -29,7 +29,7 @@ export interface RewardsDeps {
   /** The player's avatar factory; it dresses the player in the worn items. */
   readonly outfitter: Outfitter;
   readonly picker: AvatarPicker;
-  /** Learning weeks to show by the leaf (server streaks, T1361); null hides the leaf. */
+  /** Overrides the learning weeks shown by the leaf (dev page); null hides the leaf. */
   readonly weeks?: () => number | null;
 }
 
@@ -126,7 +126,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
     );
   };
   store.subscribe((next, previous) => {
-    const shown = hudView(next, deps.weeks?.() ?? null, strings);
+    const shown = hudView(next, deps.weeks ? deps.weeks() : next.weeks.count || null, strings);
     if (shown && !hud) hud = new HudRewards(host);
     hud?.show(shown);
     if (next.enabled && !dressing) dressing = dress(next.look).catch((e: unknown) => console.error('mooblox: loading the wardrobe failed', e));

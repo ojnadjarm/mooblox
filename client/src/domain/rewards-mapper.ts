@@ -1,4 +1,4 @@
-import type { CollectibleDto, LookDto, QuestDto, RewardsDto, TrophyDto } from './rewards-dto';
+import type { CollectibleDto, GoalDto, LookDto, QuestDto, RewardsDto, TrophyDto, WeeksDto } from './rewards-dto';
 import type { Collectible, CollectibleKind, Look, Quest, QuestKind, Rewards, Trophy } from './rewards';
 
 type Field = 'string' | 'number' | 'boolean';
@@ -11,6 +11,8 @@ const COLLECTIBLE: Record<keyof CollectibleDto, Field> = {
 };
 const LOOK: Record<keyof LookDto, Field> = { hat: 'string', outfit: 'string', pet: 'string' };
 const TROPHY: Record<keyof TrophyDto, Field> = { badgeid: 'number', name: 'string', image: 'string', timeissued: 'number' };
+const WEEKS: Record<keyof WeeksDto, Field> = { weeks: 'number', welcomeback: 'boolean' };
+const GOAL: Record<keyof GoalDto, Field> = { week: 'number', target: 'number', progress: 'number', reached: 'boolean', timereached: 'number' };
 const SCALARS = { enabled: 'boolean', xp: 'number', level: 'number', peaklevel: 'number', levelstart: 'number', levelnext: 'number' } as const;
 const QUEST_KINDS = new Set<string>(['section', 'video', 'quiz', 'page', 'badge', 'course']);
 const COLLECTIBLE_KINDS = new Set<string>(['gem', 'crystal', 'star']);
@@ -18,7 +20,7 @@ const COLLECTIBLE_KINDS = new Set<string>(['gem', 'crystal', 'star']);
 /** Throws unless the value has exactly the get_rewards wire shape (no missing, extra or mistyped fields). */
 export function assertRewardsDto(value: unknown): asserts value is RewardsDto {
   const lists = { quests: QUEST, collectibles: COLLECTIBLE, trophies: TROPHY };
-  const o = record(value, 'rewards', [...Object.keys(SCALARS), ...Object.keys(lists), 'unlocks', 'look']);
+  const o = record(value, 'rewards', [...Object.keys(SCALARS), ...Object.keys(lists), 'unlocks', 'look', 'weeks', 'goal']);
   for (const [k, t] of Object.entries(SCALARS)) {
     field(o[k], t, k);
   }
@@ -27,6 +29,8 @@ export function assertRewardsDto(value: unknown): asserts value is RewardsDto {
   }
   list(o.unlocks, 'unlocks').forEach((item, i) => field(item, 'string', `unlocks[${i}]`));
   shaped(o.look, LOOK, 'look');
+  shaped(o.weeks, WEEKS, 'weeks');
+  shaped(o.goal, GOAL, 'goal');
 }
 
 /** Maps the get_rewards reply to domain objects. */
@@ -43,6 +47,8 @@ export function toRewards(dto: RewardsDto): Rewards {
     unlocks: [...dto.unlocks],
     look: toLook(dto.look),
     trophies: dto.trophies.map(toTrophy),
+    weeks: { count: dto.weeks.weeks, welcomeBack: dto.weeks.welcomeback },
+    goal: dto.goal.week ? { week: dto.goal.week, target: dto.goal.target, progress: dto.goal.progress, reached: dto.goal.reached, timeReached: dto.goal.timereached } : null,
   };
 }
 
@@ -62,6 +68,9 @@ export function toRewardsDto(r: Rewards): RewardsDto {
     unlocks: [...r.unlocks],
     look: toLookDto(r.look),
     trophies: r.trophies.map((t) => ({ badgeid: t.badgeId, name: t.name, image: t.imageUrl, timeissued: t.timeIssued })),
+    weeks: { weeks: r.weeks.count, welcomeback: r.weeks.welcomeBack },
+    goal: r.goal ? { week: r.goal.week, target: r.goal.target, progress: r.goal.progress, reached: r.goal.reached, timereached: r.goal.timeReached }
+      : { week: 0, target: 0, progress: 0, reached: false, timereached: 0 },
   };
 }
 

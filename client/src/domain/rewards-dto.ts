@@ -34,6 +34,20 @@ export interface TrophyDto {
   timeissued: number;
 }
 
+export interface WeeksDto {
+  weeks: number;
+  welcomeback: boolean;
+}
+
+/** Week 0 = no goal (off, or fewer than 5 students). */
+export interface GoalDto {
+  week: number;
+  target: number;
+  progress: number;
+  reached: boolean;
+  timereached: number;
+}
+
 export interface RewardsDto {
   enabled: boolean;
   xp: number;
@@ -46,6 +60,8 @@ export interface RewardsDto {
   unlocks: string[];
   look: LookDto;
   trophies: TrophyDto[];
+  weeks: WeeksDto;
+  goal: GoalDto;
 }
 
 export interface ClaimDto {

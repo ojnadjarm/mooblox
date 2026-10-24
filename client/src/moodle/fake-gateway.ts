@@ -11,6 +11,7 @@ import { MoodleError } from './moodle-error';
 const REWARDS_OFF: RewardsDto = {
   enabled: false, xp: 0, level: 0, peaklevel: 0, levelstart: 0, levelnext: 0,
   quests: [], collectibles: [], unlocks: [], look: { hat: '', outfit: '', pet: '' }, trophies: [],
+  weeks: { weeks: 0, welcomeback: false }, goal: { week: 0, target: 0, progress: 0, reached: false, timereached: 0 },
 };
 
 /** In-memory Moodle over captured get_world and get_rewards replies, for tests and offline play. */

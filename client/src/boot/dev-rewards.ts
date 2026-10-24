@@ -127,7 +127,7 @@ async function boot(): Promise<void> {
   const keep = (l: AvatarLook) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
   const picker = startAvatarPicker(view, player, dressed, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
   const weeks = params.has('weeks') ? Number(params.get('weeks')) : null;
-  const rewardsUi = await startRewards(view, interaction, { gateway, courseId: fixture.courseid, strings: {}, assets: ASSETS, player, outfitter: dressed, picker, weeks: () => weeks });
+  const rewardsUi = await startRewards(view, interaction, { gateway, courseId: fixture.courseid, strings: {}, assets: ASSETS, player, outfitter: dressed, picker, ...(weeks === null ? {} : { weeks: () => weeks }) });
   const probe: Record<string, unknown> = { ready: true };
   Object.assign(window, { mooblox: { ...view, view, probe, player, interaction, store, gateway, picker, rewards: rewardsUi } });
 }

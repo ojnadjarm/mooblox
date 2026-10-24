@@ -24,6 +24,9 @@ namespace local_mooblox\rewards;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class summary {
+    /** @var array the goal when it is off or hidden */
+    const NO_GOAL = ['week' => 0, 'target' => 0, 'progress' => 0, 'reached' => false, 'timereached' => 0];
+
     /**
      * Syncs the user, grants the items of finished quests and returns the summary.
      *
@@ -66,7 +69,25 @@ final class summary {
             'unlocks' => array_values($DB->get_fieldset('local_mooblox_unlock', 'itemkey', ['userid' => $userid])),
             'look' => wardrobe::look($userid),
             'trophies' => self::trophies($courseid, $facts->badges),
+            'weeks' => self::weeks($courseid, $userid),
+            'goal' => class_goal::state($courseid) ?? self::NO_GOAL,
         ];
+    }
+
+    /**
+     * The user's learning weeks in a row (the leaf counter) and whether this is the first week after a break.
+     *
+     * @param int $courseid course id
+     * @param int $userid user id
+     * @return array weeks, welcomeback
+     */
+    private static function weeks(int $courseid, int $userid): array {
+        global $DB;
+        $days = $DB->get_fieldset('local_mooblox_day', 'day', ['courseid' => $courseid, 'userid' => $userid]);
+        $tz = \core_date::get_user_timezone_object($DB->get_field('user', 'timezone', ['id' => $userid]));
+        $today = (int) (new \DateTime('now', $tz))->format('Ymd');
+        $weeks = learning_weeks::count($days, course_settings::get($courseid)['weekdays'], $today);
+        return ['weeks' => $weeks['weeks'], 'welcomeback' => $weeks['welcomeback']];
     }
 
     /**
@@ -76,7 +97,8 @@ final class summary {
      */
     public static function off(): array {
         return ['enabled' => false, 'xp' => 0, 'level' => 0, 'peaklevel' => 0, 'levelstart' => 0, 'levelnext' => 0,
-            'quests' => [], 'collectibles' => [], 'unlocks' => [], 'look' => wardrobe::EMPTY_LOOK, 'trophies' => []];
+            'quests' => [], 'collectibles' => [], 'unlocks' => [], 'look' => wardrobe::EMPTY_LOOK, 'trophies' => [],
+            'weeks' => ['weeks' => 0, 'welcomeback' => false], 'goal' => self::NO_GOAL];
     }
 
     /**

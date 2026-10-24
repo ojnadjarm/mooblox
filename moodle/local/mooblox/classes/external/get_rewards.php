@@ -97,6 +97,17 @@ class get_rewards extends external_api {
                 'image' => new external_value(PARAM_URL, 'Badge image URL'),
                 'timeissued' => new external_value(PARAM_INT, 'When the badge was issued'),
             ])),
+            'weeks' => new external_single_structure([
+                'weeks' => new external_value(PARAM_INT, 'Learning weeks in a row'),
+                'welcomeback' => new external_value(PARAM_BOOL, 'Whether this is the first learning week after a break'),
+            ]),
+            'goal' => new external_single_structure([
+                'week' => new external_value(PARAM_INT, 'Week of the class goal as yyyyww, 0 when off or hidden'),
+                'target' => new external_value(PARAM_INT, 'Activities the class finishes together this week'),
+                'progress' => new external_value(PARAM_INT, 'Activities finished so far, at most the target'),
+                'reached' => new external_value(PARAM_BOOL, 'Whether the class reached the goal'),
+                'timereached' => new external_value(PARAM_INT, 'When the goal was reached, 0 before'),
+            ]),
         ]);
     }
 

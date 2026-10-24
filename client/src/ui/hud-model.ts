@@ -8,6 +8,7 @@ export interface HudStrings {
   readonly hud_alldone: string;
   readonly hud_week: string;
   readonly hud_weeks: string;
+  readonly hud_welcome: string;
 }
 
 export const DEFAULT_HUD_STRINGS: HudStrings = {
@@ -17,6 +18,7 @@ export const DEFAULT_HUD_STRINGS: HudStrings = {
   hud_alldone: 'Every quest done!',
   hud_week: '1 learning week',
   hud_weeks: '{weeks} learning weeks',
+  hud_welcome: 'Welcome back!',
 };
 
 /** What the rewards HUD shows. */
@@ -49,7 +51,7 @@ export function hudView(rewards: Rewards, weeks: number | null, s: HudStrings = 
     xpLabel: fill(s.hud_xp, { xp: rewards.xp, next: rewards.levelNext }),
     quest: quest ? quest.text : s.hud_alldone,
     progress: quest ? fill(s.hud_progress, { done: quest.done, total: quest.total }) : '',
-    weeks: weeks && weeks > 0 ? fill(weeks === 1 ? s.hud_week : s.hud_weeks, { weeks }) : null,
+    weeks: weeks && weeks > 0 ? (weeks === 1 && rewards.weeks.welcomeBack ? s.hud_welcome : fill(weeks === 1 ? s.hud_week : s.hud_weeks, { weeks })) : null,
     weekCount: weeks && weeks > 0 ? weeks : 0,
   };
 }
