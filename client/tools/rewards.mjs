@@ -38,6 +38,27 @@ const box = (page, sel) => page.evaluate((s) => {
   return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom };
 }, sel);
 
+/** Opens activity `cmid` through the world's interaction, then closes the panel with Esc. */
+async function openAndClose(page, cmid) {
+  await page.evaluate((id) => {
+    const a = window.mooblox.world.sections.flatMap((s) => s.activities).find((x) => x.id === id);
+    void window.mooblox.interaction.open(a);
+  }, cmid);
+  const panel = page.locator('.mooblox-panel-backdrop');
+  await panel.waitFor({ state: 'visible', timeout: 5000 });
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await panel.waitFor({ state: 'hidden', timeout: 5000 });
+}
+
+/** Counts level-up cards shown from now on (a MutationObserver on the page). */
+const countCards = (page) => page.evaluate(() => {
+  window.__cards = 0;
+  new MutationObserver((rs) => {
+    for (const r of rs) for (const n of r.addedNodes) if (n.classList?.contains('mooblox-levelup')) window.__cards++;
+  }).observe(document.body, { childList: true, subtree: true });
+});
+
 const modes = {
   async hud() {
     for (const [w, h] of WIDTHS) {
@@ -55,6 +76,40 @@ const modes = {
     const off = await open(1366, 768, 'off');
     check((await off.evaluate(() => document.querySelectorAll('.mooblox-hud-rewards').length)) === 0, 'rewards off: no HUD built');
     await off.close();
+  },
+  async levelup() {
+    for (const [w, h] of [[1366, 768], [400, 860]]) {
+      const page = await open(w, h);
+      await countCards(page);
+      await openAndClose(page, 42);
+      await page.waitForSelector('.mooblox-levelup', { timeout: 5000 }).catch(() => null);
+      const text = await page.evaluate(() => document.querySelector('.mooblox-levelup')?.textContent?.replace(/\s+/g, ' ').trim());
+      check(/Level 1!.*You unlocked: Explorer hat/.test(text ?? ''), `${w}: complete an activity -> card "${text}"`);
+      check(await page.evaluate(() => !!document.querySelector('.mooblox-levelup canvas')), `${w}: confetti canvas while moving`);
+      const hud = await page.evaluate(() => document.querySelector('.mooblox-hud-rewards')?.textContent?.replace(/\s+/g, ' '));
+      check(/55 \/ 150 XP/.test(hud ?? ''), `${w}: HUD now level 1, 55 / 150 XP`);
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: join(out, `levelup-${w}.png`) });
+      await page.keyboard.press('Space');
+      check(!(await page.evaluate(() => !!document.querySelector('.mooblox-levelup'))), `${w}: any key skips`);
+      await openAndClose(page, 43);
+      await page.waitForTimeout(800);
+      check((await page.evaluate(() => window.__cards)) === 1, `${w}: shown once (another completion at the same level adds none)`);
+      await page.reload();
+      await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 60000 });
+      await page.waitForTimeout(800);
+      check(!(await page.evaluate(() => !!document.querySelector('.mooblox-levelup'))), `${w}: no card on reload`);
+      await page.close();
+    }
+    const calm = await open(1366, 768, '', { reducedMotion: 'reduce' });
+    await openAndClose(calm, 42);
+    await calm.waitForSelector('.mooblox-levelup', { timeout: 5000 }).catch(() => null);
+    const state = await calm.evaluate(() => ({ card: !!document.querySelector('.mooblox-levelup.is-calm .mooblox-levelup-card'), canvas: !!document.querySelector('.mooblox-levelup canvas') }));
+    check(state.card && !state.canvas, 'reduced motion: static card, no confetti');
+    await calm.screenshot({ path: join(out, 'levelup-reduced-1366.png') });
+    await calm.mouse.click(30, 700);
+    check(!(await calm.evaluate(() => !!document.querySelector('.mooblox-levelup'))), 'reduced motion: a tap skips');
+    await calm.close();
   },
 };
 

@@ -69,7 +69,14 @@ $placeholders = [
     'hud_week' => null,
     'hud_weeks' => '{weeks}',
     'hud_xp' => (object) ['xp' => '{xp}', 'next' => '{next}'],
+    'levelup_skip' => null,
+    'levelup_title' => '{level}',
+    'levelup_tryon' => null,
+    'levelup_unlocked' => '{item}',
 ];
+foreach (\local_mooblox\rewards\catalog::ids() as $id) {
+    $placeholders['item_' . str_replace('-', '_', $id)] = null;
+}
 foreach ($placeholders as $key => $a) {
     $config['strings'][$key] = get_string($key, 'local_mooblox', $a);
 }
