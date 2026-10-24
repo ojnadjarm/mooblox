@@ -1,9 +1,12 @@
-/** Camera-relative intent: x right, z forward (length ≤ 1), run and jump held. */
+import { IDLE_ACTS } from './idle-acts';
+
+/** Camera-relative intent: x right, z forward (length ≤ 1), run and jump held, and an emote pressed this frame (idle act index; -1 or absent = none). */
 export interface InputState {
   readonly x: number;
   readonly z: number;
   readonly run: boolean;
   readonly jump: boolean;
+  readonly emote?: number;
 }
 
 export const NO_INPUT: InputState = { x: 0, z: 0, run: false, jump: false };
@@ -20,9 +23,9 @@ export interface InputSource {
   read(): InputState;
 }
 
-/** Combines sources: the strongest stick wins, buttons are ORed. */
+/** Combines sources: the strongest stick wins, buttons are ORed, the first emote wins. */
 export class CombinedInput implements InputSource {
-  private readonly state: MutableInput = { x: 0, z: 0, run: false, jump: false };
+  private readonly state: MutableInput = { x: 0, z: 0, run: false, jump: false, emote: -1 };
 
   constructor(private readonly sources: readonly InputSource[]) {}
 
@@ -30,6 +33,7 @@ export class CombinedInput implements InputSource {
     const out = this.state;
     out.x = out.z = 0;
     out.run = out.jump = false;
+    out.emote = -1;
     let best = 0;
     for (let k = 0; k < this.sources.length; k++) {
       const i = this.sources[k]!.read();
@@ -40,6 +44,7 @@ export class CombinedInput implements InputSource {
       }
       out.run ||= i.run;
       out.jump ||= i.jump;
+      if (out.emote < 0 && i.emote !== undefined && i.emote >= 0) out.emote = i.emote;
     }
     return out;
   }
@@ -59,10 +64,15 @@ const KEYS: Readonly<Record<string, 'f' | 'b' | 'l' | 'r' | 'run' | 'jump'>> = {
   Space: 'jump',
 };
 
-/** WASD / arrows to move, Shift to run, Space to jump. */
+const act = (clip: string): number => IDLE_ACTS.findIndex((a) => a.clip === clip);
+/** Emote keys 1-5 as idle act indices. */
+const EMOTE_KEYS: Readonly<Record<string, number>> = { Digit1: act('wave'), Digit2: act('cheer'), Digit3: act('emote-yes'), Digit4: act('emote-no'), Digit5: act('stretch') };
+
+/** WASD / arrows to move, Shift to run, Space to jump, 1-5 to emote (wave, cheer, nod, head shake, stretch). */
 export class KeyboardInput implements InputSource {
   private readonly down = new Set<string>();
-  private readonly state: MutableInput = { x: 0, z: 0, run: false, jump: false };
+  private readonly state: MutableInput = { x: 0, z: 0, run: false, jump: false, emote: -1 };
+  private pending = -1;
 
   constructor(target: Window = window) {
     target.addEventListener('keydown', (e) => this.key(e, true));
@@ -80,12 +90,19 @@ export class KeyboardInput implements InputSource {
     s.z = z / len;
     s.run = d.has('run');
     s.jump = d.has('jump');
+    s.emote = this.pending;
+    this.pending = -1;
     return s;
   }
 
   private key(e: KeyboardEvent, pressed: boolean): void {
     const action = KEYS[e.code];
-    if (!action || (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, iframe'))) {
+    const emote = EMOTE_KEYS[e.code];
+    if ((!action && emote === undefined) || (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, iframe'))) {
+      return;
+    }
+    if (!action) {
+      if (pressed && !e.repeat) this.pending = emote!;
       return;
     }
     e.preventDefault();

@@ -1,14 +1,15 @@
 import { AnimationClip, Euler, Quaternion, QuaternionKeyframeTrack, Vector3 } from 'three';
 
 /** The avatar states the controller drives. */
-export type AvatarState = 'idle' | 'walk' | 'run' | 'jump';
+export type AvatarState = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
 
-/** Kenney clip per state; `jump` is ours (the pack has none). */
+/** Kenney clip per state; `jump` and `fall` are ours (the pack has neither). */
 export const CLIP_FOR: Readonly<Record<AvatarState, string>> = {
   idle: 'idle',
   walk: 'walk',
   run: 'sprint',
   jump: 'jump',
+  fall: 'fall',
 };
 
 const X = new Vector3(1, 0, 0);
@@ -24,6 +25,18 @@ export function jumpClip(): AnimationClip {
     pose('arm-right', [0, -2.9, -2.9]),
     pose('leg-left', [0, -0.6, -0.6]),
     pose('leg-right', [0, 0.25, 0.25]),
+  ]);
+}
+
+/** Roblox-style fall pose after the apex: arms swing out and up to the sides, legs part, a slight flail. */
+export function fallClip(): AnimationClip {
+  const t = [0, 0.18, 0.5, 0.82];
+  return new AnimationClip('fall', 0.82, [
+    turns('arm-left', t, [[-2.9, 0, 0], [-0.5, 0, 1.9], [-0.4, 0, 2.1], [-0.5, 0, 1.9]]),
+    turns('arm-right', t, [[-2.9, 0, 0], [-0.5, 0, -1.9], [-0.6, 0, -1.75], [-0.5, 0, -1.9]]),
+    turns('leg-left', t, [[-0.6, 0, 0], [-0.35, 0, 0.12], [-0.3, 0, 0.14], [-0.35, 0, 0.12]]),
+    turns('leg-right', t, [[0.25, 0, 0], [0.3, 0, -0.12], [0.35, 0, -0.14], [0.3, 0, -0.12]]),
+    turns('head', t, [[0, 0, 0], [0.12, 0, 0], [0.14, 0, 0], [0.12, 0, 0]]),
   ]);
 }
 

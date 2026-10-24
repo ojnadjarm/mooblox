@@ -3,7 +3,7 @@ import { AnimationClip, Object3D, Quaternion, QuaternionKeyframeTrack, Vector3, 
 import { describe, expect, it } from 'vitest';
 import { focus } from '../../src/player/attention';
 import { Avatar } from '../../src/player/avatar';
-import { jumpClip } from '../../src/player/clips';
+import { fallClip, jumpClip } from '../../src/player/clips';
 import { hash01, IDLE, JUMP, M, MOTION, motionState, RUN, stepMotion, WALK, type MotionCode } from '../../src/player/motion';
 
 /** The Kenney rig's node tree (root, legs, torso with arms and head) with idle, walk and sprint loops. */
@@ -31,7 +31,7 @@ function rig(): { root: Object3D; clips: AnimationClip[] } {
       new VectorKeyframeTrack('root.position', [0, d / 2, d], [0, 0, 0, 0, 0.1, 0, 0, 0, 0]),
     ]);
   };
-  return { root, clips: [swing('idle', 1.33), swing('walk', 0.67), swing('sprint', 0.5), jumpClip()] };
+  return { root, clips: [swing('idle', 1.33), swing('walk', 0.67), swing('sprint', 0.5), jumpClip(), fallClip()] };
 }
 
 /** Runs `m` for `seconds` at 60 Hz in `code`. */
@@ -203,6 +203,28 @@ describe('look-at, landing and weight shift (pure)', () => {
     expect(nod).toBeGreaterThan(MOTION.landNod * 0.3);
     run(m, IDLE, 1);
     expect(m[M.torsoStretch]!).toBeGreaterThanOrEqual(-MOTION.breathDepth);
+  });
+
+  it('in the air the chest tilts back on the way up and the eyes go to the ground on the way down; no vertical speed, no tilt', () => {
+    const air = (vy: number): Float64Array => {
+      const m = motionState(3);
+      m[M.speed] = 0;
+      m[M.vy] = vy;
+      for (let i = 0; i < 40; i++) stepMotion(m, JUMP, 1 / 60);
+      return m;
+    };
+    const flat = air(NaN);
+    const up = air(10);
+    const down = air(-12);
+    expect(up[M.torsoPitch]! - flat[M.torsoPitch]!).toBeCloseTo(-MOTION.maxAirTilt, 1);
+    expect(up[M.headPitch]! - flat[M.headPitch]!).toBeLessThan(-0.15);
+    expect(down[M.torsoPitch]! - flat[M.torsoPitch]!).toBeCloseTo(MOTION.maxAirTilt, 1);
+    expect(down[M.headPitch]! - flat[M.headPitch]!).toBeGreaterThan(0.15);
+    const ground = motionState(3);
+    ground[M.vy] = 10;
+    const still = motionState(3);
+    for (let i = 0; i < 40; i++) (stepMotion(ground, IDLE, 1 / 60), stepMotion(still, IDLE, 1 / 60));
+    expect(ground[M.torsoPitch]).toBe(still[M.torsoPitch]);
   });
 
   it('standing kids shift their weight out of step with each other; runners do not', () => {

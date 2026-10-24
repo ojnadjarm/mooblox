@@ -1,12 +1,12 @@
 import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Mesh, type Object3D } from 'three';
-import { sense } from './attention';
+import { focus, sense } from './attention';
 import { CLIP_FOR, type AvatarState } from './clips';
 import { A, actState, IDLE_ACTS, KEEP, STOP, stepActs } from './idle-acts';
 import { Layered } from './layered';
 import { IDLE, JUMP, M, motionState, RUN, stepMotion, WALK, type MotionCode } from './motion';
 
 const FADE = 0.15;
-const CODE: Readonly<Record<AvatarState, MotionCode>> = { idle: IDLE, walk: WALK, run: RUN, jump: JUMP };
+const CODE: Readonly<Record<AvatarState, MotionCode>> = { idle: IDLE, walk: WALK, run: RUN, jump: JUMP, fall: JUMP };
 let created = 0;
 
 /** One character in the world: its model, the clip for each state, idle acts now and then, and a procedural motion layer on top. */
@@ -39,7 +39,7 @@ export class Avatar {
         throw new Error(`mooblox: avatar has no clip ${name}`);
       }
       const action = this.mixer.clipAction(clip);
-      if (state === 'jump') {
+      if (state === 'jump' || state === 'fall') {
         action.setLoop(LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -85,7 +85,7 @@ export class Avatar {
     }
     const next = this.actions.get(state)!;
     next.reset().play();
-    if (state !== 'jump') next.time = this.m[M.phase]! * next.getClip().duration;
+    if (state !== 'jump' && state !== 'fall') next.time = this.m[M.phase]! * next.getClip().duration;
     const from = this.act ?? (this.current ? this.actions.get(this.current)! : null);
     from?.crossFadeTo(next, FADE, false);
     this.act = null;
@@ -98,10 +98,19 @@ export class Avatar {
     return this.act?.getClip().name ?? null;
   }
 
-  /** Ground speed (m/s; NaN = as authored) and turn rate (rad/s, + = towards +x) for stride rate, lean and bank. */
-  setMotion(speed: number, turnRate: number): void {
+  /** Ground speed (m/s; NaN = as authored), turn rate (rad/s, + = towards +x) and vertical speed (m/s, + up; NaN = none) for stride rate, lean, bank and air tilt. */
+  setMotion(speed: number, turnRate: number, verticalSpeed = NaN): void {
     this.m[M.speed] = speed;
     this.m[M.turn] = turnRate;
+    this.m[M.vy] = verticalSpeed;
+  }
+
+  /** Plays idle act `i` now if standing and the rig has it (an emote); false otherwise. */
+  emote(i: number): boolean {
+    if (this.current !== 'idle' || !this.acts[i]) return false;
+    this.a[A.playing] = i;
+    this.startAct(i);
+    return true;
   }
 
   update(dt: number): void {
@@ -120,8 +129,12 @@ export class Avatar {
 
   /** Starts an idle act or fades it back to the idle clip, as the act step says. */
   private stepAct(state: AvatarState, dt: number): void {
-    this.a[A.attend] = this.m[M.attend]!;
-    const next = stepActs(this.a, this.seed, state === 'idle', dt, this.hasAct);
+    const a = this.a;
+    a[A.attend] = this.m[M.attend]!;
+    a[A.cue] = focus.owner === this ? -1 : focus.cue;
+    a[A.cueAge] = focus.cueAge;
+    a[A.cueId] = focus.cueId;
+    const next = stepActs(a, this.seed, state === 'idle', dt, this.hasAct);
     if (next === KEEP) return;
     const idle = this.actions.get('idle')!;
     if (next === STOP) {
@@ -133,9 +146,14 @@ export class Avatar {
       this.act = null;
       return;
     }
-    const act = this.acts[next]!;
+    this.startAct(next);
+  }
+
+  /** Cross-fades from the idle clip (or the act playing) into act `i`. */
+  private startAct(i: number): void {
+    const act = this.acts[i]!;
     act.reset().play();
-    (this.act ?? idle).crossFadeTo(act, FADE, false);
+    (this.act ?? this.actions.get('idle')!).crossFadeTo(act, FADE, false);
     this.act = act;
     this.a[A.left] = act.getClip().duration - FADE;
   }

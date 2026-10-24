@@ -19,7 +19,7 @@ import { LEGACY_BODIES, type CharacterLook, type LegacyLook } from './character/
 import { characterMaterial } from './character/material';
 import { buildGeometry } from './character/mesh';
 import { BONES } from './character/parts';
-import { actClips, jumpClip } from './clips';
+import { actClips, fallClip, jumpClip } from './clips';
 import { toCharacter } from './look';
 import { SKINNED_DEPTH } from '../world/depth-materials';
 
@@ -58,7 +58,7 @@ export class AvatarKit implements AvatarFactory {
     atlas.colorSpace = SRGBColorSpace;
     atlas.minFilter = LinearMipmapLinearFilter;
     const material = characterMaterial(atlas);
-    return new AvatarKit(gltf.scene, [...gltf.animations, jumpClip(), ...actClips()], material);
+    return new AvatarKit(gltf.scene, [...gltf.animations, jumpClip(), fallClip(), ...actClips()], material);
   }
 
   async create(look: AvatarLook, wearables: readonly Wearable[] = []): Promise<Avatar> {

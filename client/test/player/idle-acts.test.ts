@@ -5,8 +5,8 @@ import { AnimationClip, Object3D, Quaternion, QuaternionKeyframeTrack, Vector3 }
 import { describe, expect, it } from 'vitest';
 import { focus } from '../../src/player/attention';
 import { Avatar } from '../../src/player/avatar';
-import { actClips, jumpClip } from '../../src/player/clips';
-import { A, ACTS, actState, IDLE_ACTS, KEEP, pickAct, STOP, stepActs, WAVE } from '../../src/player/idle-acts';
+import { actClips, fallClip, jumpClip } from '../../src/player/clips';
+import { A, ACTS, actState, CHEER, IDLE_ACTS, KEEP, pickAct, STOP, stepActs, WAVE } from '../../src/player/idle-acts';
 
 const all = (): boolean => true;
 
@@ -39,7 +39,7 @@ function rig(): { root: Object3D; clips: AnimationClip[] } {
   bone('head', torso, 1.2);
   const q = (a: number) => new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), a).toArray();
   const loop = (name: string, d: number) => new AnimationClip(name, d, [new QuaternionKeyframeTrack('arm-left.quaternion', [0, d], [...q(0.1), ...q(0.1)])]);
-  return { root, clips: [loop('idle', 1.33), loop('walk', 0.67), loop('sprint', 0.5), jumpClip(), loop('emote-yes', 0.67), loop('emote-no', 0.67), ...actClips()] };
+  return { root, clips: [loop('idle', 1.33), loop('walk', 0.67), loop('sprint', 0.5), jumpClip(), fallClip(), loop('emote-yes', 0.67), loop('emote-no', 0.67), ...actClips()] };
 }
 
 describe('idle acts (pure)', () => {
@@ -88,6 +88,50 @@ describe('idle acts (pure)', () => {
     expect(run(a, 4, true, 1, 0.1).some(([, r]) => r === WAVE)).toBe(false);
     run(a, 4, true, 0, ACTS.waveAgain);
     expect(run(a, 4, true, 1, 0.1).some(([, r]) => r === WAVE)).toBe(true);
+  });
+
+  it("a kid that sees the player's wave or cheer answers it once, after its own beat; a nod gets no answer", () => {
+    const cue = (a: Float64Array, act: number, id: number): void => {
+      a[A.cue] = act;
+      a[A.cueAge] = 0;
+      a[A.cueId] = id;
+    };
+    const watch = (a: Float64Array, seed: number, seconds: number): [number, number][] => {
+      const out: [number, number][] = [];
+      for (let i = 0; i < seconds * 60; i++) {
+        a[A.attend] = 1;
+        const r = stepActs(a, seed, true, 1 / 60, all);
+        a[A.cueAge] = a[A.cueAge]! + 1 / 60;
+        if (r !== KEEP) out.push([i / 60, r]);
+        if (r >= 0) (a[A.left] = 1.2), (a[A.gap] = 99);
+      }
+      return out;
+    };
+    const beats = new Set<string>();
+    for (let seed = 0; seed < 12; seed++) {
+      const a = actState(seed);
+      watch(a, seed, 0.2);
+      a[A.sinceWave] = 0;
+      a[A.gap] = 99;
+      watch(a, seed, 2);
+      cue(a, CHEER, 1);
+      const answer = watch(a, seed, 2.5).filter(([, r]) => r >= 0);
+      expect(answer.length).toBe(1);
+      expect(answer[0]![1]).toBe(CHEER);
+      expect(answer[0]![0]).toBeGreaterThanOrEqual(ACTS.answer - 0.02);
+      expect(answer[0]![0]).toBeLessThanOrEqual(ACTS.answer + ACTS.answerSpread + 0.02);
+      beats.add(answer[0]![0].toFixed(2));
+      cue(a, IDLE_ACTS.findIndex((x) => x.clip === 'emote-yes'), 2);
+      expect(watch(a, seed, 2.5).filter(([, r]) => r >= 0)).toEqual([]);
+      cue(a, CHEER, 3);
+      a[A.attend] = 0;
+      for (let i = 0; i < 150; i++) {
+        a[A.attend] = 0;
+        expect(stepActs(a, seed, true, 1 / 60, all)).toBe(KEEP);
+        a[A.cueAge] = a[A.cueAge]! + 1 / 60;
+      }
+    }
+    expect(beats.size).toBeGreaterThan(6);
   });
 
   it('skips acts the rig has no clip for', () => {
@@ -147,6 +191,37 @@ describe('idle acts on the avatar', () => {
     }
   });
 
+  it('an emote plays only while standing, and a kid that sees it waves back; the player never answers itself', () => {
+    const space = new Object3D();
+    const me = rig();
+    const kid = rig();
+    space.add(me.root, kid.root);
+    me.root.position.set(0, 0, 3);
+    const player = new Avatar(me.root, me.clips, 1);
+    const npc = new Avatar(kid.root, kid.clips, 2);
+    Object.assign(focus, { owner: player, space, x: 0, y: 0, z: 3 });
+    try {
+      for (let i = 0; i < 120; i++) (player.update(1 / 60), npc.update(1 / 60));
+      for (let i = 0; i < 200 && npc.acting; i++) npc.update(1 / 60);
+      player.play('walk');
+      expect(player.emote(WAVE)).toBe(false);
+      player.play('idle');
+      expect(player.emote(WAVE)).toBe(true);
+      expect(player.acting).toBe('wave');
+      Object.assign(focus, { cue: WAVE, cueAge: 0, cueId: focus.cueId + 1 });
+      const seen: string[] = [];
+      for (let i = 0; i < 90; i++) {
+        player.update(1 / 60);
+        npc.update(1 / 60);
+        focus.cueAge += 1 / 60;
+        if (npc.acting && seen.at(-1) !== npc.acting) seen.push(npc.acting);
+      }
+      expect(seen).toContain('wave');
+    } finally {
+      Object.assign(focus, { owner: null, space: null, cue: -1 });
+    }
+  });
+
   it('20 standing kids with acts allocate nothing per frame in our code', async () => {
     const kids = Array.from({ length: 20 }, (_, i) => {
       const { root, clips } = rig();
@@ -155,14 +230,16 @@ describe('idle acts on the avatar', () => {
     function actFrames(n: number): void {
       for (let f = 0; f < n; f++) for (const a of kids) a.update(1 / 60);
     }
-    actFrames(3000);
+    actFrames(2000);
+    // Under 0.5 B per kid update (one boxed number per update would be 16 B); rounds stop at the first one under it.
+    const bound = 300 * 20 * 0.5;
     let bytes = Infinity;
-    for (let round = 0; round < 8 && bytes > 0; round++) {
+    for (let round = 0; round < 6 && bytes >= bound; round++) {
       const session = new Session();
       session.connect();
       await session.post('HeapProfiler.enable');
       await session.post('HeapProfiler.startSampling', { samplingInterval: 64, includeObjectsCollectedByMinorGC: true, includeObjectsCollectedByMajorGC: true });
-      actFrames(1200);
+      actFrames(300);
       const { profile } = (await session.post('HeapProfiler.stopSampling')) as unknown as { profile: { head: Node } };
       session.disconnect();
       interface Node { callFrame: { functionName: string; url: string }; selfSize: number; children: Node[] }
@@ -175,6 +252,6 @@ describe('idle acts on the avatar', () => {
       walk(profile.head, false);
       bytes = Math.min(bytes, sum);
     }
-    expect(bytes).toBeLessThan(12000);
+    expect(bytes).toBeLessThan(bound);
   });
 });

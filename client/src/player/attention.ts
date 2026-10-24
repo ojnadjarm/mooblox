@@ -1,7 +1,7 @@
 import type { Object3D } from 'three';
 import { M } from './motion';
 
-/** Where the local player's head is, in the space its model sits in, for other characters to turn and look at. */
+/** Where the local player's head is, in the space its model sits in, for other characters to turn and look at, and its last emote. */
 export const focus = {
   /** The player's model (it never looks at itself) and its parent; null = nobody to look at. */
   owner: null as object | null,
@@ -9,6 +9,10 @@ export const focus = {
   x: 0,
   y: 0,
   z: 0,
+  /** The idle act the player last triggered (-1 none), seconds since, and a serial per emote. */
+  cue: -1,
+  cueAge: 0,
+  cueId: 0,
 };
 
 /** Writes the player's yaw, pitch and distance from `root`'s facing into motion state `m` (NaN distance: none in its space). */

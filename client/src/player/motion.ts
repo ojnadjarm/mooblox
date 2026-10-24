@@ -2,7 +2,7 @@
  * Procedural motion layered over the clips, as pure data and one kernel (no three.js, no calls in the hot path): per-kid pace
  * so a crowd never moves in lockstep, stride rate matched to ground speed, idle glances and breathing, run lean, banking, and a
  * springy push: leaning into a start, rocking back on a stop, turning head and shoulders to a nearby player, the head leading a turn,
- * a knees-in dip on landing, and a slow weight shift while standing.
+ * a knees-in dip on landing, a slow weight shift while standing, and an air tilt (chest up on the way up, eyes to the ground on the way down).
  */
 
 export const MOTION = {
@@ -59,6 +59,11 @@ export const MOTION = {
   /** Standing weight shift: torso roll (rad) over this many glance periods. */
   swayRoll: 0.035,
   swayPeriods: 1.7,
+  /** Air tilt per m/s of vertical speed (rad; + up tilts the chest and head back), capped either way. */
+  airTilt: 0.014,
+  maxAirTilt: 0.14,
+  airHead: 0.02,
+  maxAirHead: 0.2,
   /** Rate (1/s) the layer weights follow the state. */
   blend: 8,
 } as const;
@@ -104,7 +109,10 @@ export const M = {
   /** Last clip state code and seconds since the last landing. */
   lastCode: 25,
   sinceLand: 26,
-  looks: 27,
+  /** Input: vertical speed m/s (+ up; NaN = none), then the smoothed air weight. */
+  vy: 27,
+  air: 28,
+  looks: 29,
 } as const;
 
 /** A 0..1 hash of an integer pair (stable across runs). */
@@ -128,6 +136,7 @@ export function motionState(seed: number): Float64Array {
   m[M.focusDist] = NaN;
   m[M.lookRate] = MOTION.lookRate + hash01(seed, 4) * MOTION.lookRateSpread;
   m[M.sinceLand] = Infinity;
+  m[M.vy] = NaN;
   for (let k = 0; k < MOTION.looks; k++) {
     const ahead = hash01(seed * 31 + k, 7) < MOTION.glanceAhead;
     const u = hash01(seed * 31 + k, 12);
@@ -181,12 +190,17 @@ export function stepMotion(m: Float64Array, code: MotionCode, dt: number): void 
   m[M.lastCode] = code;
   const u = m[M.sinceLand]! / MOTION.landTime;
   const land = u < 1 ? Math.sin(Math.PI * 1.5 * u) * Math.sqrt(1 - u) : 0;
+  const air = (m[M.air] = m[M.air]! + ((code === JUMP ? 1 : 0) - m[M.air]!) * k);
+  const vy = m[M.vy]!;
+  const rise = vy !== vy ? 0 : air * vy;
+  const airTorso = Math.max(-MOTION.maxAirTilt, Math.min(MOTION.maxAirTilt, -rise * MOTION.airTilt));
+  const airHead = Math.max(-MOTION.maxAirHead, Math.min(MOTION.maxAirHead, -rise * MOTION.airHead));
   const sway = MOTION.swayRoll * idle * Math.sin((2 * Math.PI * t) / (m[M.period]! * MOTION.swayPeriods) + m[M.phase]! * 17);
-  m[M.torsoPitch] = lean + push + land * MOTION.landNod * 0.5;
+  m[M.torsoPitch] = lean + push + land * MOTION.landNod * 0.5 + airTorso;
   m[M.torsoYaw] = look * MOTION.lookTorso;
   m[M.torsoRoll] = bank + sway;
   m[M.torsoStretch] = MOTION.breathDepth * Math.sin((2 * Math.PI * t) / MOTION.breathPeriod + m[M.phase]! * 6.283) * (0.3 + 0.7 * idle) - land * MOTION.landDip;
-  m[M.headPitch] = pitch * glance + lookPitch - (lean + push) * MOTION.headCounter + land * MOTION.landNod * 0.5;
+  m[M.headPitch] = pitch * glance + lookPitch - (lean + push) * MOTION.headCounter + land * MOTION.landNod * 0.5 + airHead;
   m[M.headYaw] = yaw * glance + look * (1 - MOTION.lookTorso) + lead;
   m[M.headRoll] = -bank * 0.5 - sway * 0.6;
 }

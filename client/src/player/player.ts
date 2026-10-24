@@ -10,6 +10,9 @@ import type { InputSource } from './input';
 
 const KILL_Y = -6;
 const TURN = 12;
+/** Seconds off the ground without a jump before the fall pose (steps and slopes keep the walk), and the fall speed (m/s) that ends the jump pose. */
+const FALL_AFTER = 0.14;
+const FALL_SPEED = 1.5;
 
 /** Where the feet kicked up dust: a footstep (n = 1), a jump or a landing (more puffs, stronger). */
 export type FeetListener = (x: number, y: number, z: number, n: number, strength: number) => void;
@@ -30,6 +33,7 @@ export class Player {
   private jumpHeld = false;
   private sinceLand = Infinity;
   private sinceJump = Infinity;
+  private airborne = 0;
   private landStrength = 0;
   private stride = 0;
   private readonly tick = (): void => {
@@ -100,6 +104,12 @@ export class Player {
     move.run = raw.run;
     if (raw.jump && !this.jumpHeld) this.gate.press();
     this.jumpHeld = raw.jump;
+    const emote = raw.emote ?? -1;
+    if (emote >= 0 && this.avatar.emote(emote)) {
+      focus.cue = emote;
+      focus.cueAge = 0;
+      focus.cueId++;
+    }
     const alpha = this.fixed.advance(dt, this.tick);
     const root = this.avatar.root;
     root.position.lerpVectors(this.prev, this.body.position, alpha);
@@ -117,9 +127,14 @@ export class Player {
     const s = this.sinceJump < this.sinceLand ? stretch(this.sinceJump) : squash(this.sinceLand, this.landStrength);
     root.scale.set(s.xz, s.y, s.xz);
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
-    this.avatar.setMotion(speed, dt > 0 ? turned / dt : 0);
+    const vy = this.body.velocity.y;
+    this.avatar.setMotion(speed, dt > 0 ? turned / dt : 0, this.body.onGround ? 0 : vy);
     const running = speed > Physics.walk + 0.5;
-    this.avatar.play(!this.body.onGround ? 'jump' : speed > 0.4 ? (running ? 'run' : 'walk') : 'idle');
+    this.airborne = this.body.onGround ? 0 : this.airborne + dt;
+    const jumped = this.sinceJump < this.sinceLand;
+    const air = jumped || this.airborne > FALL_AFTER;
+    const ground = speed > 0.4 ? (running ? 'run' : 'walk') : 'idle';
+    this.avatar.play(!air ? ground : jumped && vy > -FALL_SPEED ? 'jump' : 'fall');
     this.stride += running && this.body.onGround ? dt : 0;
     if (this.stride >= Feel.stride) {
       this.stride = 0;
@@ -130,6 +145,7 @@ export class Player {
     focus.x = root.position.x;
     focus.y = root.position.y;
     focus.z = root.position.z;
+    focus.cueAge += dt;
     this.avatar.update(dt);
     this.camera.follow(root.position, dt, false, this.velocity);
   }
