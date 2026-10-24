@@ -5,7 +5,6 @@ import {
   HemisphereLight,
   NeutralToneMapping,
   PCFShadowMap,
-  PCFSoftShadowMap,
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
@@ -57,7 +56,7 @@ export class Stage {
     this.renderer.toneMappingExposure = look.exposure;
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.shadowMap.type = PCFShadowMap;
     this.renderer.domElement.style.display = 'block';
     canvasHost.appendChild(this.renderer.domElement);
 

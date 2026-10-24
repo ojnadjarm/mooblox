@@ -1,25 +1,45 @@
-import type { SolidsTree } from './district-merge';
+import type { Placement } from './dressing';
+import type { BakedModel } from './model-library';
+import type { ModelSource, PrepInput, Prepped } from './district-prep';
+import { packGeometry, type PackedGeometry } from './geometry-pack';
 
-/** Builds district collision trees somewhere other than the main thread. */
-export interface TreeBuilder {
-  /** The BVH over `position` (its buffer is transferred and comes back in the tree). */
-  tree(position: Float32Array): Promise<SolidsTree>;
+/** Prepares district dressing (placement, colours, merge, collision BVH) somewhere other than the main thread. */
+export interface DistrictPrepper {
+  /** The district's merged meshes and solids tree; models it uses are read from `lib`. */
+  prep(input: PrepInput, lib: ModelSource): Promise<Prepped>;
+}
+
+/** Messages to the build worker: the models a job needs (each sent once), then the job itself. */
+export type WorkerRequest =
+  | { readonly kind: 'models'; readonly models: readonly { readonly id: string; readonly width: number; readonly height: number; readonly geometry: PackedGeometry }[] }
+  | { readonly kind: 'prep'; readonly id: number; readonly input: PackedInput };
+
+/** A prep input with its geometries packed. */
+export interface PackedInput {
+  readonly terrain: readonly { readonly geometry: PackedGeometry; readonly solid: boolean; readonly detail: boolean }[];
+  readonly placements: readonly Placement[];
+  readonly blockers: readonly PackedGeometry[];
+  readonly minor: boolean;
+  readonly rich: boolean;
+  readonly solids: boolean;
+  readonly detail: boolean;
 }
 
 /** The build worker behind a promise per job (one worker, jobs in order). */
-export class WorkerTrees implements TreeBuilder {
+export class WorkerPrep implements DistrictPrepper {
   private readonly worker: Worker;
-  private readonly waiting = new Map<number, { resolve: (r: SolidsTree) => void; reject: (e: Error) => void }>();
+  private readonly waiting = new Map<number, { resolve: (r: Prepped) => void; reject: (e: Error) => void }>();
+  private readonly sent = new Set<string>();
   private next = 0;
   /** False once the worker failed (blocked or crashed): callers build inline from then on. */
   ok = true;
 
   constructor() {
     this.worker = new Worker(new URL('./build.worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (e: MessageEvent<{ id: number; tree: SolidsTree }>) => {
+    this.worker.onmessage = (e: MessageEvent<{ id: number; prepped: Prepped }>) => {
       const done = this.waiting.get(e.data.id);
       this.waiting.delete(e.data.id);
-      done?.resolve(e.data.tree);
+      done?.resolve(e.data.prepped);
     };
     this.worker.onerror = (e) => {
       this.ok = false;
@@ -28,20 +48,41 @@ export class WorkerTrees implements TreeBuilder {
     };
   }
 
-  tree(position: Float32Array): Promise<SolidsTree> {
+  prep(input: PrepInput, lib: ModelSource): Promise<Prepped> {
     if (!this.ok) return Promise.reject(new Error('mooblox: build worker failed'));
+    const models: { id: string; width: number; height: number; geometry: PackedGeometry }[] = [];
+    for (const p of input.placements) {
+      if (this.sent.has(p.id)) continue;
+      this.sent.add(p.id);
+      const m: BakedModel = lib.get(p.id);
+      models.push({ id: p.id, width: m.width, height: m.height, geometry: packGeometry(m.geometry) });
+    }
+    if (models.length) this.post({ kind: 'models', models });
     const id = this.next++;
+    const packed: PackedInput = {
+      terrain: input.terrain.map((t) => ({ geometry: packGeometry(t.geometry), solid: t.solid, detail: t.detail })),
+      placements: input.placements,
+      blockers: input.blockers.map(packGeometry),
+      minor: input.minor,
+      rich: input.rich,
+      solids: input.solids,
+      detail: input.detail,
+    };
     return new Promise((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });
-      this.worker.postMessage({ id, position }, [position.buffer]);
+      this.post({ kind: 'prep', id, input: packed });
     });
+  }
+
+  private post(m: WorkerRequest): void {
+    this.worker.postMessage(m);
   }
 }
 
-let shared: WorkerTrees | null | undefined;
+let shared: WorkerPrep | null | undefined;
 
-/** The page's build worker, or null where workers do not exist or failed (trees are then built inline). */
-export function sharedTrees(): TreeBuilder | null {
-  if (shared === undefined) shared = typeof Worker === 'undefined' ? null : new WorkerTrees();
+/** The page's build worker, or null where workers do not exist or failed (districts are then prepared inline). */
+export function sharedPrep(): DistrictPrepper | null {
+  if (shared === undefined) shared = typeof Worker === 'undefined' ? null : new WorkerPrep();
   return shared?.ok ? shared : null;
 }

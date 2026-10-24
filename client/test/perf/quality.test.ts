@@ -66,6 +66,15 @@ describe('DynamicResolution', () => {
     expect(d.starved).toBe(true);
   });
 
+  it('never moves the scale for a few one-off hitches in a window at vsync', () => {
+    const d = new DynamicResolution(0.6);
+    for (let w = 0; w < 4; w++) {
+      for (let i = 0; i < 3; i++) d.sample(120);
+      feed(d, 16.7, 0.7);
+    }
+    expect(d.scale).toBe(1);
+  });
+
   it('holds at 50-57 fps and recovers after three windows at vsync', () => {
     const d = new DynamicResolution(0.5);
     feed(d, 25, 3);

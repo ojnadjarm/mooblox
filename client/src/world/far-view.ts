@@ -31,9 +31,10 @@ export type FarMode = 'fog' | 'full' | 'silhouette' | 'impostor';
 /** The default on every tier and shape: pre-rendered cards (T1369; options in `~/drop/T1368/options.html`). */
 export const DEFAULT_FAR: FarMode = 'impostor';
 
-/** `?far=` or the default. */
-export function farMode(query: string | null): FarMode {
-  return query === 'fog' || query === 'full' || query === 'silhouette' || query === 'impostor' ? query : DEFAULT_FAR;
+/** `?far=` or the default; software GL defaults to silhouettes (each card capture is a long CPU render there). */
+export function farMode(query: string | null, software = false): FarMode {
+  if (query === 'fog' || query === 'full' || query === 'silhouette' || query === 'impostor') return query;
+  return software ? 'silhouette' : DEFAULT_FAR;
 }
 
 /** A cheap stand-in for the islands in the haze ring: one draw for the whole ring. */
@@ -215,6 +216,8 @@ export class Silhouettes implements FarView {
 
 /** Atlas of impostor tiles: 8 x 8 tiles of 256 x 128 px. */
 const ATLAS = { w: 2048, h: 1024, cols: 8, rows: 8 } as const;
+/** District mesh chunks an impostor capture draws per frame (each at most CHUNK_VERTICES). */
+const CAPTURE_MESHES = 2;
 /** Elevation of the capture camera (radians): a little from above, like the play camera. */
 const CAPTURE_PITCH = 0.22;
 
@@ -222,19 +225,29 @@ const CAPTURE_PITCH = 0.22;
 export interface CaptureHost {
   readonly renderer: WebGLRenderer;
   readonly scene: Scene;
-  /** The district groups, island order. */
-  readonly districts: readonly Object3D[];
-  /** Runs one build slice of island i; true once built. */
+  /** Island i's capture build (a group under the scenery, hidden from play). */
+  district(i: number): Object3D;
+  /** Runs island i's capture build in the background; true once it is built and on the GPU. */
   build(i: number): boolean;
-  /** Frees island i's build unless the streamer wants it. */
+  /** Island i is captured: frees its capture build. */
   release(i: number): void;
   /** Objects shown during a capture besides the district (the scenery group and its parents). */
   readonly keep: readonly Object3D[];
 }
 
+/** A capture in progress: island i into atlas tile `tile`, its meshes drawn a few per frame. */
+interface CaptureJob {
+  readonly i: number;
+  readonly tile: number;
+  readonly meshes: readonly Mesh[];
+  next: number;
+}
+
 /**
- * Pre-rendered cards: each island's real build is rendered once (built in slices in the background, captured into one
- * atlas tile, freed again) and stands in as a camera-facing card. One draw and one 2048 x 1024 texture for the ring.
+ * Pre-rendered cards: each island's real build is rendered once (built in the background, captured into one atlas tile,
+ * freed again) and stands in as a camera-facing card. One draw and one 2048 x 1024 texture for the ring. A capture never
+ * costs one long frame: it draws CAPTURE_MESHES of the district's mesh chunks per frame into the tile (the tile's depth
+ * buffer carries over), mipmaps once at the end.
  */
 export class Impostors implements FarView {
   readonly mesh: Mesh;
@@ -244,6 +257,7 @@ export class Impostors implements FarView {
   private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
   private ring: readonly number[] = [];
   private key = '';
+  private job: CaptureJob | null = null;
 
   constructor(
     private readonly islands: readonly Circle[],
@@ -286,31 +300,44 @@ export class Impostors implements FarView {
   }
 
   step(): boolean {
-    const i = this.queue[0];
-    if (i === undefined) return false;
-    if (!this.host.build(i)) return false;
-    this.queue.shift();
-    this.capture(i, this.tiles.size);
-    this.host.release(i);
+    if (!this.job) {
+      const i = this.queue[0];
+      if (i === undefined) return false;
+      if (!this.host.build(i)) return false;
+      this.queue.shift();
+      const meshes: Mesh[] = [];
+      this.host.district(i).traverse((o) => {
+        if ((o as Mesh).isMesh) meshes.push(o as Mesh);
+      });
+      this.job = { i, tile: this.tiles.size, meshes, next: 0 };
+    }
+    const job = this.job;
+    const end = Math.min(job.meshes.length, job.next + CAPTURE_MESHES);
+    this.capture(job, end);
+    job.next = end;
+    if (end < job.meshes.length) return false;
+    this.job = null;
+    this.tiles.set(job.i, job.tile);
+    this.host.release(job.i);
     this.key = '';
     this.setRing(this.ring);
     return true;
   }
 
-  private capture(i: number, tile: number): void {
+  /** Draws the job's meshes up to `end` into its tile: the first slice clears the tile, the last one mipmaps the atlas. */
+  private capture(job: CaptureJob, end: number): void {
     const { renderer, scene } = this.host;
-    const c = this.islands[i]!;
+    const c = this.islands[job.i]!;
     const tw = ATLAS.w / ATLAS.cols;
     const th = ATLAS.h / ATLAS.rows;
-    const col = tile % ATLAS.cols;
-    const row = Math.floor(tile / ATLAS.cols);
+    const col = job.tile % ATLAS.cols;
+    const row = Math.floor(job.tile / ATLAS.cols);
     const half = c.radius + 3;
     const cam = this.camera;
     cam.left = -half;
     cam.right = half;
     cam.top = half / 2;
     cam.bottom = -half / 2;
-    cam.updateProjectionMatrix();
     const dir = this.viewDirection(c);
     const d = c.radius + 40;
     cam.position.set(c.x - dir.x * d * Math.cos(CAPTURE_PITCH), half / 2 - 3 + d * Math.sin(CAPTURE_PITCH), c.z - dir.z * d * Math.cos(CAPTURE_PITCH));
@@ -318,10 +345,11 @@ export class Impostors implements FarView {
     cam.near = d - c.radius - 4;
     cam.far = d + c.radius + 4;
     cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
     // Only the district's line to the scene and that line's siblings change: a big world's thousands of props stay untouched.
     const shown = new Map<Object3D, boolean>();
     const keep = new Set<Object3D>(this.host.keep);
-    const district = this.host.districts[i]!;
+    const district = this.host.district(job.i);
     for (let a = district; a.parent; a = a.parent) {
       for (const o of a.parent.children) {
         shown.set(o, o.visible);
@@ -330,8 +358,9 @@ export class Impostors implements FarView {
     }
     district.traverse((o) => {
       if (!shown.has(o)) shown.set(o, o.visible);
-      o.visible = true;
+      o.visible = !(o as Mesh).isMesh;
     });
+    for (let k = job.next; k < end; k++) job.meshes[k]!.visible = true;
     const background = scene.background;
     const fog = scene.fog as { near: number; far: number } | null;
     const fogNear = fog?.near ?? 0;
@@ -344,24 +373,33 @@ export class Impostors implements FarView {
     const clear = renderer.getClearColor(new Color());
     const alpha = renderer.getClearAlpha();
     const shadows = renderer.shadowMap.autoUpdate;
+    const autoClear = renderer.autoClear;
+    // The world matrices are this frame's already: no pass over every object in the scene for one slice.
+    const matrices = scene.matrixWorldAutoUpdate;
+    scene.matrixWorldAutoUpdate = false;
     renderer.shadowMap.autoUpdate = false;
+    renderer.autoClear = false;
+    this.target.texture.generateMipmaps = end === job.meshes.length;
     this.target.viewport.set(col * tw, row * th, tw, th);
     this.target.scissor.set(col * tw, row * th, tw, th);
     this.target.scissorTest = true;
     renderer.setRenderTarget(this.target);
-    renderer.setClearColor(0x000000, 0);
-    renderer.clear();
+    if (job.next === 0) {
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+    }
     renderer.render(scene, cam);
     renderer.setRenderTarget(null);
     renderer.setClearColor(clear, alpha);
+    renderer.autoClear = autoClear;
     renderer.shadowMap.autoUpdate = shadows;
+    scene.matrixWorldAutoUpdate = matrices;
     scene.background = background;
     if (fog) {
       fog.near = fogNear;
       fog.far = fogFar;
     }
     for (const [o, v] of shown) o.visible = v;
-    this.tiles.set(i, tile);
   }
 
   private viewDirection(c: Circle): { x: number; z: number } {

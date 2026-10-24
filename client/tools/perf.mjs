@@ -20,8 +20,8 @@ const BUDGETS = {
 const ALL = { loadMb: 3, loadS: 3, memoryMb: 800, frameMs: 50, bigCourse: 1.5 };
 /** The realistic low-end proxy (Iris Xe DPR 1, 4x CPU) walks over a bridge without a dropped frame. */
 const LOW_FRAME_MS = 20;
-/** Software GL (SwiftShader) under 6x CPU: harsher than any real GPU, so a floor, not the target. */
-const STRESS = { fps: 30, frameMs: 100 };
+/** Software GL (SwiftShader) under 6x CPU, a floor; each page waits `coolMs` idle first (back-to-back runs hit the host's power limit: 200 ms stalls). */
+const STRESS = { fps: 30, frameMs: 100, coolMs: 45000 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
 
 const args = process.argv.slice(2);
@@ -100,7 +100,7 @@ function sample(ms) {
       });
       let geoBytes = 0;
       for (const g of geos) {
-        for (const a of Object.values(g.attributes)) geoBytes += a.array.byteLength;
+        for (const a of Object.values(g.attributes)) geoBytes += a.array?.byteLength ?? a.count * a.itemSize * 4;
         if (g.index) geoBytes += g.index.array.byteLength;
       }
       let texBytes = 0;
@@ -160,6 +160,7 @@ try {
       console.log(JSON.stringify(row));
       if (tier === 'low' && !flag('no-stress')) {
         const stress = { ...rig, browser: 'soft', throttle: 6 };
+        await new Promise((r) => setTimeout(r, STRESS.coolMs));
         const st = await open(stress, query(shape, tier, 'walk=far'));
         await st.page.waitForTimeout(1500);
         const sm = await st.page.evaluate(sample, 5000);

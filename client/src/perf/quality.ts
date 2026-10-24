@@ -89,16 +89,18 @@ const SLOW_MS = 1000 / 50;
 const FAST_MS = 1000 / 57;
 const WINDOW_MS = 1000;
 const RAISE_AFTER = 3;
+/** Share of each window's slowest frames left out of its average: a one-off hitch never moves the scale (a resize is a hitch too). */
+const TRIM = 0.05;
 
 /**
- * Lowers the render scale while the average frame misses 50 fps and raises it again after 3 windows at vsync;
+ * Lowers the render scale while the average frame (slowest 5% left out) misses 50 fps and raises it again after 3 windows at vsync;
  * `starved` turns true when the scale is at its floor and frames are still slow (the governor's cue to drop a tier).
  */
 export class DynamicResolution {
   scale = 1;
   starved = false;
   private sum = 0;
-  private frames = 0;
+  private readonly frames: number[] = [];
   private good = 0;
 
   constructor(private readonly minScale = 0.6) {}
@@ -106,13 +108,17 @@ export class DynamicResolution {
   /** Feeds one frame time; returns true when the scale changed. */
   sample(frameMs: number): boolean {
     this.sum += frameMs;
-    this.frames++;
+    this.frames.push(frameMs);
     if (this.sum < WINDOW_MS) {
       return false;
     }
-    const avg = this.sum / this.frames;
+    const sorted = this.frames.sort((a, b) => a - b);
+    const kept = Math.max(1, sorted.length - Math.floor(sorted.length * TRIM));
+    let total = 0;
+    for (let i = 0; i < kept; i++) total += sorted[i]!;
+    const avg = total / kept;
     this.sum = 0;
-    this.frames = 0;
+    this.frames.length = 0;
     const before = this.scale;
     this.starved = false;
     if (avg > SLOW_MS) {

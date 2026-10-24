@@ -138,7 +138,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const kit = new MaterialKit(settings.materials);
   withFade(kit.scenery, false);
   withFade(kit.sceneryInstanced, false);
-  const far = farMode(params.get('far'));
+  const far = farMode(params.get('far'), SOFTWARE_GL.test(pickedGpu));
   // Fakes (silhouettes, bridge decks) hide where a real island draws: plastic with the inverted island fade.
   const fake = kit.plastic.clone();
   withFade(fake, true);
@@ -192,9 +192,20 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     }));
     const graph = islandGraph(l);
     const islandStream = new IslandStreamer(graph.islands, graph.bridges, { ...ISLAND, neighbours: far === 'full' });
-    const streamer = new DistrictStreamer(units, { sliceMs: STREAM[tier].sliceMs, keep: ISLAND.preload, drop: ISLAND.preload + 10 }, undefined, islandStream.metric, budget);
+    const streamer = new DistrictStreamer(units, { sliceMs: STREAM[tier].sliceMs, keep: RESIDENT, drop: RESIDENT }, undefined, islandStream.metric, budget);
     const landmarkOf = (c: { x: number; z: number; radius: number }) =>
       d.landmarks.find((m) => Math.hypot(m.x - c.x, m.z - c.z) < c.radius) ?? null;
+    const captures = new Map<number, DistrictBuild<never>>();
+    const captureBuild = (i: number): DistrictBuild<never> => {
+      let b = captures.get(i);
+      if (!b) {
+        b = new DistrictBuild<never>(d.districts[i]!, models, kit.scenery, 0, CAPTURE_LEVEL, null);
+        b.group.visible = false;
+        scenery.add(b.group);
+        captures.set(i, b);
+      }
+      return b;
+    };
     let farView: FarView | null = null;
     if (far === 'silhouette') {
       farView = new Silhouettes(fake, (i) => {
@@ -205,26 +216,21 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       farView = new Impostors(graph.islands, {
         renderer: stage.renderer,
         scene: stage.scene,
-        districts: builds.map((b) => b.group),
-        // Builds in the shared slice; the capture (one unsplittable render) waits for an upload-free, calm frame.
+        // Each island is captured from its own light build (no solids, no minor dressing), made in the build worker.
+        district: (i) => captureBuild(i).group,
         build: (i) => {
-          const b = builds[i]!;
-          if (streamer.pending > 0) return false;
+          const b = captureBuild(i);
           if (!b.isBuilt) {
             budget.run(() => b.step() || b.busy);
-            if (b.isBuilt) {
-              warmup.add(b.group);
-              solids();
-            }
+            if (b.isBuilt) warmup.add(b.group);
             return false;
           }
-          return warmup.pending === 0 && !budget.wasLate && budget.left >= CAPTURE_MS;
+          return warmup.pending === 0;
         },
         release: (i) => {
-          if (islandStream.metric(units[i]!, i, 0, 0) === Infinity) {
-            builds[i]!.unload();
-            solids();
-          }
+          captures.get(i)?.unload();
+          captures.get(i)?.group.removeFromParent();
+          captures.delete(i);
         },
         keep: [group, scenery],
       }, l.spawn);
@@ -415,6 +421,11 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   };
   window.addEventListener('resize', resize);
   resize();
+  // Behind a post chain: programs for everything drawn later (far props, signs) and the impostor captures' canvas variants.
+  if (settings.post) {
+    warmup.compile(stage.scene, stage.camera, stage.scene, true);
+    if (built.farView instanceof Impostors) warmup.compile(islands, stage.camera, stage.scene, false);
+  }
   gate.start();
   requestAnimationFrame(() => requestAnimationFrame(() => (root.dataset['ready'] = '1')));
   const rebuild = (next: WorldData): void => {
@@ -523,8 +534,10 @@ const PROPS_ALWAYS = 40;
 /** Island rim segments per metre of radius per tier. */
 const RIM_DETAIL = { low: 1.5, medium: 2.5, high: 4, xhigh: 4 } as const;
 
-/** One island at a time: build the island across a bridge within `preload` m of its deck, draw it within `show` m. */
-const ISLAND = { preload: 20, show: 2.5, shore: 2 } as const;
+/** One island at a time: draw the island across a bridge within `show` m of its deck (its neighbours are built on landing). */
+const ISLAND = { show: 2.5, shore: 2 } as const;
+/** Stream metric (m) up to which a wanted island is built and kept: every finite one (the current island and its neighbours). */
+const RESIDENT = 1e6;
 /** Bridge distance (m) at which the island across must be built: the player is on its deck. */
 const ON_DECK = 1;
 /** A focus move longer than this (m) in one frame is a teleport. */
@@ -536,12 +549,12 @@ const FADE_SECONDS = 0.5;
 const FADE_MARGIN = 0.5;
 /** Cap colour of a silhouette landmark: the bible's teal (hub roofs). */
 const LANDMARK_CAP = 0x2fa39a;
+/** What an impostor capture builds of an island: what reads at 256 x 128 px (no detail, minor or rich dressing). */
+const CAPTURE_LEVEL = { minor: false, rich: false, detail: false } as const;
 /** Software rasterisers (no GPU): dynamic resolution starts at its floor there. */
 const SOFTWARE_GL = /swiftshader|llvmpipe|software|microsoft basic/i;
 /** Frame interval the background budget holds (60 Hz). */
 const FRAME_MS = 1000 / 60;
-/** Background time (ms) a frame must still have before an impostor capture runs in it. */
-const CAPTURE_MS = 3;
 /** Per tier: at most `sliceMs` of background work per frame (`keep`/`drop` are the edge-distance policy of the T1367 streamer). */
 const STREAM = {
   low: { sliceMs: 4, keep: 70, drop: 100 },

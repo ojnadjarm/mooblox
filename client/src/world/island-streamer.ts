@@ -7,10 +7,8 @@ export interface IslandBridge {
   readonly b: number;
 }
 
-/** How near a bridge the player starts building the island across, and how close counts as standing on it. */
+/** How close to a bridge the island across is drawn, and how close counts as standing on an island. */
 export interface IslandPolicy {
-  /** Distance (m) from a bridge deck at which the island across starts to build. */
-  readonly preload: number;
   /** Distance (m) from a bridge deck at which the island across is drawn at full detail. */
   readonly show: number;
   /** Margin (m) past the island circle that still counts as on the island (beach, shore fence). */
@@ -31,9 +29,10 @@ export function islandGraph(layout: WorldLayout): { islands: Circle[]; bridges: 
 }
 
 /**
- * One mini island at a time: the island the player stands on is live (built and drawn), the island across a bridge
- * starts building when the player nears that bridge and is drawn while the player is on it; the one behind is freed once
- * the player has left its bridge. Pure: feeds `DistrictStreamer` through `metric` and the far view through `live`.
+ * One mini island at a time: the island the player stands on is live (built and drawn); every island across one of its
+ * bridges is wanted from the moment the player lands (nearest deck first) and stays resident, so it is built long before
+ * the player reaches its deck; it is drawn while the player is on that bridge. Islands two bridges away are freed.
+ * Pure: feeds `DistrictStreamer` through `metric` and the far view through `live`.
  */
 export class IslandStreamer {
   /** Index of the island the player stands on (or last stood on while on a bridge or in the water). */
@@ -74,7 +73,7 @@ export class IslandStreamer {
       const d = deckDistance(this.islands[b.a]!, this.islands[b.b]!, x, z);
       this.bridgeDistance[bi] = d;
       const across = b.a === this.current ? b.b : b.a;
-      if (this.policy.neighbours || d <= this.policy.preload) this.wanted[across] = Math.min(this.wanted[across]!, this.policy.neighbours ? 0 : d);
+      this.wanted[across] = Math.min(this.wanted[across]!, this.policy.neighbours ? 0 : d);
       if (this.policy.neighbours || d <= this.policy.show) this.liveSet[across] = 1;
     }
     return this.current !== before;
@@ -103,7 +102,7 @@ export class IslandStreamer {
     return { across, t: Math.min(1, t) };
   }
 
-  /** Stream metric: 0 for live islands, the bridge distance for the one being preloaded, Infinity for the rest. */
+  /** Stream metric: 0 for the current island, the deck distance for its bridge neighbours, Infinity for the rest. */
   readonly metric: StreamMetric = (_unit, i) => this.wanted[i] ?? Infinity;
 
   /** The island whose circle (plus shore) holds (x, z), nearest centre first; -1 when none. */

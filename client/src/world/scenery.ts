@@ -1,12 +1,11 @@
-import { Box3, BufferAttribute, BufferGeometry, Color, Group, Matrix4, Mesh, Quaternion, Vector3, type InterleavedBufferAttribute, type Material, type Object3D } from 'three';
+import { Box3, BufferAttribute, BufferGeometry, Group, Mesh, Sphere, Vector3, type Material, type Object3D } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { District, Dressing, Placement } from './dressing';
+import type { District, Dressing } from './dressing';
 import type { ModelLibrary } from './model-library';
-import { bakeAo } from './landmarks/shapes';
-import { tagSurface } from './surfaces';
-import { sharedTrees, type TreeBuilder } from './build-worker';
-import { MeshMerge, SolidsMerge, solidsTree, type MeshArrays, type PartArrays, type SolidsTree } from './district-merge';
+import { sharedPrep, type DistrictPrepper } from './build-worker';
+import type { MeshArrays } from './district-merge';
+import { CHUNK_VERTICES, prepDistrict, withSway, type PrepInput, type Prepped } from './district-prep';
 
 /** Distance past which a district drops its detail (flowers, bushes, hedges, lamps, small props) per tier. */
 export const DETAIL_DISTANCE = { low: 20, medium: 70, high: 90, xhigh: 130 } as const;
@@ -18,15 +17,17 @@ export interface DressingLevel {
   readonly minor: boolean;
   readonly rich: boolean;
   readonly detailShadows?: boolean;
+  /** Keep the detail dressing at all (default true; a far-view capture leaves it out). */
+  readonly detail?: boolean;
   /** Edge distance (metres) within which the minor dressing shows. */
   readonly minorDistance?: number;
 }
 
 /**
  * One district's dressing, built in slices (`step`) and freed again (`unload`): a group with the big shapes, a detail
- * group and a minor group over the shared scenery material, plus the world-space solid triangles for collision. Each slice
- * places one model and appends it to its mesh; the collision BVH builds in the build worker (inline where there is none, or
- * on `finish`).
+ * group and a minor group over the shared scenery material, plus the world-space solid triangles for collision. Placement,
+ * merge and the collision BVH run in the build worker (`district-prep.ts`); inline, one model per slice, where there is no
+ * worker or on `finish`.
  */
 export class DistrictBuild<C = unknown> {
   /** Always in the scene; empty until built. */
@@ -47,9 +48,9 @@ export class DistrictBuild<C = unknown> {
     private readonly material: Material,
     detailDistance: number,
     private readonly level: DressingLevel,
-    /** Turns the solid triangles into a collider (its own build slice); the geometry may carry a ready `boundsTree`. */
-    private readonly collide: (solids: BufferGeometry) => C,
-    private readonly trees: TreeBuilder | null = sharedTrees(),
+    /** Turns the solid triangles into a collider; the geometry carries a ready `boundsTree`. Null: no solids (a far-view capture). */
+    private readonly collide: ((solids: BufferGeometry) => C) | null,
+    private readonly worker: DistrictPrepper | null = sharedPrep(),
   ) {
     const d = district.island;
     this.group.name = 'district';
@@ -60,7 +61,7 @@ export class DistrictBuild<C = unknown> {
     return this.built;
   }
 
-  /** True while the collision BVH builds in the build worker. */
+  /** True while the build worker prepares the district. */
   get busy(): boolean {
     return this.waiting;
   }
@@ -103,40 +104,21 @@ export class DistrictBuild<C = unknown> {
   private *slices(): Generator<void, void> {
     const d = this.district;
     const level = this.level;
-    const tag = (g: BufferGeometry, id: string) => (level.rich ? tagSurface(g, id) : g);
-    // Each part is appended to its mesh as it is placed: no merge pass, nothing big left for one slice.
-    const meshes = [new MeshMerge(), new MeshMerge(), new MeshMerge()];
-    const solid = new SolidsMerge();
-    const add = (g: BufferGeometry, mesh: number, isSolid: boolean) => {
-      const p = partArrays(g);
-      meshes[mesh]!.add(p);
-      if (isSolid) solid.add(p.position);
-    };
-    for (const t of d.terrain) {
-      add(tag(withSway(t.geometry, false, 1), ''), t.detail ? 1 : 0, t.solid);
-      yield;
-    }
-    for (const p of d.placements) {
-      if ((p.minor && !level.minor) || (p.rich && !level.rich)) continue;
-      add(tag(placeModel(p, this.lib), p.id), p.minor || p.rich ? 2 : p.detail ? 1 : 0, p.solid);
-      yield;
-    }
-    for (const b of d.blockers) solid.add(floats((b.index ? b.toNonIndexed() : b).getAttribute('position')));
-    const position = solid.finish();
-    let tree: SolidsTree | null = null;
-    if (position && this.trees && !this.inline) {
-      // The collision BVH builds in the worker from a copy; the slices wait for it without blocking a frame. A failed
-      // worker or a `finish` meanwhile builds it here from the original.
+    const input: PrepInput = { terrain: d.terrain, placements: d.placements, blockers: d.blockers, minor: level.minor, rich: level.rich, solids: this.collide !== null, detail: level.detail !== false };
+    let prepped: Prepped | null = null;
+    if (this.worker && !this.inline) {
+      // Placement, merge and the collision BVH run in the build worker; the slices wait for it without blocking a frame.
+      // A failed worker or a `finish` meanwhile prepares it here.
       let failed = false;
       const job = ++this.job;
       this.waiting = true;
       const settle = () => {
         if (this.job === job) this.waiting = false;
       };
-      this.trees.tree(position.slice()).then(
-        (t) => {
+      this.worker.prep(input, this.lib).then(
+        (r) => {
           if (this.job !== job) return;
-          tree = t;
+          prepped = r;
           settle();
         },
         () => {
@@ -144,26 +126,23 @@ export class DistrictBuild<C = unknown> {
           settle();
         },
       );
-      while (!tree && !failed && !this.inline) yield;
+      while (!prepped && !failed && !this.inline) yield;
     }
-    if (position && !tree) {
-      tree = solidsTree(position);
-      yield;
-    }
-    // Meshes come in chunks of at most CHUNK_VERTICES: each is one short GPU upload (and its own culling sphere, one per
-    // slice); the group takes them all at once, so `cullDistricts` never sees a half-built district.
-    const merged = meshes.map((m) => m.finish());
+    prepped ??= yield* prepDistrict(input, this.lib);
+    const { meshes: merged, spheres, tree } = prepped as Prepped;
+    // Meshes come in chunks of at most CHUNK_VERTICES: each is one short GPU upload with its culling sphere from the prep;
+    // the group takes them all at once, so `cullDistricts` never sees a half-built district.
     const parts: Mesh[][] = [[], [], []];
     for (let k = 0; k < 3; k++) {
-      for (const g of chunks(merged[k] ?? null)) {
+      const sphere = spheres[k]!;
+      chunks(merged[k] ?? null).forEach((g, c) => {
         const m = mesh(g, this.material);
         if (k === 1) m.castShadow = level.detailShadows !== false;
         // Minor and rich dressing is too small to need a shadow.
         if (k === 2) m.castShadow = false;
-        g.computeBoundingSphere();
+        g.boundingSphere = new Sphere(new Vector3(sphere[c * 4], sphere[c * 4 + 1], sphere[c * 4 + 2]), sphere[c * 4 + 3]);
         parts[k]!.push(m);
-        yield;
-      }
+      });
     }
     // The big shapes always, the detail group only within `detailDistance`, the minor one within its range (see `cullDistricts`).
     const near = new Group();
@@ -179,8 +158,8 @@ export class DistrictBuild<C = unknown> {
       o.matrixAutoUpdate = false;
     });
     this.group.userData['tris'] = merged.map((m) => (m ? m.position.length / 9 : 0));
-    if (tree) {
-      const t = tree as SolidsTree;
+    if (tree && this.collide) {
+      const t = tree;
       const solids = new BufferGeometry();
       solids.setAttribute('position', new BufferAttribute(t.position, 3));
       const bvh = MeshBVH.deserialize(t.bvh, solids, { setIndex: true });
@@ -261,31 +240,11 @@ export function singleModel(lib: ModelLibrary, id: string, height: number): Buff
   return withSway(g, false, 1);
 }
 
-/** A placed part as plain arrays for its mesh merge. */
-function partArrays(g: BufferGeometry): PartArrays {
-  const color = g.getAttribute('color');
-  const surface = g.getAttribute('surface');
-  return {
-    position: floats(g.getAttribute('position')),
-    normal: floats(g.getAttribute('normal')),
-    color: floats(color),
-    colorSize: color.itemSize,
-    sway: floats(g.getAttribute('sway')),
-    surface: surface ? floats(surface) : null,
-  };
-}
 
-/** An attribute's values as a Float32Array (as is when it already is one; converted when normalized, interleaved or not float). */
-function floats(a: BufferAttribute | InterleavedBufferAttribute): Float32Array {
-  const arr = (a as BufferAttribute).array;
-  if (!(a as InterleavedBufferAttribute).isInterleavedBufferAttribute && arr instanceof Float32Array && !a.normalized && arr.length === a.count * a.itemSize) return arr;
-  const out = new Float32Array(a.count * a.itemSize);
-  for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) out[i * a.itemSize + k] = a.getComponent(i, k);
-  return out;
-}
 
-/** Vertices per district mesh chunk: about 1 MB of vertex data, one short upload. */
-const CHUNK_VERTICES = 3 * 8192;
+function dropArray(this: BufferAttribute): void {
+  (this as { array: unknown }).array = null;
+}
 
 /** A merged mesh as geometries of at most CHUNK_VERTICES (views into the merged arrays, no copies). */
 function chunks(m: MeshArrays | null): BufferGeometry[] {
@@ -300,22 +259,13 @@ function chunks(m: MeshArrays | null): BufferGeometry[] {
     g.setAttribute('color', new BufferAttribute(m.color.subarray(a * m.colorSize, b * m.colorSize), m.colorSize));
     g.setAttribute('sway', new BufferAttribute(m.sway.subarray(a, b), 1));
     if (m.surface) g.setAttribute('surface', new BufferAttribute(m.surface.subarray(a, b), 1));
+    // Once on the GPU the chunk's arrays are not read again (culling uses the prep's sphere): the heap lets them go.
+    for (const attr of Object.values(g.attributes)) (attr as BufferAttribute).onUpload(dropArray);
     out.push(g);
   }
   return out;
 }
 
-function placeModel(p: Placement, lib: ModelLibrary): BufferGeometry {
-  const m = lib.get(p.id);
-  const s = p.width ? p.width / m.width : p.height / m.height;
-  const g = m.geometry.clone();
-  if (p.tint !== undefined) tint(g, p.tint);
-  if (p.roof !== undefined) repaintRoof(g, p.roof);
-  g.applyMatrix4(new Matrix4().compose(new Vector3(p.x, p.y, p.z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), p.yaw), new Vector3(s, s, s)));
-  if (p.bands) repaintBands(g, p.bands);
-  const out = withSway(g, p.sway === true, p.height, p.y);
-  return p.solid && p.y > -1 ? bakeAo(out, p.y, p.height > 0 ? Math.min(1.2, Math.max(0.3, p.height * 0.5)) : 0.6, 0.24) : out;
-}
 
 function mesh(g: BufferGeometry, material: Material): Mesh {
   const m = new Mesh(g, material);
@@ -323,66 +273,7 @@ function mesh(g: BufferGeometry, material: Material): Mesh {
   return m;
 }
 
-/** Keeps position, normal and colour only, plus a `sway` weight that grows with height above the base. */
-function withSway(g: BufferGeometry, sway: boolean, height: number, baseY = 0): BufferGeometry {
-  const flat = g.index ? g.toNonIndexed() : g;
-  for (const name of Object.keys(flat.attributes)) {
-    if (name !== 'position' && name !== 'normal' && name !== 'color') flat.deleteAttribute(name);
-  }
-  if (!flat.getAttribute('normal')) flat.computeVertexNormals();
-  const nrm = flat.getAttribute('normal');
-  for (let i = 0; i < nrm.count; i++) {
-    // Degenerate triangles get zero normals, which shade as NaN and bloom over the whole frame.
-    if (nrm.getX(i) === 0 && nrm.getY(i) === 0 && nrm.getZ(i) === 0) nrm.setXYZ(i, 0, 1, 0);
-  }
-  const pos = flat.getAttribute('position');
-  if (!flat.getAttribute('color')) {
-    flat.setAttribute('color', new BufferAttribute(new Float32Array(pos.count * 3).fill(1), 3));
-  }
-  const w = new Float32Array(pos.count);
-  if (sway) {
-    for (let i = 0; i < pos.count; i++) {
-      const t = Math.max(0, (pos.getY(i) - baseY) / height);
-      w[i] = t * t * Math.min(1.5, height / 3);
-    }
-  }
-  flat.setAttribute('sway', new BufferAttribute(w, 1));
-  return flat;
-}
 
-/** Recolours the strongly green faces (the kit's roofs) keeping their shading. */
-function repaintRoof(g: BufferGeometry, hex: number): void {
-  const c = new Color(hex);
-  const col = g.getAttribute('color');
-  for (let i = 0; i < col.count; i++) {
-    const r = col.getX(i);
-    const gr = col.getY(i);
-    const b = col.getZ(i);
-    if (gr > r * 1.25 && gr > b * 1.1) {
-      const l = gr / 0.55;
-      col.setXYZ(i, c.r * l, c.g * l, c.b * l);
-    }
-  }
-}
 
-const bandColour = new Color();
 
-/** Two horizontal colour bands split at world y, keeping each vertex's shading (its brightness against the model's). */
-function repaintBands(g: BufferGeometry, b: NonNullable<Placement['bands']>): void {
-  const pos = g.getAttribute('position');
-  const col = g.getAttribute('color');
-  if (!col) return;
-  for (let i = 0; i < col.count; i++) {
-    const lum = Math.min(1.15, Math.max(0.7, (col.getX(i) + col.getY(i) + col.getZ(i)) / 3 / 0.62));
-    bandColour.set(pos.getY(i) > b.split ? b.hi : b.lo);
-    col.setXYZ(i, bandColour.r * lum, bandColour.g * lum, bandColour.b * lum);
-  }
-}
 
-function tint(g: BufferGeometry, hex: number): void {
-  const c = new Color(hex);
-  const col = g.getAttribute('color');
-  for (let i = 0; i < col.count; i++) {
-    col.setXYZ(i, col.getX(i) * c.r, col.getY(i) * c.g, col.getZ(i) * c.b);
-  }
-}

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DistrictStreamer, type StreamUnit } from '../../src/world/district-streamer';
 import { islandGraph, IslandStreamer } from '../../src/world/island-streamer';
 import { Haze } from '../../src/world/haze';
-import { deckGeometry } from '../../src/world/far-view';
+import { deckGeometry, farMode } from '../../src/world/far-view';
 import { IslandLayout } from '../../src/world/island-layout';
 import { parseShape, shapeWorld } from '../../src/domain/course-shape';
 
@@ -19,7 +19,7 @@ const bridges = [
   { a: 0, b: 2 },
   { a: 0, b: 3 },
 ];
-const policy = { preload: 12, show: 2.5, shore: 2, neighbours: false };
+const policy = { show: 2.5, shore: 2, neighbours: false };
 
 class Unit implements StreamUnit {
   done = false;
@@ -47,13 +47,16 @@ describe('IslandStreamer', () => {
     s.update(0, 0);
     expect(s.current).toBe(0);
     expect([0, 1, 2, 3].filter((i) => s.live(i))).toEqual([0]);
-    expect([0, 1, 2, 3].map((i) => s.metric(null as never, i, 0, 0))).toEqual([0, Infinity, Infinity, Infinity]);
+    expect(s.metric(null as never, 0, 0, 0)).toBe(0);
   });
 
-  it('preloads the island across a bridge near its head, draws it on the deck, switches on arrival', () => {
+  it('wants every bridge neighbour from landing, nearest deck first, and draws only the one whose deck the player is on', () => {
     const s = new IslandStreamer(islands, bridges, policy);
     s.update(12, 0);
-    expect(s.metric(null as never, 1, 0, 0)).toBeLessThanOrEqual(12);
+    const m = [0, 1, 2, 3].map((i) => s.metric(null as never, i, 0, 0));
+    expect(m[0]).toBe(0);
+    expect(m.slice(1).every((d) => d < Infinity)).toBe(true);
+    expect(m[1]).toBeLessThan(m[2]!);
     expect(s.live(1)).toBe(false);
     s.update(25, 0);
     expect(s.current).toBe(0);
@@ -61,12 +64,11 @@ describe('IslandStreamer', () => {
     expect(s.crossing(25, 0)).toEqual({ across: 1, t: 0.5 });
     expect(s.update(31, 0)).toBe(true);
     expect(s.current).toBe(1);
-    // The hub behind stays wanted while the player is by its bridge, then it is freed.
-    s.update(34, 0);
-    expect(s.metric(null as never, 0, 0, 0)).toBeLessThan(Infinity);
+    // The hub behind is a neighbour: it stays resident (not drawn); the hub's other neighbours are freed.
     s.update(48, 0);
-    expect(s.metric(null as never, 0, 0, 0)).toBe(Infinity);
+    expect(s.metric(null as never, 0, 0, 0)).toBeLessThan(Infinity);
     expect(s.live(0)).toBe(false);
+    expect([2, 3].map((i) => s.metric(null as never, i, 0, 0))).toEqual([Infinity, Infinity]);
   });
 
   it('keeps the last island while in the water', () => {
@@ -82,20 +84,19 @@ describe('IslandStreamer', () => {
     expect([0, 1, 2, 3].filter((i) => s.live(i))).toEqual([0, 1, 2, 3]);
   });
 
-  it('drives the district streamer: builds the live island, frees the one left behind', () => {
+  it('drives the district streamer: builds the neighbours on landing, frees islands two bridges away', () => {
     const s = new IslandStreamer(islands, bridges, policy);
     const units = islands.map((c) => new Unit(c.x, c.z, c.radius));
-    const streamer = new DistrictStreamer(units, { sliceMs: 100, keep: 12, drop: 22 }, () => 0, s.metric);
+    const streamer = new DistrictStreamer(units, { sliceMs: 100, keep: 1e6, drop: 1e6 }, () => 0, s.metric);
     s.update(0, 0);
     streamer.finishWanted(0, 0);
     expect(units.map((u) => u.isBuilt)).toEqual([true, false, false, false]);
-    s.update(31, 0);
-    streamer.pump(31, 0);
-    expect(units[1]!.isBuilt).toBe(true);
+    streamer.pump(0, 0);
+    expect(units.map((u) => u.isBuilt)).toEqual([true, true, true, true]);
     s.update(45, 0);
     streamer.pump(45, 0);
-    expect(units[0]!.unloads).toBe(1);
-    expect(units.filter((u) => u.isBuilt).length).toBe(1);
+    expect(units.map((u) => u.isBuilt)).toEqual([true, true, false, false]);
+    expect(units[0]!.unloads).toBe(0);
   });
 
   it('links every island of a big course into one graph', () => {
@@ -138,5 +139,14 @@ describe('deckGeometry', () => {
   it('builds one deck and two rails per bridge without bottom faces', () => {
     const g = deckGeometry([{ ax: 0, az: 0, bx: 10, bz: 0 }], 0xb97a4a, 0x7a4a2a, 0.08)!;
     expect(g.getAttribute('position').count / 3).toBe(30);
+  });
+});
+
+describe('farMode', () => {
+  it('defaults to cards, to silhouettes on software GL, and lets ?far= win', () => {
+    expect(farMode(null)).toBe('impostor');
+    expect(farMode(null, true)).toBe('silhouette');
+    expect(farMode('impostor', true)).toBe('impostor');
+    expect(farMode('bogus')).toBe('impostor');
   });
 });

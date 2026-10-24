@@ -1,4 +1,4 @@
-import { Group } from 'three';
+import { Group, type Object3D } from 'three';
 import type { Activity, WorldData } from '../../domain/types';
 import type { WorldLayout } from '../layout';
 import type { Prop, PropContext } from './prop';
@@ -14,6 +14,20 @@ export class PropsLayer {
     private readonly ctx: PropContext,
   ) {
     this.group.name = 'props';
+    // Hidden props are not drawn: the per-frame matrix pass skips them (a big course has thousands of prop parts).
+    const shown: Object3D[] = [];
+    const update = this.group.updateMatrixWorld.bind(this.group);
+    this.group.updateMatrixWorld = (force?: boolean) => {
+      const all = this.group.children;
+      shown.length = 0;
+      for (const c of all) if (c.visible) shown.push(c);
+      this.group.children = shown;
+      try {
+        update(force);
+      } finally {
+        this.group.children = all;
+      }
+    };
   }
 
   build(world: WorldData, layout: WorldLayout): this {

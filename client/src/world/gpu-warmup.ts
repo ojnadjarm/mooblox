@@ -1,4 +1,4 @@
-import { Material, OrthographicCamera, WebGLRenderTarget, type Mesh, type Object3D, type WebGLRenderer } from 'three';
+import { Material, OrthographicCamera, WebGLRenderTarget, type Camera, type Mesh, type Object3D, type Scene, type WebGLRenderer } from 'three';
 import type { FrameBudget } from '../perf/frame-budget';
 
 /**
@@ -41,6 +41,15 @@ export class GpuWarmup {
       return this.queue.length === 0;
     });
     return any;
+  }
+
+  /** Compiles the programs of every material under `root`, hidden ones too, for the canvas or (`offscreen`) a plain target like the post chain's. */
+  compile(root: Object3D, camera: Camera, scene: Scene, offscreen: boolean): void {
+    const r = this.renderer;
+    const before = r.getRenderTarget();
+    r.setRenderTarget(offscreen ? this.target : null);
+    r.compile(root, camera, scene);
+    r.setRenderTarget(before);
   }
 
   private upload(mesh: Mesh): void {

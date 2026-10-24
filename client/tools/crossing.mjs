@@ -2,7 +2,7 @@
 // Per shape x rig (the perf gate's rigs: low = Iris Xe 400x800 4x CPU, stress = SwiftShader 6x, medium/high = Iris Xe 1366) the
 // player walks from the spawn to the farthest plot (demo, 1x2) or to the plot just across the spawn hub's straightest bridge (bigger
 // shapes: their farthest plot is a beeline off the hub into the water); every frame's time, island and time in pump/render/resize/player/collider/whole frame/off-screen renders are kept. A crossing window is 2 s either side of
-// each island change. Writes { rows: [{ shape, rig, frames: [[t, dt, island, pump, render, resize, player, solids, frame, offscreen, links, bufMb, tex, calls, geometries, textures]], crossings: [t], worst, crossingWorst }] }.
+// each island change. Writes { rows: [{ shape, rig, frames: [[t, dt, island, pump, render, resize, player, solids, frame, offscreen, links, bufMb, tex, calls, geometries, textures, captures, pipes]], crossings: [t], worst, crossingWorst }] }.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -75,6 +75,8 @@ try {
   for (const shape of shapes) {
     for (const name of rigs) {
       const rig = RIG[name];
+      // SwiftShader after back-to-back runs hits the host's power limit (200 ms stalls): the stress rig starts after 45 s idle, as in the perf gate.
+      if (rig.browser === 'soft') await new Promise((r) => setTimeout(r, 45000));
       const page = await browsers[rig.browser].newPage({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch });
       page.on('pageerror', (e) => console.error('pageerror:', e.message));
       const cdp = await page.context().newCDPSession(page);
@@ -112,14 +114,30 @@ try {
             const r = v.stage.renderer;
             const draw = r.render.bind(r);
             r.render = (...a) => {
-              if (!r.getRenderTarget()) return draw(...a);
+              const target = r.getRenderTarget();
+              if (!target) return draw(...a);
               const t = performance.now();
               draw(...a);
               spent.offscreen += performance.now() - t;
+              // The impostor atlas (2048x1024): its captures, one column on their own.
+              if (target.width === 2048 && target.height === 1024) gpu.captures++;
             };
             // GPU work queued per frame: program links, buffer bytes (MB), texture uploads.
             const gl = v.stage.renderer.getContext();
-            const gpu = { links: 0, bufMb: 0, tex: 0 };
+            const gpu = { links: 0, bufMb: 0, tex: 0, captures: 0, pipes: 0 };
+            // First draws of a (program, vertex layout, target, blend/depth/side) state: a software GL compiles a pipeline for each.
+            const seen = new Set();
+            const direct = r.renderBufferDirect.bind(r);
+            r.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
+              const t = r.getRenderTarget();
+              const layout = Object.entries(geometry.attributes).map(([k, a]) => `${k}${a.itemSize}${a.normalized ? 'n' : ''}${a.array?.constructor.name ?? ''}`).sort().join();
+              const key = `${material.type}${material.customProgramCacheKey?.() ?? ''}${material.defines ? JSON.stringify(material.defines) : ''}|${layout}|${object.isInstancedMesh ? 'i' : ''}${object.isSkinnedMesh ? 's' : ''}|${t ? `${t.width}x${t.height}${t.samples}` : 'screen'}|${material.blending}${material.transparent}${material.depthWrite}${material.depthTest}${material.side}${material.colorWrite}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                gpu.pipes++;
+              }
+              return direct(camera, scene, geometry, material, object, group);
+            };
             const count = (name, f) => {
               const orig = gl[name].bind(gl);
               gl[name] = (...a) => {
@@ -144,9 +162,9 @@ try {
               const p = v.player.body.position;
               const on = circles.findIndex((c) => Math.hypot(c.x - p.x, c.z - p.z) < c.radius);
               if (on >= 0) island = on;
-              if (last !== null) out.push([+(t - t0).toFixed(1), +(t - last).toFixed(1), island, ...Object.values(spent).map((x) => +x.toFixed(1)), gpu.links, +gpu.bufMb.toFixed(2), gpu.tex, v.stage.renderer.info.render.calls, v.stage.renderer.info.memory.geometries, v.stage.renderer.info.memory.textures]);
+              if (last !== null) out.push([+(t - t0).toFixed(1), +(t - last).toFixed(1), island, ...Object.values(spent).map((x) => +x.toFixed(1)), gpu.links, +gpu.bufMb.toFixed(2), gpu.tex, v.stage.renderer.info.render.calls, v.stage.renderer.info.memory.geometries, v.stage.renderer.info.memory.textures, gpu.captures, gpu.pipes]);
               for (const k in spent) spent[k] = 0;
-              gpu.links = gpu.bufMb = gpu.tex = 0;
+              gpu.links = gpu.bufMb = gpu.tex = gpu.captures = gpu.pipes = 0;
               last = t;
               if (v.probe.reached || t - t0 > max) return resolve({ out, tasks });
               requestAnimationFrame(tick);
