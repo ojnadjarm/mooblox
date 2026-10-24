@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import fixture from '../fixtures/get_world_demo.json';
+import rewards from '../fixtures/get_rewards_demo.json';
 import { AjaxGateway } from '../../src/moodle/ajax-gateway';
 import { MoodleError } from '../../src/moodle/moodle-error';
 
@@ -66,5 +67,24 @@ describe('AjaxGateway', () => {
     ['network', () => new AjaxGateway(session, async () => { throw new TypeError('offline'); })],
   ])('maps transport trouble to a %s failure', async (kind, make) => {
     expect((await failure(make().getWorld(30))).kind).toBe(kind);
+  });
+
+  it('calls get_rewards, claim_collectible and set_look with their wire arguments', async () => {
+    const got = gatewayReplying([{ error: false, data: rewards }]);
+    expect((await got.gw.getRewards(31)).xp).toBe(45);
+    expect(sent(got.fetchFn).body[0]).toEqual({ index: 0, methodname: 'local_mooblox_get_rewards', args: { courseid: 31 } });
+
+    const claim = gatewayReplying([{ error: false, data: { key: 'gem:46', found: 2 } }]);
+    expect(await claim.gw.claimCollectible(31, 'gem:46')).toBe(2);
+    expect(sent(claim.fetchFn).body[0].args).toEqual({ courseid: 31, key: 'gem:46' });
+
+    const look = gatewayReplying([{ error: false, data: { hat: 'hat-cap', outfit: '', pet: '' } }]);
+    expect(await look.gw.setLook({ hat: 'hat-cap', outfit: null, pet: null })).toEqual({ hat: 'hat-cap', outfit: null, pet: null });
+    expect(sent(look.fetchFn).body[0].args).toEqual({ hat: 'hat-cap', outfit: '', pet: '' });
+  });
+
+  it('reports a get_rewards reply of the wrong shape as a protocol error', async () => {
+    const { gw } = gatewayReplying([{ error: false, data: { enabled: true } }]);
+    expect((await failure(gw.getRewards(31))).kind).toBe('protocol');
   });
 });

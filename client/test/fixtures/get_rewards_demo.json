@@ -1,0 +1,233 @@
+{
+  "enabled": true,
+  "xp": 45,
+  "level": 0,
+  "peaklevel": 0,
+  "levelstart": 0,
+  "levelnext": 50,
+  "quests": [
+    {
+      "id": "sec:40",
+      "kind": "section",
+      "name": "Reading corner",
+      "text": "Finish Reading corner",
+      "done": 3,
+      "total": 3,
+      "complete": true,
+      "reward": "outfit-candy"
+    },
+    {
+      "id": "sec:41",
+      "kind": "section",
+      "name": "Cinema",
+      "text": "Finish Cinema",
+      "done": 1,
+      "total": 2,
+      "complete": false,
+      "reward": "outfit-lava"
+    },
+    {
+      "id": "sec:42",
+      "kind": "section",
+      "name": "Arena",
+      "text": "Finish Arena",
+      "done": 0,
+      "total": 2,
+      "complete": false,
+      "reward": "outfit-forest"
+    },
+    {
+      "id": "sec:43",
+      "kind": "section",
+      "name": "Lava lab",
+      "text": "Finish Lava lab",
+      "done": 0,
+      "total": 1,
+      "complete": false,
+      "reward": "hat-glasses"
+    },
+    {
+      "id": "mod:video",
+      "kind": "video",
+      "name": "",
+      "text": "Watch all the videos",
+      "done": 1,
+      "total": 2,
+      "complete": false,
+      "reward": "outfit-space"
+    },
+    {
+      "id": "mod:quiz",
+      "kind": "quiz",
+      "name": "",
+      "text": "Pass every quiz",
+      "done": 0,
+      "total": 2,
+      "complete": false,
+      "reward": "hat-tophat"
+    },
+    {
+      "id": "mod:page",
+      "kind": "page",
+      "name": "",
+      "text": "Read every page",
+      "done": 3,
+      "total": 4,
+      "complete": false,
+      "reward": "hat-pirate"
+    },
+    {
+      "id": "badge:1",
+      "kind": "badge",
+      "name": "Bookworm",
+      "text": "Earn the Bookworm trophy",
+      "done": 1,
+      "total": 1,
+      "complete": true,
+      "reward": "hat-cap"
+    },
+    {
+      "id": "badge:2",
+      "kind": "badge",
+      "name": "Quiz champ",
+      "text": "Earn the Quiz champ trophy",
+      "done": 0,
+      "total": 1,
+      "complete": false,
+      "reward": "hat-explorer"
+    },
+    {
+      "id": "course",
+      "kind": "course",
+      "name": "",
+      "text": "Finish the whole course",
+      "done": 0,
+      "total": 1,
+      "complete": false,
+      "reward": "outfit-snow"
+    }
+  ],
+  "collectibles": [
+    {
+      "key": "gem:46",
+      "kind": "gem",
+      "sectionid": 40,
+      "cmid": 46,
+      "unlocked": true,
+      "found": false
+    },
+    {
+      "key": "gem:47",
+      "kind": "gem",
+      "sectionid": 40,
+      "cmid": 47,
+      "unlocked": true,
+      "found": false
+    },
+    {
+      "key": "gem:48",
+      "kind": "gem",
+      "sectionid": 40,
+      "cmid": 48,
+      "unlocked": true,
+      "found": false
+    },
+    {
+      "key": "crystal:40",
+      "kind": "crystal",
+      "sectionid": 40,
+      "cmid": 0,
+      "unlocked": true,
+      "found": false
+    },
+    {
+      "key": "star:40:1",
+      "kind": "star",
+      "sectionid": 40,
+      "cmid": 0,
+      "unlocked": true,
+      "found": false
+    },
+    {
+      "key": "gem:49",
+      "kind": "gem",
+      "sectionid": 41,
+      "cmid": 49,
+      "unlocked": true,
+      "found": false
+    },
+    {
+      "key": "gem:50",
+      "kind": "gem",
+      "sectionid": 41,
+      "cmid": 50,
+      "unlocked": false,
+      "found": false
+    },
+    {
+      "key": "crystal:41",
+      "kind": "crystal",
+      "sectionid": 41,
+      "cmid": 0,
+      "unlocked": false,
+      "found": false
+    },
+    {
+      "key": "gem:51",
+      "kind": "gem",
+      "sectionid": 42,
+      "cmid": 51,
+      "unlocked": false,
+      "found": false
+    },
+    {
+      "key": "gem:52",
+      "kind": "gem",
+      "sectionid": 42,
+      "cmid": 52,
+      "unlocked": false,
+      "found": false
+    },
+    {
+      "key": "crystal:42",
+      "kind": "crystal",
+      "sectionid": 42,
+      "cmid": 0,
+      "unlocked": false,
+      "found": false
+    },
+    {
+      "key": "gem:53",
+      "kind": "gem",
+      "sectionid": 43,
+      "cmid": 53,
+      "unlocked": false,
+      "found": false
+    },
+    {
+      "key": "crystal:43",
+      "kind": "crystal",
+      "sectionid": 43,
+      "cmid": 0,
+      "unlocked": false,
+      "found": false
+    }
+  ],
+  "unlocks": [
+    "outfit-candy",
+    "hat-cap"
+  ],
+  "look": {
+    "hat": "",
+    "outfit": "",
+    "pet": ""
+  },
+  "trophies": [
+    {
+      "badgeid": 1,
+      "name": "Bookworm",
+      "image": "https://moodle.example/pluginfile.php/163/badges/badgeimage/1/f3",
+      "timeissued": 1792847382
+    }
+  ]
+}

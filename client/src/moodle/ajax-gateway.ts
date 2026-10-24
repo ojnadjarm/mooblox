@@ -1,4 +1,7 @@
 import type { WorldDto } from '../domain/dto';
+import type { Look, Rewards } from '../domain/rewards';
+import type { ClaimDto, LookDto } from '../domain/rewards-dto';
+import { assertRewardsDto, toLook, toLookDto, toRewards } from '../domain/rewards-mapper';
 import { toWorld } from '../domain/mapper';
 import type { WorldData } from '../domain/types';
 import type { MoodleGateway } from './gateway';
@@ -36,6 +39,24 @@ export class AjaxGateway implements MoodleGateway {
 
   async touchSession(): Promise<void> {
     await this.call('core_session_touch', {});
+  }
+
+  async getRewards(courseId: number): Promise<Rewards> {
+    const dto = await this.call<unknown>('local_mooblox_get_rewards', { courseid: courseId });
+    try {
+      assertRewardsDto(dto);
+    } catch (e) {
+      throw new MoodleError('protocol', `local_mooblox_get_rewards: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    return toRewards(dto);
+  }
+
+  async claimCollectible(courseId: number, key: string): Promise<number> {
+    return (await this.call<ClaimDto>('local_mooblox_claim_collectible', { courseid: courseId, key })).found;
+  }
+
+  async setLook(look: Look): Promise<Look> {
+    return toLook(await this.call<LookDto>('local_mooblox_set_look', { ...toLookDto(look) }));
   }
 
   private async call<T>(methodname: string, args: Record<string, unknown>): Promise<T> {
