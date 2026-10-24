@@ -112,18 +112,19 @@ The contrast between soft and crisp is the point. Baked into the shared models f
 | Soft | tree crowns, bushes | smooth-shaded normals (puffy), no extra triangles |
 | Round | hedges, signs, lamps, barrels, pots, planters, fountains, mushrooms, tents, boats; island rims; plot pads | one bevel + smooth normals; rims a rolled grass lip; pads rounded corners |
 | Soft edges | buildings, market stalls, roofs | one chamfer on long edges only (wall corners, eaves, ridges) |
+| Bulging | house roofs, landmark domes, tent and keeper's-house roofs, canopies | slopes split 3x3 and pushed out most at mid-slope, smooth-shaded (pillowy); spires keep crisp hips with a flared, curved profile; mansard roofs stay flat |
 | Crisp | planks, bridges, docks, fences, stone steps, crates, logs, carts, windows, doors, rocks, small dressing | left sharp |
 
 Districts get a theme (from the section's dominant activity purpose, else in order) with a hand-made landmark:
 
 | Theme | Landmark | Accent | Medium pieces |
 | --- | --- | --- | --- |
-| Hub | Clock tower, teal prism roof, weather vane; fountain centrepiece | teal | market stalls, planters, lamp pairs |
-| Library | Domed library on a 2-step terrace with columns | teal | book kiosk, reading garden, giant open book |
-| Science | Faceted glass greenhouse dome with a small rocket | lime / white | telescope, planters, weather mast |
-| Sports | Mini stadium ring with coral flags | coral | goal, bleachers, track loop |
-| Arts | Round theatre tent beside a striped lighthouse | sunflower | stage, easels, bunting |
-| Harbour / nature | Lighthouse on a rocky point, docks | red-white | boats, nets, reeds, beach umbrellas |
+| Hub | Clock tower on a stepped plinth, arched door, flared curved teal roof, rooster vane; fountain centrepiece | teal | market stalls, planters, lamp pairs |
+| Library | Podium with a grand stair, four-column portico and pediment, drum of round windows, ribbed dome | teal | book kiosk, reading garden, giant open book |
+| Science | Big faceted glass greenhouse dome with white ribs, round-nosed rocket by its gantry | lime / white | telescope, planters, weather mast |
+| Sports | Mini stadium ring, curved canopy over the back stand, arched gate, coral flags | coral | goal, bleachers, track loop |
+| Arts | Big striped theatre tent with a bulging roof, scalloped valance and arched entrance | sunflower | stage, easels, bunting |
+| Harbour / nature | Lighthouse with gallery and domed cap beside a round keeper's house, on a rocky point | red-white | boats, nets, reeds, beach umbrellas |
 
 Landmarks are bespoke models (Blender or composed kit pieces with their own faceted parts), never a recoloured house.
 

@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, Color, ConeGeometry, CylinderGeometry, DodecahedronGeometry, SphereGeometry, type BufferGeometry } from 'three';
+import { BoxGeometry, BufferAttribute, Color, ConeGeometry, CylinderGeometry, DodecahedronGeometry, LatheGeometry, SphereGeometry, Vector2, type BufferGeometry } from 'three';
 
 /** Shadow tint of the art bible: baked AO and shade lean towards it, never towards black. */
 export const SHADOW_TINT = 0x4b5a8c;
@@ -11,14 +11,40 @@ export function facet(g: BufferGeometry, colour: number, x = 0, y = 0, z = 0): B
   if (flat !== g) g.dispose();
   flat.deleteAttribute('uv');
   flat.translate(x, y, z);
-  const c = new Color(colour);
-  const n = flat.getAttribute('position').count;
-  const col = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
-  flat.setAttribute('color', new BufferAttribute(col, 3));
+  paint(flat, colour);
   flat.computeVertexNormals();
   return flat;
 }
+
+function paint(g: BufferGeometry, colour: number): void {
+  const c = new Color(colour);
+  const n = g.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new BufferAttribute(col, 3));
+}
+
+/**
+ * A solid of revolution standing on y from `profile` ([radius, height] bottom to top): soft (smooth normals) for domes,
+ * bulging roofs and tents, else faceted; `turn` and `sweep` set the start angle and arc (canopies).
+ */
+export function lathe(profile: readonly (readonly [number, number])[], sides: number, colour: number, x = 0, y = 0, z = 0, soft = true, turn = 0, sweep = Math.PI * 2): BufferGeometry {
+  const g = new LatheGeometry(profile.map(([r, h]) => new Vector2(r, h)), sides, turn, sweep);
+  if (!soft) return facet(g, colour, x, y, z);
+  const flat = g.toNonIndexed();
+  g.dispose();
+  flat.deleteAttribute('uv');
+  flat.translate(x, y, z);
+  paint(flat, colour);
+  return flat;
+}
+
+/** Triangles per lathe gore (one `sides` step of a profile with `points` points): the run that stripes a lathe per gore. */
+export const gore = (points: number): number => 2 * (points - 1);
+
+/** A pillowy hip roof w x d, `h` high on y: four slopes that bulge out, soft-shaded. */
+export const hipRoof = (w: number, d: number, h: number, colour: number, x = 0, y = 0, z = 0): BufferGeometry =>
+  lathe([[1, 0], [0.93, 0.3], [0.74, 0.62], [0.44, 0.88], [0, 1]], 4, colour, 0, 0, 0, true, Math.PI / 4).scale(w / Math.SQRT2, h, d / Math.SQRT2).translate(x, y, z);
 
 export const box = (w: number, h: number, d: number, colour: number, x = 0, y = 0, z = 0): BufferGeometry =>
   facet(new BoxGeometry(w, h, d), colour, x, y + h / 2, z);
