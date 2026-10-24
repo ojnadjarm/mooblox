@@ -134,7 +134,8 @@ export class Player {
     const jumped = this.sinceJump < this.sinceLand;
     const air = jumped || this.airborne > FALL_AFTER;
     const ground = speed > 0.4 ? (running ? 'run' : 'walk') : 'idle';
-    this.avatar.play(!air ? ground : jumped && vy > -FALL_SPEED ? 'jump' : 'fall');
+    const falling = this.avatar.state === 'fall' || !jumped || vy < -FALL_SPEED;
+    this.avatar.play(!air ? ground : falling ? 'fall' : 'jump');
     this.stride += running && this.body.onGround ? dt : 0;
     if (this.stride >= Feel.stride) {
       this.stride = 0;
