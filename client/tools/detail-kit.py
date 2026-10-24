@@ -4,7 +4,8 @@
 # barrel staves seamed and the lid sunk in its rim, house doors in vertical boards, stall tables and sign boards in planks,
 # fence posts pointed, lamp posts with two collars, leaf clumps on broadleaf crowns and hedge tops, sunlit pine tiers,
 # moss pads and pebbles on rocks, blossom window boxes and shutter pairs at house windows, inner leaf fans on bushes, clumps on
-# planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks. Seams and sunk walls use a darker copy
+# planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks, growth rings and bark plates on the stump,
+# logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree. Seams and sunk walls use a darker copy
 # of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
 import bpy, colorsys, math, os, sys
@@ -396,6 +397,41 @@ def rock(bm, size, mats, slot, seed):
              (0.04 + 0.015 * k) * size, slot(dirt), None, smooth=False, sides=5, rot=a)
 
 
+def rings(bm, faces, steps, slot):
+    """Growth rings: the region inset in turns of (gap, line) widths, each line ring painted in the darker slot."""
+    for gap, line in steps:
+        bmesh.ops.inset_region(bm, faces=faces, thickness=gap, depth=0.0, use_even_offset=True)
+        res = bmesh.ops.inset_region(bm, faces=faces, thickness=line, depth=0.0, use_even_offset=True)
+        paint(bm, res['faces'], slot)
+
+
+def campfire(bm, mats, uv, size):
+    """Three crossed logs and a low ember heap inside the stone ring (crisp boxes, a flat dome)."""
+    vs = [v.co for v in bm.verts]
+    c = Vector(((min(v.x for v in vs) + max(v.x for v in vs)) / 2, (min(v.y for v in vs) + max(v.y for v in vs)) / 2, 0))
+    log = coloured(mats, 0, 'campfire-log', (0.36, 0.14, 0.05))
+    ember = coloured(mats, 0, 'campfire-ember', (1.0, 0.32, 0.03))
+    dome(bm, c, Vector((0, 0, 1)), 0.16 * size, 0.12 * size, ember, uv, Vector((0, 0)), smooth=False, sides=6)
+    half, t = 0.2 * size, 0.045 * size
+    for k in range(3):
+        a = k * math.pi / 3 + 0.3
+        n = Vector((math.cos(a), math.sin(a), 0))
+        across = Vector((n.y, -n.x, 0))
+        z = 0.01 * size + k * 0.6 * t
+        block(bm, c - across * half - n * t / 2 + Vector((0, 0, z)), c + across * half + n * t / 2 + Vector((0, 0, z + t)), n, log, uv, Vector((0, 0)))
+
+
+def spots(bm, caps, uv, white):
+    """White spots on each mushroom cap: flat 5-sided domes on its upper side faces."""
+    for cap in components(caps):
+        side = sorted([f for f in cap if 0.35 < f.normal.z < 0.9], key=lambda f: -f.calc_area())
+        vs = [v.co for f in cap for v in f.verts]
+        r = max(max(v.x for v in vs) - min(v.x for v in vs), max(v.y for v in vs) - min(v.y for v in vs)) / 2
+        for k, f in enumerate(side[:4]):
+            n = f.normal.copy()
+            dome(bm, f.calc_center_median() - n * 0.02 * r, n, 0.28 * r, 0.1 * r, white, uv, smooth=False, sides=5, rot=k)
+
+
 def plane_groups(faces, size):
     """Faces grouped by plane (normal and offset)."""
     out = {}
@@ -444,6 +480,16 @@ def recipe(name):
         return 'flower'
     if name.startswith('fountain-round'):
         return 'fountain'
+    if name == 'stump_round':
+        return 'stump'
+    if name == 'campfire_stones':
+        return 'campfire'
+    if name.startswith('mushroom_'):
+        return 'mushroom'
+    if name == 'tent_smallOpen':
+        return 'tent'
+    if name == 'tree-large':
+        return 'suburb-tree'
     return None
 
 
@@ -624,6 +670,26 @@ def detail(o, kind):
         rim = max(plane_groups(far, size), key=lambda g: sum(f.calc_area() for f in g), default=[])
         if rim:
             blocks(bm, rim, ring_planes(c, 8), size * 0.5, slot, short=True)
+    elif kind == 'stump':
+        inner = next(i for i, m in enumerate(me.materials) if m.name.startswith('woodInner'))
+        core = [f for f in bm.faces if f.material_index == inner and f.normal.z > 0.95]
+        r = max(Vector((v.co.x, v.co.y)).length for f in core for v in f.verts)
+        rings(bm, core, [(0.1 * r, 0.08 * r), (0.18 * r, 0.08 * r)], slot)
+        seams(bm, [f for f in bm.faces if f.material_index != inner and abs(f.normal.z) < 0.6 and not f[bm.faces.layers.int.get('flat')]],
+              size, slot, any_shape=True, short=True)
+    elif kind == 'campfire':
+        campfire(bm, me.materials, uv, size)
+    elif kind == 'mushroom':
+        spots(bm, [f for f in bm.faces if f.material_index == 1], uv, 0)
+    elif kind == 'tent':
+        for side in plane_groups([f for f in bm.faces if f.material_index == 0 and f.normal.z > 0.5], size):
+            if sum(f.calc_area() for f in side) > 0.1 * size * size:
+                boards(bm, side, Vector((0, 1, 0)), 3, size, slot)
+    elif kind == 'suburb-tree':
+        greens = [f for f in bm.faces if (lambda c: c[1] > c[0] + 0.15 and c[1] > c[2])(col(f, uv))]
+        if greens:
+            lit = max(greens, key=lambda f: sum(col(f, uv)))
+            crown(bm, greens, 7, 0.24, greens[0].material_index, 2.0, uv, lit.loops[0][uv].uv.copy())
     bm.to_mesh(me)
     bm.free()
     if keep:
