@@ -11,9 +11,11 @@ import { Palette } from '../world/palette';
 import { createPropRegistry } from '../world/props/catalog';
 import { CanvasSignPainter } from '../world/props/sign-painter';
 import { createOpenerRegistry } from '../interaction/catalog';
+import { decodeLook, encodeLook } from '../player/look';
+import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { ScriptedTutor } from '../tutor/scripted-tutor';
-import { startActivities, startGuide, startPlayer, startWorld, type WorldView } from './app';
+import { startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
 const FIXTURE_HOST = 'https://moodle.example';
@@ -49,11 +51,14 @@ async function boot(): Promise<void> {
     const walk = Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
     const avatars = await AvatarKit.load(ASSETS);
-    const player = await startPlayer(view, avatars, { skin: 'b', tint: Palette.red }, [pilot]);
+    const look = params.has('avatar') ? decodeLook(params.get('avatar')!, avatars.bodies.map((b) => b.id)) : { skin: 'b', tint: Palette.red };
+    const player = await startPlayer(view, avatars, look, [pilot]);
     const course = { store, gateway };
     const interaction = startActivities(view, player, createOpenerRegistry(gateway), course);
     const guide = await startGuide(view, player, avatars, new ScriptedTutor(), course, DEFAULT_GUIDE_STRINGS);
-    Object.assign(window, { mooblox: { ...view, probe, player, interaction, store, gateway, guide } });
+    const keep = (l: typeof look) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
+    const picker = startAvatarPicker(view, player, avatars, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
+    Object.assign(window, { mooblox: { ...view, probe, player, interaction, store, gateway, guide, picker } });
     if (walk) {
       pilot.drive(view, player, walk, probe);
     }

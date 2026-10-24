@@ -22,16 +22,27 @@ export interface AvatarLook {
 
 export const SKINS = 'abcdefghijklmnopqr'.split('');
 
+/** A preset body the picker offers: its id and the face area of an image, as fractions (top-left origin). */
+export interface AvatarBody {
+  readonly id: string;
+  readonly preview: { readonly url: string; readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number };
+}
+
 /** Builds avatars from a look; the one seam a different character set plugs into. */
 export interface AvatarFactory {
+  readonly bodies: readonly AvatarBody[];
   create(look: AvatarLook): Promise<Avatar>;
 }
+
+const FACE = { x0: 0.09375, y0: 0.09375, x1: 0.28125, y1: 0.28125 };
 
 /** Loads the blocky character once and builds tinted avatars from it. */
 export class AvatarKit implements AvatarFactory {
   private readonly skins = new Map<string, Promise<ImageBitmap>>();
 
   private readonly uvTransform: Texture | null;
+
+  readonly bodies: readonly AvatarBody[];
 
   private constructor(
     private readonly template: Object3D,
@@ -43,6 +54,7 @@ export class AvatarKit implements AvatarFactory {
       map ??= ((o as Mesh).material as MeshBasicMaterial | undefined)?.map ?? null;
     });
     this.uvTransform = map;
+    this.bodies = SKINS.map((id) => ({ id, preview: { url: `${assetBase}skins/texture-${id}.png`, ...FACE } }));
   }
 
   static async load(assetBase: string): Promise<AvatarKit> {

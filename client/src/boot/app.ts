@@ -28,6 +28,7 @@ import { ActivityPrompt } from '../ui/prompt';
 import { Guide, type GuideStrings } from '../tutor/guide';
 import type { Tutor } from '../tutor/tutor';
 import { Palette } from '../world/palette';
+import { AvatarPicker, type AvatarPickerStrings } from '../ui/avatar-picker';
 import { BookController } from '../ui/book-controller';
 import { TouchControls } from '../ui/touch-controls';
 import { Stage } from '../world/stage';
@@ -132,7 +133,7 @@ export async function startPlayer(
   const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
   view.onFrame((dt) => {
     player.update(dt);
-    view.stage.focusShadow(avatar.root.position.x, avatar.root.position.z, SHADOW_RADIUS);
+    view.stage.focusShadow(player.body.position.x, player.body.position.z, SHADOW_RADIUS);
   });
   return player;
 }
@@ -185,6 +186,32 @@ export async function startGuide(
   course.store.subscribe((world) => guide.say(tutor.nextStep({ world })));
   view.onFrame((dt) => guide.update(dt, player.avatar.root.position));
   return guide;
+}
+
+/** The avatar picker: each pick swaps the player's model at once, closing saves the look through `keep`. */
+export function startAvatarPicker(
+  view: WorldView,
+  player: Player,
+  avatars: AvatarFactory,
+  look: AvatarLook,
+  keep: (look: AvatarLook) => Promise<void>,
+  strings: AvatarPickerStrings,
+): AvatarPicker {
+  let latest = 0;
+  return new AvatarPicker(view.stage.canvasHost, avatars.bodies, look, strings, {
+    opened: () => player.faceCamera(),
+    picked: async (next) => {
+      const ticket = ++latest;
+      const avatar = await avatars.create(next);
+      if (ticket === latest) {
+        player.setAvatar(avatar).dispose();
+        view.gate.invalidate();
+      } else {
+        avatar.dispose();
+      }
+    },
+    kept: (next) => void keep(next).catch((e: unknown) => console.error('mooblox: saving the avatar failed', e)),
+  });
 }
 
 const STAND_OFF = 1.6;

@@ -3,12 +3,15 @@ import { keepSessionAlive } from '../moodle/session-keeper';
 import { CourseStore } from '../state/course-store';
 import { createOpenerRegistry } from '../interaction/catalog';
 import { AvatarKit } from '../player/avatar-kit';
+import { decodeLook, encodeLook } from '../player/look';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { DEFAULT_TUTOR_STRINGS, ScriptedTutor } from '../tutor/scripted-tutor';
-import { startActivities, startGuide, startPlayer, startWorld } from './app';
+import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
+import { startActivities, startAvatarPicker, startGuide, startPlayer, startWorld } from './app';
 import { readConfig } from './config';
 
 const SESSION_TOUCH_MS = 5 * 60 * 1000;
+const AVATAR_PREFERENCE = 'local_mooblox_avatar';
 
 /** Composition root: reads the play.php config and wires the client. */
 async function boot(): Promise<void> {
@@ -24,12 +27,15 @@ async function boot(): Promise<void> {
   root.dataset['courseid'] = String(config.courseid);
   const view = startWorld(root, store.world!);
   const avatars = await AvatarKit.load(new URL(/* @vite-ignore */ './assets/', import.meta.url).href);
-  const player = await startPlayer(view, avatars, { skin: config.avatar || 'a', tint: null });
+  const look = decodeLook(config.avatar, avatars.bodies.map((b) => b.id));
+  const player = await startPlayer(view, avatars, look);
   const course = { store, gateway };
   const interaction = startActivities(view, player, createOpenerRegistry(gateway), course);
   const strings = config.strings;
+  const keep = (l: typeof look) => gateway.savePreference(AVATAR_PREFERENCE, encodeLook(l));
+  const picker = startAvatarPicker(view, player, avatars, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
-  Object.assign(window, { mooblox: { ...view, player, interaction, store, guide } });
+  Object.assign(window, { mooblox: { ...view, player, interaction, store, guide, picker } });
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));

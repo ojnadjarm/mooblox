@@ -144,6 +144,25 @@ async function quiz(page) {
   }
 }
 
-async function avatar() {
-  throw new Error('avatar scenario not written yet');
+async function avatar(page) {
+  const pref = () => sql("SELECT value FROM {user_preferences} WHERE userid = ? AND name = 'local_mooblox_avatar'", userid);
+  check('no avatar preference yet', pref() === null, `value ${pref()}`);
+  await page.locator('.mooblox-hud-avatar').click();
+  await page.locator('[data-body="f"]').click();
+  await page.locator('[data-colour="green"]').click();
+  await page.locator('.mooblox-picker-done').click();
+  const saved = await waitFor(() => pref());
+  check('Done saves the preference row', saved === 'f_green', `value ${saved}`);
+  await openPlay(page);
+  const look = await page.evaluate(() => JSON.stringify(window.mooblox.picker.current));
+  check('reload keeps the choice', look === '{"skin":"f","tint":4431943}', look);
+  await page.locator('.mooblox-hud-avatar').click();
+  check('picker marks the saved body and colour', await page.evaluate(() => document.querySelector('[data-body="f"]').getAttribute('aria-pressed') === 'true'
+    && document.querySelector('[data-colour="green"]').getAttribute('aria-pressed') === 'true'));
+  if (out) {
+    await page.screenshot({ path: `${out}/avatar-reloaded.png` });
+  }
+  await page.keyboard.press('Escape');
+  const bubble = await page.evaluate(() => window.mooblox.guide.bubble.textContent);
+  check('guide greets the learner by first name', bubble.includes('Hi Mia!'), bubble.trim().slice(0, 40));
 }

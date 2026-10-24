@@ -50,6 +50,11 @@ $config = [
         'next' => get_string('guide_next', 'local_mooblox', '{activity}'),
         'alldone' => get_string('guide_alldone', 'local_mooblox'),
         'showme' => get_string('guide_showme', 'local_mooblox'),
+        'avatar' => get_string('avatar', 'local_mooblox'),
+        'body' => get_string('avatar_body', 'local_mooblox'),
+        'colour' => get_string('avatar_colour', 'local_mooblox'),
+        'original' => get_string('avatar_original', 'local_mooblox'),
+        'done' => get_string('avatar_done', 'local_mooblox'),
     ],
 ];
 

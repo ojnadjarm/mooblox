@@ -24,6 +24,11 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['avatar'] = 'My avatar';
+$string['avatar_body'] = 'Body';
+$string['avatar_colour'] = 'Shirt colour';
+$string['avatar_done'] = 'Done';
+$string['avatar_original'] = 'Original';
 $string['disabled'] = 'MOOBLOX is turned off on this site.';
 $string['enabled'] = 'Enable MOOBLOX';
 $string['enabled_desc'] = 'When on, students and teachers can open each course as a 3D world.';

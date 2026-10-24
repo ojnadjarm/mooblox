@@ -17,7 +17,7 @@ export class Player {
   private facing = Math.PI;
 
   constructor(
-    readonly avatar: Avatar,
+    private model: Avatar,
     private readonly collider: Collider,
     private readonly spawn: Vector3,
     private readonly input: InputSource,
@@ -25,8 +25,28 @@ export class Player {
   ) {
     this.body = { position: spawn.clone(), velocity: new Vector3(), onGround: false };
     this.prev.copy(spawn);
-    avatar.root.position.copy(spawn);
+    model.root.position.copy(spawn);
     camera.follow(spawn, 0, true);
+  }
+
+  get avatar(): Avatar {
+    return this.model;
+  }
+
+  /** Swaps the model in place (same spot, heading and state); returns the old one for disposal. */
+  setAvatar(next: Avatar): Avatar {
+    const old = this.model;
+    next.root.position.copy(old.root.position);
+    next.root.rotation.y = old.root.rotation.y;
+    old.root.parent?.add(next.root);
+    old.root.removeFromParent();
+    this.model = next;
+    return old;
+  }
+
+  /** Swings the camera round to the avatar's front. */
+  faceCamera(): void {
+    this.camera.yaw = this.facing;
   }
 
   update(dt: number): void {
