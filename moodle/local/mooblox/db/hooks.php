@@ -29,4 +29,8 @@ $callbacks = [
         'hook' => \core\hook\navigation\secondary_extend::class,
         'callback' => [\local_mooblox\hook_callbacks::class, 'secondary_extend'],
     ],
+    [
+        'hook' => \core\hook\output\before_http_headers::class,
+        'callback' => [\local_mooblox\hook_callbacks::class, 'before_http_headers'],
+    ],
 ];

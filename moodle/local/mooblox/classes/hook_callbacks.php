@@ -61,4 +61,20 @@ class hook_callbacks {
         $after = array_search('coursehome', $keys, true);
         $view->add_node($node, $after === false ? null : ($keys[$after + 1] ?? null));
     }
+
+    /**
+     * Switches pages framed by the world to the embedded layout.
+     *
+     * @param \core\hook\output\before_http_headers $hook
+     */
+    public static function before_http_headers(
+        \core\hook\output\before_http_headers $hook
+    ): void {
+        global $PAGE, $SESSION;
+
+        if (local\embed_detector::is_embedded($_SERVER, !empty($SESSION->local_mooblox_play))) {
+            $PAGE->set_pagelayout('embedded');
+            $PAGE->add_body_class('local-mooblox-framed');
+        }
+    }
 }

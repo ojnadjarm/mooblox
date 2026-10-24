@@ -29,6 +29,7 @@ $course = get_course($id);
 require_login($course);
 $context = context_course::instance($course->id);
 \local_mooblox\local\access::require_play($context);
+$SESSION->local_mooblox_play = true;
 
 $PAGE->set_url(new moodle_url('/local/mooblox/play.php', ['id' => $course->id]));
 $PAGE->set_pagelayout('embedded');
