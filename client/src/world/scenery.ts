@@ -121,6 +121,7 @@ export class DistrictBuild<C = unknown> {
       o.updateMatrix();
       o.matrixAutoUpdate = false;
     });
+    this.group.userData['tris'] = [triangles(base), triangles(detail), triangles(small)];
     if (solids) {
       yield;
       solids.computeBoundingBox();
@@ -141,19 +142,41 @@ export function buildGlow(dressing: Dressing, glow: Material): Mesh | null {
   return m;
 }
 
-/** Shows districts within `distance` of (x, z), their detail and minor dressing within each one's ranges; every district when `all`. */
-export function cullDistricts(districts: readonly Object3D[], x: number, z: number, distance: number, all: boolean): void {
+let edges = new Float64Array(64);
+
+/**
+ * Shows districts within `distance` of (x, z), their detail and minor dressing within each one's ranges; every district when
+ * `all`. Nearest first, a district only shows while the scenery stays within `budget` triangles (its base alone when the
+ * detail does not fit): big courses drop their farthest districts instead of the frame rate.
+ */
+export function cullDistricts(districts: readonly Object3D[], x: number, z: number, distance: number, all: boolean, budget = Infinity): void {
+  if (edges.length < districts.length) edges = new Float64Array(districts.length * 2);
   for (let i = 0; i < districts.length; i++) {
     const d = districts[i]!;
-    const n = d.children.length;
-    if (n < 2) continue;
-    const u = d.userData as { x: number; z: number; radius: number; detail: number; minor: number };
+    const u = d.userData as { x: number; z: number; radius: number };
     const dx = u.x - x;
     const dz = u.z - z;
-    const edge = Math.sqrt(dx * dx + dz * dz) - u.radius;
-    d.visible = all || edge < distance;
-    d.children[n - 2]!.visible = edge < u.detail;
-    d.children[n - 1]!.visible = edge < u.minor;
+    edges[i] = d.children.length < 2 ? Infinity : Math.sqrt(dx * dx + dz * dz) - u.radius;
+  }
+  let used = 0;
+  for (let k = 0; k < districts.length; k++) {
+    let i = -1;
+    for (let j = 0; j < districts.length; j++) if (edges[j]! < Infinity && (i < 0 || edges[j]! < edges[i]!)) i = j;
+    if (i < 0) break;
+    const edge = edges[i]!;
+    edges[i] = Infinity;
+    const d = districts[i]!;
+    const u = d.userData as { detail: number; minor: number; tris: readonly number[] };
+    const n = d.children.length;
+    const near = edge < u.detail;
+    const close = edge < u.minor;
+    const full = u.tris[0]! + (near ? u.tris[1]! : 0) + (close ? u.tris[2]! : 0);
+    const fits = all || used + full <= budget;
+    const baseFits = fits || used + u.tris[0]! <= budget;
+    d.visible = all || (edge < distance && baseFits);
+    d.children[n - 2]!.visible = near && fits;
+    d.children[n - 1]!.visible = close && fits;
+    if (d.visible) used += fits ? full : u.tris[0]!;
   }
 }
 
@@ -185,6 +208,10 @@ function placeModel(p: Placement, lib: ModelLibrary): BufferGeometry {
   if (p.roof !== undefined) repaintRoof(g, p.roof);
   g.applyMatrix4(new Matrix4().compose(new Vector3(p.x, p.y, p.z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), p.yaw), new Vector3(s, s, s)));
   return withSway(g, p.sway === true, p.height, p.y);
+}
+
+function triangles(g: BufferGeometry | null): number {
+  return g ? (g.index ? g.index.count : g.getAttribute('position').count) / 3 : 0;
 }
 
 function merge(parts: BufferGeometry[]): BufferGeometry | null {

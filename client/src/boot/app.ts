@@ -191,7 +191,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       built.solids();
       gate.invalidate();
     }
-    cullDistricts(built.districts, eye.x, eye.z, settings.districtDistance, overview);
+    cullDistricts(built.districts, eye.x, eye.z, settings.districtDistance, overview, settings.sceneryTris);
     kit.time.value = clock;
     if (built.water) built.water.uniforms['uTime']!.value = clock;
     if (gates.frame(dt)) {
