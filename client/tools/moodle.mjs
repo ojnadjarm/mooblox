@@ -148,21 +148,29 @@ async function avatar(page) {
   const pref = () => sql("SELECT value FROM {user_preferences} WHERE userid = ? AND name = 'local_mooblox_avatar'", userid);
   check('no avatar preference yet', pref() === null, `value ${pref()}`);
   await page.locator('.mooblox-hud-avatar').click();
-  await page.locator('[data-body="f"]').click();
-  await page.locator('[data-colour="green"]').click();
-  await page.locator('.mooblox-picker-done').click();
+  const pick = (field, option) => page.locator(`.mooblox-creator [data-field="${field}"][data-option="${option}"]`).click();
+  await pick('hair', 'braids');
+  await pick('hairc', 'blonde');
+  await page.locator('[data-tab="face"]').click();
+  await pick('eyec', 'hazel');
+  await pick('glasses', 'stars');
+  await page.locator('[data-tab="clothes"]').click();
+  await pick('bottom', 'skirt');
+  const built = await page.evaluate(() => JSON.stringify(window.mooblox.picker.current));
+  await page.locator('.mooblox-creator-save').click();
   const saved = await waitFor(() => pref());
-  check('Done saves the preference row', saved === 'f_green', `value ${saved}`);
+  check('Save stores the look as the preference row (mdb)', saved === built, `value ${saved}`);
   await openPlay(page);
   const look = await page.evaluate(() => JSON.stringify(window.mooblox.picker.current));
-  check('reload keeps the choice', look === '{"skin":"f","tint":4431943}', look);
+  check('reload gives the same look', look === built, look);
   await page.locator('.mooblox-hud-avatar').click();
-  check('picker marks the saved body and colour', await page.evaluate(() => document.querySelector('[data-body="f"]').getAttribute('aria-pressed') === 'true'
-    && document.querySelector('[data-colour="green"]').getAttribute('aria-pressed') === 'true'));
+  check('creator marks the saved options', await page.evaluate(() => document.querySelector('[data-field="hairc"][data-option="blonde"]').getAttribute('aria-pressed') === 'true'));
   if (out) {
-    await page.screenshot({ path: `${out}/avatar-reloaded.png` });
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${out}/creator-reloaded.png` });
   }
   await page.keyboard.press('Escape');
+  check('creator closed with Esc', await page.locator('.mooblox-creator').isHidden());
   const bubble = await page.evaluate(() => window.mooblox.guide.bubble.textContent);
   check('guide greets the learner by first name', bubble.includes('Hi Mia!'), bubble.trim().slice(0, 40));
 }

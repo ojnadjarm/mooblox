@@ -53,12 +53,14 @@ $config = [
         'gate_open' => get_string('gate_open', 'local_mooblox'),
         'lock_notyet' => get_string('lock_notyet', 'local_mooblox'),
         'avatar' => get_string('avatar', 'local_mooblox'),
-        'body' => get_string('avatar_body', 'local_mooblox'),
-        'colour' => get_string('avatar_colour', 'local_mooblox'),
-        'original' => get_string('avatar_original', 'local_mooblox'),
-        'done' => get_string('avatar_done', 'local_mooblox'),
     ],
 ];
+foreach (['title', 'hair', 'face', 'skin', 'clothes', 'random', 'undo', 'save', 'cancel'] as $key) {
+    $config['strings']['creator_' . $key] = get_string('creator_' . $key, 'local_mooblox');
+}
+foreach (array_keys(\local_mooblox\character::catalogue()['fields']) as $field) {
+    $config['strings']['creator_field_' . $field] = get_string('creator_field_' . $field, 'local_mooblox');
+}
 
 echo $OUTPUT->header();
 echo $OUTPUT->render_from_template('local_mooblox/play', [

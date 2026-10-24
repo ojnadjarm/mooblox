@@ -1,4 +1,4 @@
-import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Material, type Mesh, type MeshStandardMaterial, type Object3D } from 'three';
+import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Mesh, type Object3D } from 'three';
 import { CLIP_FOR, type AvatarState } from './clips';
 
 const FADE = 0.15;
@@ -59,18 +59,9 @@ export class Avatar {
     this.mixer.update(dt);
   }
 
-  /** Frees this avatar's materials and textures; the geometry stays shared with its kit. */
+  /** Frees this avatar's geometry; materials are shared by its kit. */
   dispose(): void {
     this.mixer.stopAllAction();
-    const materials = new Set<Material>();
-    this.root.traverse((o) => {
-      if ((o as Mesh).isMesh) {
-        materials.add((o as Mesh).material as Material);
-      }
-    });
-    for (const m of materials) {
-      (m as MeshStandardMaterial).map?.dispose();
-      m.dispose();
-    }
+    this.root.traverse((o) => (o as Mesh).geometry?.dispose());
   }
 }

@@ -320,7 +320,7 @@ export async function startGuide(
   return guide;
 }
 
-/** The avatar picker: each pick swaps the player's model at once, closing saves the look through `keep`. */
+/** The character creator: the world pauses behind it; Save swaps the player's model and keeps the look through `keep`. */
 export function startAvatarPicker(
   view: WorldView,
   player: Player,
@@ -330,8 +330,12 @@ export function startAvatarPicker(
   strings: AvatarPickerStrings,
 ): AvatarPicker {
   let latest = 0;
-  return new AvatarPicker(view.stage.canvasHost, avatars.bodies, look, strings, {
-    opened: () => player.faceCamera(),
+  return new AvatarPicker(view.stage.canvasHost, avatars, look, strings, {
+    opened: () => view.gate.pause(),
+    closed: () => {
+      player.faceCamera();
+      view.gate.resume();
+    },
     picked: async (next) => {
       const ticket = ++latest;
       const avatar = await avatars.create(next);

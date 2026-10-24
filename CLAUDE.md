@@ -153,3 +153,21 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     unlock per new peak level; returns the change count, 0 on a re-run).
   - Tests: PHPUnit 47 (rewards 20: 15-set provider, fact source on a generated course, reconciler idempotence and
     untick), vitest 29 files 166 tests, mci quick 7 ok 0 red. Nothing wired to events or the client yet (T1344+).
+- T1365, 2026-10-24, character creator (replaces the T1302 picker; no version bump: lib.php callback + lang only):
+  - Look = compact JSON preference `local_mooblox_avatar` `{"v":2,skin,hair,hairc,eyes,eyec,brows,mouth,glasses,glassesc,
+    top,topc,bottom,bottomc,shoes,shoesc}`; allow-lists in `moodle/local/mooblox/character.json`, shared by PHP
+    (`local_mooblox\character::clean`, the preference `cleancallback`: invalid → '', T1302 `<body>[_<colour>]` kept) and
+    the client (`player/character/catalog.ts` imports it). Client migrates T1302 values to 18 presets (`character/look.ts`).
+  - `player/character/`: `parts.ts` (box/spike/quad parts on the 7 Kenney rig bones), `hair.ts` (11 box-built styles,
+    `crown` tag for future hats), `face.ts` (eyes, highlights, brows, mouth quads; glasses slot), `outfit.ts`, `compose.ts`
+    (`Wearable` slots hat/face/back/hand: plug-in seam for unlockables), `atlas.ts` (one 512² canvas face atlas, white
+    masks tinted by vertex colour), `mesh.ts` (one merged indexed skinned geometry). `AvatarKit` keeps the
+    `AvatarFactory` contract (legacy looks accepted): one SkinnedMesh + one shared Lambert material per character,
+    Kenney glb used only for the rig transforms and clips. `player/recolor.ts` and the per-kid 1024² skin textures gone.
+  - `ui/avatar-picker.ts` = full-screen creator (tabs Hair/Face/Skin/Clothes, `creator/preview.ts` turntable in its own
+    small renderer, created on open and freed on close; Surprise me, Undo (`creator/history.ts`), Save, Cancel/Esc);
+    world gate paused while open. Lang `creator_*`, privacy string describes the JSON.
+  - Tools: `client/grid.html` (`?n=12` 3x4 showcase, `?n=20&random=1` crowd), `node tools/characters.mjs <dir> [n]
+    [--random]`, `node tools/picker.mjs [dir]` (18 checks incl. 5 widths and 6x CPU fps), live `tools/moodle.mjs avatar` 6/6.
+  - Numbers: 12 kids 12 draws / 3.6k tris, 20 kids 20 draws / 5.7k tris, ≤ 1.5k tris per kid (tested), preview 60 fps at
+    400 px under 6x CPU throttle. vitest 29 files 166 tests, PHPUnit `character_test` 14 cases, mci quick 7 ok 0 red.

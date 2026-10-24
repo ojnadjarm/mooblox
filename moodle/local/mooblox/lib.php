@@ -30,7 +30,8 @@
 function local_mooblox_user_preferences(): array {
     return [
         'local_mooblox_avatar' => [
-            'type' => PARAM_ALPHANUMEXT,
+            'type' => PARAM_RAW,
+            'cleancallback' => [\local_mooblox\character::class, 'clean'],
             'null' => NULL_NOT_ALLOWED,
             'default' => '',
             'permissioncallback' => [core_user::class, 'is_current_user'],
