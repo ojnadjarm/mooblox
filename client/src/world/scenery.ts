@@ -114,10 +114,12 @@ interface Part {
 }
 
 function placed(d: District, lib: ModelLibrary, level: DressingLevel): Part[] {
-  const parts: Part[] = d.terrain.map((t) => ({ g: tagSurface(withSway(t.geometry, false, 1), ''), solid: t.solid, detail: t.detail, small: false }));
+  // Surface classes feed only the rich tier's detail textures.
+  const tag = (g: BufferGeometry, id: string) => (level.rich ? tagSurface(g, id) : g);
+  const parts: Part[] = d.terrain.map((t) => ({ g: tag(withSway(t.geometry, false, 1), ''), solid: t.solid, detail: t.detail, small: false }));
   for (const p of d.placements) {
     if ((p.minor && !level.minor) || (p.rich && !level.rich)) continue;
-    parts.push({ g: tagSurface(placeModel(p, lib), p.id), solid: p.solid, detail: p.detail, small: p.minor === true || p.rich === true });
+    parts.push({ g: tag(placeModel(p, lib), p.id), solid: p.solid, detail: p.detail, small: p.minor === true || p.rich === true });
   }
   return parts;
 }

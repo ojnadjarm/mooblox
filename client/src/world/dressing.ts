@@ -4,6 +4,7 @@ import type { Circle, WorldLayout, Zone } from './layout';
 import type { LookPalette } from './look';
 import FOOTPRINTS from './model-footprints.json';
 import { Occupancy } from './occupancy';
+import { SegmentIndex } from './segment-index';
 import { seededRandom } from './random';
 
 export const WATER_Y = -3;
@@ -212,6 +213,11 @@ export function designWorld(layout: WorldLayout, seed: number, palette: LookPale
 class Designer {
   private readonly life: LifeSpot[] = [];
   private readonly paths: Segment[] = [];
+  private readonly pathIndex = new SegmentIndex();
+  private readonly plotIndex = new Occupancy();
+  private readonly circles: readonly Circle[];
+  /** Bridge lines extended by 3 m at both ends (their landings). */
+  private readonly landings: Segment[] = [];
   private readonly obstacles: Obstacle[] = [];
   private readonly bridges: Segment[] = [];
   private readonly spans: Segment[] = [];
@@ -237,6 +243,9 @@ class Designer {
     for (const l of layout.links) this.spans.push(span(layout.hubs[l.from]!, layout.hubs[l.to]!));
     for (const z of layout.zones) this.walks.push(spoke(z.anchor, z));
     for (const l of layout.links) this.walks.push(spoke(layout.hubs[l.from]!, layout.hubs[l.to]!), spoke(layout.hubs[l.to]!, layout.hubs[l.from]!));
+    this.circles = [...layout.hubs, ...layout.zones];
+    for (const z of layout.zones) for (const p of z.plots) this.plotIndex.add(p.x, p.z, p.radius);
+    for (const s of this.spans) this.landings.push(extend(s, 3));
   }
 
   build(): Dressing {
@@ -287,7 +296,7 @@ class Designer {
     const count = z.plots.length;
     const stop = count === 1 ? z.plots[0]!.radius : 0;
     const walk = { ax: z.x + ex * (z.radius - 0.4), az: z.z + ez * (z.radius - 0.4), bx: z.x + ex * stop, bz: z.z + ez * stop };
-    this.paths.push(walk);
+    this.addPath(walk);
     this.entries.add(walk);
     for (const ring of plotRings(count)) {
       if (ring.radius === 0) continue;
@@ -295,7 +304,7 @@ class Designer {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * 2 * Math.PI;
         const b = ((i + 1) / n) * 2 * Math.PI;
-        this.paths.push({ ax: z.x + Math.cos(a) * ring.radius, az: z.z + Math.sin(a) * ring.radius, bx: z.x + Math.cos(b) * ring.radius, bz: z.z + Math.sin(b) * ring.radius });
+        this.addPath({ ax: z.x + Math.cos(a) * ring.radius, az: z.z + Math.sin(a) * ring.radius, bx: z.x + Math.cos(b) * ring.radius, bz: z.z + Math.sin(b) * ring.radius });
       }
     }
   }
@@ -588,26 +597,30 @@ class Designer {
     if (this.random() < 0.3) this.critters.push({ kind: 'butterfly', x, y: 0.9, z, r: 1.4 });
   }
 
+  private addPath(s: Segment): void {
+    this.paths.push(s);
+    this.pathIndex.add(s);
+  }
+
   /** Free ground: off plots, bridges, plazas, paths (by `clearPath`) and earlier things (by `gap`), inside its island (centre only on the `rim`). */
   private free(x: number, z: number, gap: number, clearPath: number, rim = false): boolean {
-    const island = [...this.layout.hubs, ...this.layout.zones].find((c) => Math.hypot(x - c.x, z - c.z) < c.radius - (rim ? 1.4 : 1.5 + gap / 2));
     return (
-      island !== undefined &&
+      this.circles.some((c) => Math.hypot(x - c.x, z - c.z) < c.radius - (rim ? 1.4 : 1.5 + gap / 2)) &&
       !this.onPlot(x, z, 1.2 + gap / 2) &&
       !this.nearBridge(x, z, DECK_HALF + 1.4 + gap / 2) &&
       this.layout.hubs.every((h, i) => Math.hypot(x - h.x, z - h.z) > (i === 0 ? PLAZA : SMALL_PLAZA) + 0.6 + gap / 2) &&
-      this.paths.every((s) => segmentDistance(x, z, s) > clearPath + 1.1 + gap / 2) &&
+      !this.pathIndex.within(x, z, clearPath + 1.1 + gap / 2) &&
       !this.near(x, z, gap / 2)
     );
   }
 
   private onPlot(x: number, z: number, margin: number): boolean {
-    return this.layout.zones.some((zone) => zone.plots.some((p) => Math.hypot(x - p.x, z - p.z) < p.radius + margin));
+    return this.plotIndex.hits(x, z, margin);
   }
 
   /** Whether (x, z) is within d of a bridge line, its landing included. */
   private nearBridge(x: number, z: number, d: number): boolean {
-    return this.spans.some((s) => segmentDistance(x, z, extend(s, 3)) < d) || this.walks.some((s) => segmentDistance(x, z, s) < d);
+    return this.landings.some((s) => segmentDistance(x, z, s) < d) || this.walks.some((s) => segmentDistance(x, z, s) < d);
   }
 
   private near(x: number, z: number, r: number): boolean {
