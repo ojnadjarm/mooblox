@@ -19,6 +19,10 @@ export class CreatorPreview {
   private drag: { x: number; yaw: number } | null = null;
   private ticket = 0;
   private resize: ResizeObserver | null = null;
+  /** The avatar whose programs are ready in the current renderer; the loop draws only that one. */
+  private compiled: Avatar | null = null;
+  /** Callers of `rendererReady` waiting for the renderer the next frame makes. */
+  private waiting: ((r: WebGLRenderer | null) => void)[] = [];
   /** Frames drawn since `start()`. */
   frames = 0;
 
@@ -43,10 +47,12 @@ export class CreatorPreview {
     host.addEventListener('pointercancel', end);
   }
 
-  /** Shows `look`; a newer call wins over a slower older one. */
+  /** Shows `look` once its programs are compiled off the main thread (the old look stays meanwhile); a newer call wins over a slower older one. */
   async show(look: CharacterLook): Promise<void> {
     const ticket = ++this.ticket;
     const next = await this.factory.create(look);
+    const renderer = ticket === this.ticket ? await this.rendererReady() : null;
+    if (renderer) await renderer.compileAsync(next.root, this.camera, this.scene);
     if (ticket !== this.ticket) {
       next.dispose();
       return;
@@ -54,37 +60,52 @@ export class CreatorPreview {
     this.avatar?.root.removeFromParent();
     this.avatar?.dispose();
     this.avatar = next;
+    if (renderer && renderer === this.renderer) this.compiled = next;
     next.root.rotation.y = this.yaw;
     this.scene.add(next.root);
   }
 
-  /** Creates the renderer and starts the loop. */
+  /** Starts the loop; the renderer is made in its first frame, so the frame that opens the creator only lays out the page. */
   start(): void {
-    if (!this.renderer) {
-      this.renderer = new WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
-      this.renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_DPR));
-      this.renderer.toneMapping = NeutralToneMapping;
-      this.renderer.toneMappingExposure = CAMPUS.exposure;
-      this.host.appendChild(this.renderer.domElement);
-      this.resize = new ResizeObserver(() => this.fit());
-      this.resize.observe(this.host);
-    }
-    this.fit();
+    if (this.handle !== null) return;
     this.frames = 0;
     this.last = performance.now();
     const frame = (t: number) => {
       this.handle = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (t - this.last) / 1000);
       this.last = t;
+      if (!this.renderer) {
+        this.create();
+        return;
+      }
       if (!this.drag) this.yaw += SPIN * dt;
-      if (this.avatar) {
+      if (this.avatar && this.avatar === this.compiled) {
         this.avatar.root.rotation.y = this.yaw;
         this.avatar.update(dt);
+        this.renderer.render(this.scene, this.camera);
+        this.frames++;
       }
-      this.renderer!.render(this.scene, this.camera);
-      this.frames++;
     };
     this.handle = requestAnimationFrame(frame);
+  }
+
+  private create(): void {
+    const r = new WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
+    r.setPixelRatio(Math.min(devicePixelRatio, MAX_DPR));
+    r.toneMapping = NeutralToneMapping;
+    r.toneMappingExposure = CAMPUS.exposure;
+    this.host.appendChild(r.domElement);
+    this.renderer = r;
+    this.resize = new ResizeObserver(() => this.fit());
+    this.resize.observe(this.host);
+    this.fit();
+    for (const resolve of this.waiting.splice(0)) resolve(r);
+  }
+
+  /** The renderer, once the loop has made it; null while stopped. */
+  private rendererReady(): Promise<WebGLRenderer | null> {
+    if (this.renderer || this.handle === null) return Promise.resolve(this.renderer);
+    return new Promise((resolve) => this.waiting.push(resolve));
   }
 
   /** Stops the loop and frees the GPU context (the world keeps the only one while playing). */
@@ -97,6 +118,8 @@ export class CreatorPreview {
     this.renderer?.forceContextLoss();
     this.renderer?.domElement.remove();
     this.renderer = null;
+    this.compiled = null;
+    for (const resolve of this.waiting.splice(0)) resolve(null);
   }
 
   /** Draw calls of the last frame (one per character). */
