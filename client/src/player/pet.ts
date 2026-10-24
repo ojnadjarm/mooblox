@@ -47,6 +47,8 @@ export class PetFollower {
     root.position.z = this.state.z;
     root.position.y = dt > 0 ? root.position.y + (l.position.y - root.position.y) * Math.min(1, dt * 10) : l.position.y;
     root.rotation.y = this.state.yaw;
+    const bearing = Math.atan2(l.position.x - this.state.x, l.position.z - this.state.z) - this.state.yaw;
+    model.setMotion(this.state.speed, this.state.yaw, root.position.y, Math.atan2(Math.sin(bearing), Math.cos(bearing)));
     model.play(this.state.speed > RUN ? 'run' : this.state.speed > WALK ? 'walk' : 'idle');
     model.update(dt);
   }

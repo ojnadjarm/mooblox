@@ -17,6 +17,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SKINNED_DEPTH } from '../world/depth-materials';
+import { Layered } from './layered';
+import { P, petMotionState, stepPetMotion } from './pet-motion';
 
 /** Catalog pet id → node of `cosmetics/pets.glb` (Kenney Cube Pets: 8 clips per animal, in node order). */
 const NODES: Readonly<Record<string, string>> = {
@@ -33,16 +35,45 @@ const HEIGHT = 0.95;
 
 export type PetMotion = 'idle' | 'walk' | 'run';
 
-/** One pet: a single skinned mesh (one draw) on the pack's node rig, with idle, walk and run clips. */
+let created = 0;
+
+/** One pet: a single skinned mesh (one draw) on the pack's node rig, with idle, walk and run clips and secondary motion on top. */
 export class PetModel {
   private current: AnimationAction | null = null;
+  private readonly m = petMotionState(created++);
+  /** The rig nodes the motion layer moves (tail and wings only on the pets that have them). */
+  private readonly layered: { readonly node: Layered; readonly at: number; readonly stretch: number }[] = [];
 
   constructor(
     readonly root: Group,
     private readonly mixer: AnimationMixer,
     private readonly clips: ReadonlyMap<string, AnimationClip>,
     readonly mesh: SkinnedMesh,
-  ) {}
+    rig: Object3D = root,
+  ) {
+    const slots: Readonly<Record<string, readonly [number, number]>> = {
+      body: [P.body, P.bodyStretch],
+      tail: [P.tailOut, -1],
+      'wing-left': [P.wingLeft, -1],
+      'wing-right': [P.wingRight, -1],
+    };
+    rig.traverse((o) => {
+      const slot = o instanceof Bone ? undefined : slots[o.name];
+      if (!slot || this.layered.some((l) => l.node.bone.name === o.name)) return;
+      const node = new Layered(o);
+      node.apply(this.m, slot[0], slot[1]);
+      this.layered.push({ node, at: slot[0], stretch: slot[1] });
+    });
+  }
+
+  /** Ground speed (m/s), facing yaw, feet height and the owner's bearing from the facing (rad) for the motion layer. */
+  setMotion(speed: number, yaw: number, y: number, toOwner: number): void {
+    const m = this.m;
+    m[P.speed] = speed;
+    m[P.yaw] = yaw;
+    m[P.y] = y;
+    m[P.toOwner] = toOwner;
+  }
 
   play(motion: PetMotion): void {
     const clip = this.clips.get(motion);
@@ -54,7 +85,15 @@ export class PetModel {
   }
 
   update(dt: number): void {
+    const layered = this.layered;
+    for (let i = 0; i < layered.length; i++) layered[i]!.node.restore();
+    this.m[P.dt] = dt;
+    stepPetMotion(this.m);
     this.mixer.update(dt);
+    for (let i = 0; i < layered.length; i++) {
+      const l = layered[i]!;
+      l.node.apply(this.m, l.at, l.stretch);
+    }
   }
 
   dispose(): void {
@@ -140,7 +179,7 @@ export class PetLibrary {
     const at = Object.keys(NODES).indexOf(id) * CLIPS_PER_ANIMAL;
     const clips = new Map<string, AnimationClip>();
     for (const clip of this.animations.slice(at, at + CLIPS_PER_ANIMAL)) clips.set(clip.name, clip);
-    const model = new PetModel(root, new AnimationMixer(animal), clips, mesh);
+    const model = new PetModel(root, new AnimationMixer(animal), clips, mesh, animal);
     model.play('idle');
     return model;
   }

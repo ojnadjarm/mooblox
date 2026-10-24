@@ -20,9 +20,9 @@ describe('FollowCamera', () => {
 
   it('comes in close in front of a wall right behind the player instead of sitting inside it', () => {
     const cam = new PerspectiveCamera();
-    const wall = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(20, 20, 0.5).translate(0, 0, 2.5))]);
+    const wall = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(20, 20, 0.5).translate(0, 0, 2.8))]);
     new FollowCamera(cam, canvas, wall).follow(new Vector3(), 0, true);
-    expect(cam.position.z).toBeLessThan(2.25);
+    expect(cam.position.z).toBeLessThan(2.55);
     expect(cam.position.z).toBeGreaterThan(0.5);
   });
 
@@ -36,6 +36,25 @@ describe('FollowCamera', () => {
     shown = true;
     f.follow(new Vector3(), 0.1);
     expect(cam.position.z).toBeLessThan(5.75);
+  });
+
+  it('a lamp post on the sight line does not pull it in', () => {
+    const cam = new PerspectiveCamera();
+    const post = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(0.15, 20, 0.15).translate(0, 0, 7))]);
+    new FollowCamera(cam, canvas, post).follow(new Vector3(), 0, true);
+    expect(cam.position.z).toBeCloseTo(10, 5);
+  });
+
+  it('between sight-line probes, slides off a post it would touch', () => {
+    const cam = new PerspectiveCamera();
+    const post = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(0.4, 20, 0.4).translate(0.3, 0, 10))]);
+    const none = new Vector3();
+    let shown = false;
+    const f = new FollowCamera(cam, canvas, { resolve: (a, b, r) => (shown ? post.resolve(a, b, r) : none) });
+    f.follow(new Vector3(), 0, true);
+    shown = true;
+    f.follow(new Vector3(), 1 / 60);
+    expect(cam.position.x).toBeLessThan(0.1 - 0.25 + 1e-3);
   });
 
   it('looks ahead along the velocity', () => {

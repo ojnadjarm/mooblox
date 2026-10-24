@@ -11,11 +11,14 @@ const DRAG_SPEED = 0.008;
 const PITCH_MIN = 0.12;
 const PITCH_MAX = 0.85;
 const LOOK_AHEAD_RATE = 3;
-/** Collision: samples along the sight line, the clearance kept from walls, how fast it eases back out, the closest it comes. */
+/** Collision: samples along the sight line, the clearance kept from walls, how fast it eases back out, the closest it comes, the fan. */
 const PROBES = 10;
 const CLEARANCE = 0.3;
 const EASE_OUT = 2.5;
-const NEAREST = 1.2;
+const NEAREST = 2.2;
+const SIDE = 1.2;
+/** Radius of the camera itself, pushed out of anything it touches every frame. */
+const BODY = 0.25;
 /** Seconds between sight-line probes (10 a second is plenty for an eased camera). */
 const PROBE_EVERY = 0.1;
 
@@ -95,21 +98,38 @@ export class FollowCamera {
       const k = d / out;
       cam.set(this.look.x + (cam.x - this.look.x) * k, this.look.y + (cam.y - this.look.y) * k, this.look.z + (cam.z - this.look.z) * k);
     }
+    if (this.collider) cam.add(this.collider.resolve(cam, cam, BODY));
     this.camera.lookAt(this.look);
   }
 
-  /** How far back along the sight line the camera can sit before a solid, probed piece by piece from the look point out. */
+  /**
+   * How far back the camera can sit before a solid. A blocked sight line pulls it in unless the line SIDE metres to either
+   * side is clear all the way (a lamp post or thin trunk the player stays visible past) and the camera spot is clear.
+   */
   private clearDistance(distance: number): number {
     if (!this.collider) return distance;
-    const a = this.probeA.copy(this.look);
-    const b = this.probe;
+    const centre = this.lineClear(distance, 0);
+    if (centre >= distance) return distance;
+    const thin = centre < (distance * (PROBES - 1)) / PROBES && (this.lineClear(distance, SIDE) >= distance || this.lineClear(distance, -SIDE) >= distance);
+    return thin ? distance : Math.max(NEAREST, centre);
+  }
+
+  /** How far out the line from the look point to the camera spot, shifted `side` metres sideways, is clear. */
+  private lineClear(distance: number, side: number): number {
+    const collider = this.collider!;
     const rise = this.pitch * distance - LOOK_HEIGHT;
+    const s = Math.sin(this.yaw);
+    const c = Math.cos(this.yaw);
+    const x = this.look.x + c * side;
+    const z = this.look.z - s * side;
+    const a = this.probeA.set(x, this.look.y, z);
+    const b = this.probe;
     for (let i = 1; i <= PROBES; i++) {
       const f = i / PROBES;
-      b.set(this.look.x + Math.sin(this.yaw) * distance * f, this.look.y + rise * f, this.look.z + Math.cos(this.yaw) * distance * f);
+      b.set(x + s * distance * f, this.look.y + rise * f, z + c * distance * f);
       // A capsule that cuts straight through a face gets no push, so the end point is probed on its own too.
-      if (this.collider.resolve(a, b, CLEARANCE).lengthSq() > 1e-6 || this.collider.resolve(b, b, CLEARANCE).lengthSq() > 1e-6) {
-        return Math.max(NEAREST, (distance * (i - 1)) / PROBES);
+      if (collider.resolve(a, b, CLEARANCE).lengthSq() > 1e-6 || collider.resolve(b, b, CLEARANCE).lengthSq() > 1e-6) {
+        return (distance * (i - 1)) / PROBES;
       }
       a.copy(b);
     }
