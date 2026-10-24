@@ -40,4 +40,24 @@ $functions = [
         'ajax' => true,
         'capabilities' => 'local/mooblox:play',
     ],
+    'local_mooblox_get_rewards' => [
+        'classname' => 'local_mooblox\external\get_rewards',
+        'description' => 'Syncs and returns the XP, level, quests, collectibles, items and trophies of the user in a course.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'local/mooblox:play',
+    ],
+    'local_mooblox_claim_collectible' => [
+        'classname' => 'local_mooblox\external\claim_collectible',
+        'description' => 'Picks up a collectible the user has unlocked.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'local/mooblox:play',
+    ],
+    'local_mooblox_set_look' => [
+        'classname' => 'local_mooblox\external\set_look',
+        'description' => 'Wears unlocked items (hat, outfit, pet).',
+        'type' => 'write',
+        'ajax' => true,
+    ],
 ];
