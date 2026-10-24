@@ -117,3 +117,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Demo high 1366: 86 draws, 147k tris all passes (76k on screen), 30 shaders; low tier 60 fps on all 4 shapes.
     vitest 26 files 133 tests (`campus-shapes.test.ts`: determinism, no overlaps, BFS walk from spawn to every plot
     for 4 shapes + 6 random). Live `tools/moodle.mjs gates` 8/8.
+  - Owner round 2 (same ticket): density, collision, xhigh.
+    - `world/occupancy.ts` grid: every solid model claims its footprint in `Designer.model()` (hedges/fences as
+      abutting `wall` pieces); overlaps are skipped. Fountains get collision-only walls (`District.blockers`).
+      `campus-shapes.test.ts` asserts zero solid footprint overlaps; `node tools/bump.mjs [shape]` walks the player
+      into fountains, houses and stalls (8/8).
+    - Density: one theme corner per ~120 m² of district (park playground built from boxes, market, garden, fountain
+      square, woods camp), ground patches, path edging, more flowers and tufts, shore rocks/reeds/lilies, buoys,
+      islets, coloured roofs. `Placement.minor` (low drops it, shadowless mesh) and `rich` (xhigh only). Life:
+      ducks, cats, dogs, butterflies (instanced), smoke points, 2 ships, kids per tier (medium 2, high 3, xhigh 8)
+      at hangouts or on paths, hidden past 60 m.
+    - Xhigh tier (merged from branch `t1309-xhigh`): `perf/gpu.ts` auto-picks it on discrete GPUs with 8+ cores,
+      `?quality=xhigh` forces it. `public/assets/kit-hd/` = bevelled kit (`blender -b -P tools/bevel-kit.py --
+      public/assets/kit public/assets/kit-hd`, then `python3 tools/hd-licences.py public/assets`), `detail/` = 2
+      packed ambientCG CC0 detail atlases (`tools/pack-detail.py`), `world/surfaces.ts` classes per vertex, GTAO,
+      4096 shadows. Assets test: 3 MB base budget, separate 12 MB xhigh budget.

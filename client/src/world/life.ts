@@ -190,17 +190,19 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
   };
 }
 
-/** Butterflies: two flapping wings per instance, fluttering round flower beds and fountains. */
+/** Butterflies: two flapping two-sided wings per instance (scenery material, no extra shader), round flower beds and fountains. */
 function butterflies(view: WorldView, list: readonly Critter[], teardown: (() => void)[]): Mover {
   const per = 2;
-  const wing = new BufferGeometry();
-  wing.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0.16, 0, 0.1, 0.16, 0, -0.08, 0, 0, 0, -0.16, 0, 0.1, -0.16, 0, -0.08]), 3));
-  wing.computeVertexNormals();
-  const mesh = new InstancedMesh(wing, new MeshLambertMaterial({ side: DoubleSide }), list.length * per);
+  const flat = new BufferGeometry();
+  flat.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0.16, 0, 0.1, 0.16, 0, -0.08, 0, 0, 0, 0.16, 0, -0.08, 0.16, 0, 0.1, 0, 0, 0, -0.16, 0, 0.1, -0.16, 0, -0.08, 0, 0, 0, -0.16, 0, -0.08, -0.16, 0, 0.1]), 3));
+  const colour = new Color(0xffd43b);
+  const accent = new Color(0xf06292);
+  const cols = new Float32Array(36);
+  for (let v = 0; v < 12; v++) (v % 3 === 0 ? accent : colour).toArray(cols, v * 3);
+  flat.setAttribute('color', new BufferAttribute(cols, 3));
+  const wing = sceneryGeometry(flat);
+  const mesh = new InstancedMesh(wing, view.kit.scenery, list.length * per);
   mesh.frustumCulled = false;
-  const colours = [0xffd43b, 0xf06292, 0x4dabf7, 0xffffff, 0xff922b];
-  const random = seededRandom(31);
-  for (let i = 0; i < list.length * per; i++) mesh.setColorAt(i, new Color(colours[Math.floor(random() * colours.length)]!));
   view.stage.add(mesh);
   teardown.push(() => {
     mesh.removeFromParent();
