@@ -194,5 +194,5 @@ file,pack,author,license,source,sha256_16
 "detail/detail-b.png","ambientCG RoofingTiles006 Plaster001 Bricks059 Ground054 (packed by tools/pack-detail.py)","ambientCG (ambientcg.com)","CC0-1.0","https://ambientcg.com/view?id=RoofingTiles006 https://ambientcg.com/view?id=Plaster001 https://ambientcg.com/view?id=Bricks059 https://ambientcg.com/view?id=Ground054","a39e082d845d3baf"
 "cosmetics/pets.glb","Kenney Cube Pets 2.0","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/cube-pets","0b6315598ba508ef"
 "cosmetics/hats.glb","MOOBLOX hats (client/tools/hats.py in Blender 5.0.1)","MOOBLOX contributors","CC0-1.0","client/tools/hats.py","449a6c868778b649"
-"built:boxes","MOOBLOX box-built trophy pedestals (client/src/rewards)","MOOBLOX contributors","GPL-3.0-or-later","client/src/rewards",""
+"built:trophy-hall","MOOBLOX designed trophy pedestals and hall (client/src/world/trophy-hall.ts)","MOOBLOX contributors","GPL-3.0-or-later","client/src/world/trophy-hall.ts",""
 "kit.glb","Kenney Nature Kit + Fantasy Town Kit 2.0 + City Kit (Suburban) 2.0 + Pirate Kit (packed from kit-src/ by tools/pack-kit.mjs)","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets","84b571d72445a47f"

@@ -285,3 +285,31 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     fed the avatar root; no world code). Tiers: none on low (HUD badge), no shadow on medium, shadow on high/xhigh.
   - Checks: `node tools/rewards.mjs hud|levelup|wardrobe|hats|pet [outdir]`; stills `~/drop/T1276/T1352..T1355/`. vitest 222,
     mci quick 6 ok 0 red 1 skip (phpunit: plugin not in a Moodle root).
+- Gamification phase G5 (T1356-T1362), 2026-10-24, version 2026102412 (`db/caches.php` `classgoal`):
+  - World data: `world/walk-grid.ts` (`WalkGrid`: walkable cells + BFS from the spawn, shared by tests and placement),
+    `Dressing.occupancy` (`GroundQuery`), `Dressing.hall` (round lawn reserved on the spawn hub, r 3.6/3.1/2.6, nearest the
+    landmark) and `Dressing.monument` (spot on the spawn plaza beside the avenue, away from the hall and bridge lines).
+  - Collectibles: `world/collectibles.ts` (seeded per course + key, gems round their plot, crystal mid-district, stars anywhere
+    reachable; tier caps 40/80/150/300 nearest within 40-120 m), `collectible-models.ts` (gem 32, crystal 90, star 20 tris),
+    `collectible-layer.ts` (3 instanced draws, spin + bob in the vertex shader), `boot/collectibles.ts` (walk-through pickup ->
+    `claim_collectible` -> album; `ui/collect-toast.ts`).
+  - Book: `BookController.addPage` + tabs (`ui/book.ts` `bookTabs`); `ui/book-rewards*.ts` + `boot/book-pages.ts`: Quests,
+    Collection (album per district, "?" slots), Trophies (badge shelf, cup fallback).
+  - Trophy hall: `world/trophy-hall.ts` (designed pavilion: stepped dais, radial paving, 5 columns, teal lintel, star crest;
+    gold/silver/bronze faceted pedestals per badge in a horseshoe, 9 max, then a "+N" plaque; none = one "?" pedestal),
+    `world/trophy-atlas.ts` (one 1024 canvas: medallions + name strips + a white patch), `boot/trophy-hall.ts` (one mesh, one
+    `paintedPlastic` material, static collider part via `CompositeCollider.addStatic`). Catalog trophies now `designed:pedestal-*`.
+  - Server: `rewards\learning_weeks` (pure: weeks of >= `weekdays` days Mon-Sun in the user's tz, a freeze per 4 learning weeks,
+    max 2, spent on a missed week, the current week never breaks, a break restarts at 1 with `welcomeback`), `rewards\class_goal`
+    (weekly `cm complete` ledger rows of the course in server time, target max(5, round(0.6 x students x 2)) or the teacher's,
+    hidden below 5 students (`moodle/course:isincompletionreports`), counts in MUC `classgoal` 5 min, reached -> one
+    `local_mooblox_goal` row). `get_rewards` gains `weeks` {weeks, welcomeback} and `goal` {week (0 = none), target, progress,
+    reached, timereached}; the HUD leaf reads them ("Welcome back!").
+  - Monument + fireworks: `world/monument.ts` (stepped plinth, teal column, gold star; 10 lanterns light with the shared
+    progress, a sunburst when reached; one draw), `world/fireworks.ts` (one Points draw, 600/1500/3000 sparks), `ui/goal-burst.ts`
+    (CSS burst on low; reduced motion = toast only), `boot/class-goal.ts` (once per course week per browser:
+    `localStorage['mooblox-goal-<courseid>']`). Hall and monument cast shadows on high only (xhigh doubles draws via GTAO).
+  - Dev page: `rewards.html?collect=all&trophies=N&goal=P/T`. Checks: `node tools/rewards.mjs collect|book|hall|goal [outdir]`
+    (9, 37, 12, 15 checks); stills `~/drop/T1276/T1357..T1362/`. Extras from the spawn (collectibles + hall + monument):
+    low 5 draws / 2.5k tris / 2 programs, medium 5 / 2.6k / 2, high 7 / 4.8k / 2, xhigh 10 / 5.2k / 2 (fireworks +1 program
+    while they fly). vitest 48 files 295 tests, PHPUnit 82, mci quick 7 ok 0 red. Bundle 280 KB gz (+12.6 KB).
