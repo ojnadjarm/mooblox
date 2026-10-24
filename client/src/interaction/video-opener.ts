@@ -1,7 +1,7 @@
 import { playable } from '../domain/media';
 import type { Activity } from '../domain/types';
 import type { MoodleGateway } from '../moodle/gateway';
-import type { Panel } from '../ui/panel';
+import type { PanelHost } from '../ui/panel';
 import { injectStyle } from '../ui/style';
 import type { ActivityOpener } from './opener';
 
@@ -18,7 +18,7 @@ export class VideoOpener implements ActivityOpener {
     return a.available && playable(a) !== null;
   }
 
-  open(a: Activity, panel: Panel): Promise<void> {
+  open(a: Activity, panel: PanelHost): Promise<void> {
     injectStyle('mooblox-video-style', CSS);
     const media = playable(a)!;
     let element: HTMLElement;

@@ -107,8 +107,41 @@ async function video(page) {
   }
 }
 
-async function quiz() {
-  throw new Error('quiz scenario not written yet');
+async function quiz(page) {
+  const id = cmid('quiz');
+  const state = () => page.evaluate((x) => ({
+    store: window.mooblox.store.world.sections.flatMap((s) => s.activities).find((a) => a.id === x).completion.state,
+    flag: window.mooblox.props.get(x).state.done,
+  }), id);
+  await page.evaluate(() => (window.moobloxNoReload = true));
+  check(`quiz cm ${id} starts not done`, JSON.stringify(await state()) === '{"store":0,"flag":false}', JSON.stringify(await state()));
+  await openActivity(page, id);
+  const frame = page.frameLocator('.mooblox-panel iframe');
+  const f = await (await page.waitForSelector('.mooblox-panel iframe')).contentFrame();
+  await f.waitForSelector('body#page-mod-quiz-view');
+  await Promise.all([f.waitForNavigation(), frame.getByRole('button', { name: /attempt quiz/i }).click()]);
+  while (await f.$('body#page-mod-quiz-attempt')) {
+    for (const radio of await f.$$('input[type=radio][value="1"]')) {
+      await radio.check();
+    }
+    await Promise.all([f.waitForNavigation(), f.click('#mod_quiz-next-nav')]);
+  }
+  await frame.locator('body#page-mod-quiz-summary').waitFor({ timeout: 15000 });
+  await frame.getByRole('button', { name: 'Submit all and finish' }).first().click();
+  await frame.getByRole('dialog').getByRole('button', { name: 'Submit all and finish' }).click();
+  await frame.locator('body#page-mod-quiz-review').waitFor({ timeout: 20000 });
+  check('quiz finished inside the frame (review page, embedded layout)', await frame.locator('body.pagelayout-embedded').count() === 1);
+  check('quiz completion complete in the DB', completion(id) === '1', `completionstate ${completion(id)}`);
+  if (out) {
+    await page.screenshot({ path: `${out}/quiz-review.png` });
+  }
+  await page.locator('.mooblox-panel-close').click();
+  await page.waitForFunction((x) => window.mooblox.props.get(x).state.done === true, id, { timeout: 10000 }).catch(() => {});
+  check('close refreshes store state and prop flag', JSON.stringify(await state()) === '{"store":1,"flag":true}', JSON.stringify(await state()));
+  check('no page reload', await page.evaluate(() => window.moobloxNoReload === true));
+  if (out) {
+    await page.screenshot({ path: `${out}/quiz-flag.png` });
+  }
 }
 
 async function avatar() {

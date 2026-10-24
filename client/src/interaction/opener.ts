@@ -1,10 +1,10 @@
 import type { Activity } from '../domain/types';
-import type { Panel } from '../ui/panel';
+import type { PanelHost } from '../ui/panel';
 
 /** Opens an activity inside the world; resolves once the learner closes it. */
 export interface ActivityOpener {
   canOpen(a: Activity): boolean;
-  open(a: Activity, panel: Panel): Promise<void>;
+  open(a: Activity, panel: PanelHost): Promise<void>;
 }
 
 /** Strategy chain: the first registered opener that can open the activity wins. */

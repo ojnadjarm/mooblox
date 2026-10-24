@@ -25,8 +25,13 @@ const CSS = `
 
 const FOCUSABLE = 'button:not([disabled]), [href], iframe, video, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+/** Where an opener shows an activity; resolves once the learner closes it. */
+export interface PanelHost {
+  open(title: string, content: HTMLElement, actions?: readonly HTMLElement[]): Promise<void>;
+}
+
 /** Modal host over the canvas for a framed page or native content: focus trap, Esc and a close button. */
-export class Panel {
+export class Panel implements PanelHost {
   readonly element: HTMLElement;
   private readonly dialog: HTMLElement;
   private readonly title: HTMLElement;

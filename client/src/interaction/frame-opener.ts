@@ -1,5 +1,5 @@
 import type { Activity } from '../domain/types';
-import type { Panel } from '../ui/panel';
+import type { PanelHost } from '../ui/panel';
 import type { ActivityOpener } from './opener';
 
 /** Default: the activity's own Moodle page in a frame (the plugin strips Moodle's chrome there). */
@@ -8,7 +8,7 @@ export class FrameOpener implements ActivityOpener {
     return a.available && a.url !== '';
   }
 
-  open(a: Activity, panel: Panel): Promise<void> {
+  open(a: Activity, panel: PanelHost): Promise<void> {
     const frame = document.createElement('iframe');
     frame.className = 'mooblox-frame';
     frame.title = a.name;

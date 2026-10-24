@@ -1,7 +1,11 @@
 import { Vector3, type Group } from 'three';
-import type { WorldData } from '../domain/types';
+import type { Activity, WorldData } from '../domain/types';
 import { ActivityInteraction } from '../interaction/activity-interaction';
 import type { OpenerRegistry } from '../interaction/opener';
+import type { MoodleGateway } from '../moodle/gateway';
+import type { CourseStore } from '../state/course-store';
+import { CourseSync } from '../state/course-sync';
+import { completionToggle } from '../ui/completion-toggle';
 import { FrameGate } from '../perf/frame-gate';
 import { QUALITY, pickTier } from '../perf/quality';
 import { QualityManager } from '../perf/quality-manager';
@@ -130,18 +134,27 @@ export async function startPlayer(
   return player;
 }
 
-/** Prompts at each plot and opens activities in the panel; `world` gives the latest course state. */
-export function startActivities(
-  view: WorldView,
-  player: Player,
-  openers: OpenerRegistry,
-  world: () => WorldData = () => view.world,
-): ActivityInteraction {
+/** The course the world shows and the gateway that changes it. */
+export interface Course {
+  readonly store: CourseStore;
+  readonly gateway: MoodleGateway;
+}
+
+/** Prompts at each plot, opens activities in the panel, re-reads the course after each close. */
+export function startActivities(view: WorldView, player: Player, openers: OpenerRegistry, course: Course): ActivityInteraction {
   const host = view.stage.canvasHost;
   const panel = new Panel(host);
   const prompt = new ActivityPrompt(host, () => void interaction.openCurrent());
   const plots = view.layout.zones.flatMap((z) => z.plots);
-  const interaction = new ActivityInteraction(plots, world, openers, panel, prompt, view.gate);
+  const toggle = (a: Activity) => completionToggle(a, (done) => course.gateway.setManualCompletion(a.id, done));
+  const interaction = new ActivityInteraction(plots, () => course.store.world ?? view.world, openers, panel, prompt, view.gate, toggle);
+  const sync = new CourseSync(course.gateway, course.store, view.world.courseId);
+  interaction.onClosed(() => void sync.refresh());
+  course.store.subscribe((world) => {
+    view.props.update(world);
+    interaction.refreshPrompt();
+    view.gate.invalidate();
+  });
   view.onFrame(() => interaction.update(player.body.position.x, player.body.position.z));
   return interaction;
 }

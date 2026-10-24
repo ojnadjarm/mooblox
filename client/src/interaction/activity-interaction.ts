@@ -9,6 +9,9 @@ import { nearestPlot } from './proximity';
 
 export type ClosedListener = (a: Activity) => void;
 
+/** Extra title-bar controls for an open activity (the manual completion toggle). */
+export type PanelActions = (a: Activity) => HTMLElement[];
+
 /** Walk up to a plot → prompt → E or tap → opener in the panel; the world sleeps while it is open. */
 export class ActivityInteraction {
   private current: Plot | null = null;
@@ -21,6 +24,7 @@ export class ActivityInteraction {
     private readonly panel: Panel,
     private readonly prompt: ActivityPrompt,
     private readonly gate: FrameGate,
+    private readonly actionsFor: PanelActions = () => [],
   ) {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyE' && !e.repeat && !this.panel.isOpen && !(e.target instanceof HTMLInputElement)) {
@@ -72,7 +76,8 @@ export class ActivityInteraction {
     this.prompt.show(null);
     this.gate.pause();
     try {
-      await opener.open(a, this.panel);
+      const actions = this.actionsFor(a);
+      await opener.open(a, { open: (title, content, more = []) => this.panel.open(title, content, [...actions, ...more]) });
     } finally {
       this.gate.resume();
       this.refreshPrompt();

@@ -21,7 +21,7 @@ async function boot(): Promise<void> {
   root.dataset['courseid'] = String(config.courseid);
   const view = startWorld(root, store.world!);
   const player = await startPlayer(view, new URL(/* @vite-ignore */ './assets/', import.meta.url).href, { skin: config.avatar || 'a', tint: null });
-  const interaction = startActivities(view, player, createOpenerRegistry(gateway), () => store.world!);
+  const interaction = startActivities(view, player, createOpenerRegistry(gateway), { store, gateway });
   Object.assign(window, { mooblox: { ...view, player, interaction, store } });
 }
 

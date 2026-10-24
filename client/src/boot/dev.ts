@@ -1,5 +1,8 @@
 import fixture from '../../test/fixtures/get_world_demo.json';
+import type { WorldDto } from '../domain/dto';
+import { CompletionTracking } from '../domain/types';
 import { FakeGateway } from '../moodle/fake-gateway';
+import { CourseStore } from '../state/course-store';
 import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
 import type { AvatarState } from '../player/clips';
 import { NO_INPUT, type InputSource, type InputState } from '../player/input';
@@ -16,10 +19,17 @@ const FIXTURE_HOST = 'https://moodle.example';
 /** Dev composition root: the demo course from the captured fixture, no Moodle needed. */
 async function boot(): Promise<void> {
   const root = document.getElementById('mooblox-root')!;
-  const gateway = new FakeGateway(JSON.parse(JSON.stringify(fixture).replaceAll(FIXTURE_HOST, location.origin)));
-  const view = startWorld(root, await gateway.getWorld(fixture.courseid));
-  const probe: Record<string, unknown> = {};
   const params = new URLSearchParams(location.search);
+  const dto = JSON.parse(JSON.stringify(fixture).replaceAll(FIXTURE_HOST, location.origin)) as WorldDto;
+  const manual = Number(params.get('manual') ?? 0);
+  for (const m of dto.sections.flatMap((s) => s.modules).filter((x) => x.id === manual)) {
+    Object.assign(m, { completion: CompletionTracking.Manual, isautomatic: false });
+  }
+  const gateway = new FakeGateway(dto);
+  const store = new CourseStore();
+  store.set(await gateway.getWorld(fixture.courseid));
+  const view = startWorld(root, store.world!);
+  const probe: Record<string, unknown> = {};
   Object.assign(window, { mooblox: { ...view, probe } });
   const scene = params.get('scene');
   if (scene === 'avatars') {
@@ -30,8 +40,8 @@ async function boot(): Promise<void> {
     const walk = Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
     const player = await startPlayer(view, ASSETS, { skin: 'b', tint: Palette.red }, [pilot]);
-    const interaction = startActivities(view, player, createOpenerRegistry(gateway));
-    Object.assign(window, { mooblox: { ...view, probe, player, interaction } });
+    const interaction = startActivities(view, player, createOpenerRegistry(gateway), { store, gateway });
+    Object.assign(window, { mooblox: { ...view, probe, player, interaction, store, gateway } });
     if (walk) {
       pilot.drive(view, player, walk, probe);
     }
