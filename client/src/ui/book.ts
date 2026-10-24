@@ -30,6 +30,9 @@ const CSS = `
 .mooblox-book-go { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 0; background: #1e88e5; color: #fff;
   font: 800 16px ${UI_FONT}; cursor: pointer; white-space: nowrap; }
 .mooblox-book-go:focus-visible { outline: 3px solid #ffc21a; outline-offset: 2px; }
+.mooblox-book-go:disabled { background: #c9c8cc; color: #4a4950; cursor: not-allowed; }
+.mooblox-book-lock { display: flex; align-items: center; gap: 6px; color: #8a3b12; }
+.mooblox-book-lock svg { width: 18px; height: 18px; flex: none; }
 .mooblox-hud-book { position: absolute; z-index: 10; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left));
   height: 52px; padding: 0 16px 0 12px; border-radius: 999px; border: 4px solid #fff; background: #1e88e5; color: #fff; cursor: pointer;
   display: inline-flex; align-items: center; gap: 8px; font: 800 17px ${UI_FONT}; box-shadow: 0 4px 14px rgba(0, 40, 80, .3); }
@@ -71,8 +74,9 @@ export function renderBook(world: WorldData, go: (activityId: number) => void): 
     block.appendChild(h);
     if (section.lockedInfo) {
       const p = document.createElement('p');
-      p.className = 'mooblox-book-meta';
-      p.textContent = `Locked: ${htmlToText(section.lockedInfo)}`;
+      p.className = 'mooblox-book-meta mooblox-book-lock';
+      p.innerHTML = ICONS.locked;
+      p.append(htmlToText(section.lockedInfo));
       block.appendChild(p);
     }
     const list = document.createElement('ul');
@@ -106,7 +110,7 @@ function bookRow(r: BookRow, go: (activityId: number) => void): HTMLElement {
   main.appendChild(name);
   const meta = [
     ...r.dates.map((d) => `${d.label} ${dateFormat.format(new Date(d.timestamp * 1000))}`),
-    ...(r.status === 'locked' ? [`Locked: ${htmlToText(r.lockedInfo)}`] : []),
+    ...(r.status === 'locked' ? [htmlToText(r.lockedInfo)] : []),
   ];
   if (meta.length) {
     const m = document.createElement('div');
@@ -126,7 +130,8 @@ function bookRow(r: BookRow, go: (activityId: number) => void): HTMLElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'mooblox-book-go';
-  button.textContent = 'Go there';
+  button.textContent = r.status === 'locked' ? 'Locked' : 'Go there';
+  button.disabled = r.status === 'locked';
   button.addEventListener('click', () => go(r.id));
   end.appendChild(button);
   li.append(icon, main, end);

@@ -9,7 +9,7 @@ export interface BookRow {
   readonly purpose: string;
   readonly iconUrl: string;
   readonly status: RowStatus;
-  /** Restriction text as HTML from Moodle, empty when open. */
+  /** Kid-friendly lock reason (or Moodle's restriction HTML), empty when open. */
   readonly lockedInfo: string;
   /** Each date as its Moodle label and epoch seconds. */
   readonly dates: readonly { readonly label: string; readonly timestamp: number }[];
@@ -32,11 +32,11 @@ export interface BookModel {
 /** The course as the book lists it: sections with activities, each with its status; progress over tracked ones. */
 export function bookModel(world: WorldData): BookModel {
   const sections = world.sections
-    .filter((s) => s.activities.length > 0)
+    .filter((s) => s.activities.length > 0 || !s.available)
     .map((s) => ({
       id: s.id,
       name: s.name,
-      lockedInfo: s.available ? '' : s.availableInfo,
+      lockedInfo: s.available ? '' : reason(s.lock, s.availableInfo),
       rows: s.activities.map(row),
     }));
   return {
@@ -55,9 +55,14 @@ function row(a: Activity): BookRow {
     purpose: a.purpose,
     iconUrl: a.iconUrl,
     status: status(a),
-    lockedInfo: a.available ? '' : a.availableInfo,
+    lockedInfo: a.available ? '' : reason(a.lock, a.availableInfo),
     dates: a.dates,
   };
+}
+
+/** The short lock reason, else Moodle's restriction HTML, else a plain "Locked". */
+function reason(lock: string, info: string): string {
+  return lock || info || 'Locked';
 }
 
 function status(a: Activity): RowStatus {

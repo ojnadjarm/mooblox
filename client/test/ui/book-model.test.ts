@@ -20,4 +20,16 @@ describe('bookModel', () => {
     expect(book.sections[3]!.rows[0]!.dates).toEqual([{ label: 'Closes:', timestamp: 1793000000 }]);
     expect([book.done, book.total]).toEqual([1, 4]);
   });
+
+  it('lists a closed section with its lock reason even without activities, and prefers the short reason', () => {
+    const dto: WorldDto = structuredClone(fixture);
+    dto.sections.push({ id: 99, number: 4, name: 'Lava lab', available: false, availableinfo: '<b>long</b>',
+      lock: 'Finish How volcanoes work first', modules: [] });
+    Object.assign(dto.sections[2]!.modules[1]!, { available: false, availableinfo: 'x', lock: 'Opens Mon 3 Nov' });
+    const book = bookModel(toWorld(dto));
+    const lava = book.sections.find((s) => s.id === 99)!;
+    expect(lava.lockedInfo).toBe('Finish How volcanoes work first');
+    expect(lava.rows).toEqual([]);
+    expect(book.sections[2]!.rows[1]!).toMatchObject({ status: 'locked', lockedInfo: 'Opens Mon 3 Nov' });
+  });
 });

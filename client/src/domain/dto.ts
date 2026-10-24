@@ -19,6 +19,8 @@ export interface ModuleDto {
   icon: string;
   available: boolean;
   availableinfo: string;
+  /** Short lock reason for signs, empty when open. */
+  lock?: string;
   completion: number;
   state: number;
   isautomatic: boolean;
@@ -32,6 +34,7 @@ export interface SectionDto {
   name: string;
   available: boolean;
   availableinfo: string;
+  lock?: string;
   modules: ModuleDto[];
 }
 
@@ -40,4 +43,6 @@ export interface WorldDto {
   coursename: string;
   firstname: string;
   sections: SectionDto[];
+  /** Earliest future restriction date (epoch s), 0 when none. */
+  nextchange?: number;
 }

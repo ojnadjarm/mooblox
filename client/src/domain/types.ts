@@ -41,6 +41,8 @@ export interface Activity {
   readonly iconUrl: string;
   readonly available: boolean;
   readonly availableInfo: string;
+  /** Short, kid-friendly lock reason; empty when open. */
+  readonly lock: string;
   readonly completion: Completion;
   readonly dates: readonly ActivityDate[];
   readonly media: Media | null;
@@ -52,6 +54,8 @@ export interface Section {
   readonly name: string;
   readonly available: boolean;
   readonly availableInfo: string;
+  /** Short, kid-friendly lock reason; empty when open. */
+  readonly lock: string;
   readonly activities: readonly Activity[];
 }
 
@@ -60,6 +64,8 @@ export interface WorldData {
   readonly courseName: string;
   readonly firstName: string;
   readonly sections: readonly Section[];
+  /** Earliest future restriction date (epoch s) the world must re-read at, 0 when none. */
+  readonly nextChange: number;
 }
 
 /** Whether an activity counts as done for the book and the tutor. */

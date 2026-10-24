@@ -40,7 +40,7 @@ class world_builder {
     private const NO_MEDIA = ['type' => '', 'mimetype' => '', 'src' => ''];
 
     /**
-     * Returns the course, its sections and the activities the user can see.
+     * Returns the course, its sections and the activities the user sees on the course page, with lock reasons.
      *
      * @param \stdClass $course course record
      * @param \stdClass $user user record
@@ -56,17 +56,18 @@ class world_builder {
         $context = \context_course::instance($course->id);
 
         $sections = [];
+        $availabilities = [];
         foreach ($modinfo->get_section_info_all() as $section) {
-            if (!empty($section->component) || (!$section->uservisible && empty($section->availableinfo))) {
+            $availabilities[] = $section->availability;
+            if (!empty($section->component) || !$format->is_section_visible($section)) {
                 continue;
             }
             $modules = [];
-            foreach ($modinfo->sections[$section->section] ?? [] as $cmid) {
+            foreach ($section->uservisible ? $modinfo->sections[$section->section] ?? [] : [] as $cmid) {
                 $cm = $modinfo->get_cm($cmid);
-                if (!$cm->uservisible && !$cm->is_visible_on_course_page()) {
-                    continue;
+                if ($cm->is_visible_on_course_page()) {
+                    $modules[] = self::module($cm, $completioninfo, $course, $user->id);
                 }
-                $modules[] = self::module($cm, $completioninfo, $course, $user->id);
             }
             $sections[] = [
                 'id' => $section->id,
@@ -74,8 +75,17 @@ class world_builder {
                 'name' => $format->get_section_name($section),
                 'available' => $section->uservisible,
                 'availableinfo' => empty($section->availableinfo) ? '' : info::format_info($section->availableinfo, $course),
+                'lock' => $section->uservisible ? '' : lock_reason::text(
+                    $modinfo,
+                    $section->availability,
+                    $section->availableinfo,
+                    $user->id
+                ),
                 'modules' => $modules,
             ];
+        }
+        foreach ($modinfo->get_cms() as $cm) {
+            $availabilities[] = $cm->availability;
         }
 
         return [
@@ -83,6 +93,7 @@ class world_builder {
             'coursename' => format_string($course->fullname, true, ['context' => $context]),
             'firstname' => $user->firstname,
             'sections' => $sections,
+            'nextchange' => lock_reason::next_change($availabilities, time()),
         ];
     }
 
@@ -111,6 +122,12 @@ class world_builder {
             'icon' => $cm->get_icon_url()->out(false),
             'available' => $cm->uservisible,
             'availableinfo' => empty($cm->availableinfo) ? '' : info::format_info($cm->availableinfo, $course),
+            'lock' => $cm->uservisible ? '' : lock_reason::text(
+                $cm->get_modinfo(),
+                $cm->availability,
+                $cm->availableinfo,
+                $userid
+            ),
             'completion' => (int) $tracking,
             'state' => $details ? $details->get_overall_completion() : COMPLETION_INCOMPLETE,
             'isautomatic' => $details ? $details->is_automatic() : false,

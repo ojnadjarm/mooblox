@@ -8,6 +8,7 @@ export function toWorld(dto: WorldDto): WorldData {
     courseName: dto.coursename,
     firstName: dto.firstname,
     sections: dto.sections.map(toSection),
+    nextChange: dto.nextchange ?? 0,
   };
 }
 
@@ -23,8 +24,10 @@ export function toDto(world: WorldData): WorldDto {
       name: s.name,
       available: s.available,
       availableinfo: s.availableInfo,
+      lock: s.lock,
       modules: s.activities.map(toModuleDto),
     })),
+    nextchange: world.nextChange,
   };
 }
 
@@ -35,6 +38,7 @@ function toSection(dto: SectionDto): Section {
     name: dto.name,
     available: dto.available,
     availableInfo: dto.availableinfo,
+    lock: dto.lock ?? '',
     activities: dto.modules.map((m) => toActivity(m, dto.id)),
   };
 }
@@ -50,6 +54,7 @@ function toActivity(dto: ModuleDto, sectionId: number): Activity {
     iconUrl: dto.icon,
     available: dto.available,
     availableInfo: dto.availableinfo,
+    lock: dto.lock ?? '',
     completion: { tracking: dto.completion, state: dto.state, automatic: dto.isautomatic },
     dates: dto.dates.map((d) => ({ label: d.label, timestamp: d.timestamp })),
     media: toMedia(dto.media),
@@ -73,6 +78,7 @@ function toModuleDto(a: Activity): ModuleDto {
     icon: a.iconUrl,
     available: a.available,
     availableinfo: a.availableInfo,
+    lock: a.lock,
     completion: a.completion.tracking,
     state: a.completion.state,
     isautomatic: a.completion.automatic,

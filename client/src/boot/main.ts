@@ -9,6 +9,7 @@ import { DEFAULT_TUTOR_STRINGS, ScriptedTutor } from '../tutor/scripted-tutor';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { startActivities, startAvatarPicker, startGuide, startPlayer, startWorld } from './app';
 import { readConfig } from './config';
+import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
 
 const SESSION_TOUCH_MS = 5 * 60 * 1000;
 const AVATAR_PREFERENCE = 'local_mooblox_avatar';
@@ -25,7 +26,7 @@ async function boot(): Promise<void> {
   keepSessionAlive(gateway, SESSION_TOUCH_MS, (e) => console.error('mooblox: session touch failed', e));
   store.set(await gateway.getWorld(config.courseid));
   root.dataset['courseid'] = String(config.courseid);
-  const view = startWorld(root, store.world!);
+  const view = startWorld(root, store.world!, { ...DEFAULT_GATE_STRINGS, ...config.strings });
   const avatars = await AvatarKit.load(new URL(/* @vite-ignore */ './assets/', import.meta.url).href);
   const look = decodeLook(config.avatar, avatars.bodies.map((b) => b.id));
   const player = await startPlayer(view, avatars, look);
@@ -35,7 +36,7 @@ async function boot(): Promise<void> {
   const keep = (l: typeof look) => gateway.savePreference(AVATAR_PREFERENCE, encodeLook(l));
   const picker = startAvatarPicker(view, player, avatars, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
-  Object.assign(window, { mooblox: { ...view, player, interaction, store, guide, picker } });
+  Object.assign(window, { mooblox: { ...view, view, player, interaction, store, guide, picker } });
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));

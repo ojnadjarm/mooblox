@@ -11,7 +11,7 @@ const policy = new IslandLayout();
 function activity(id: number, sectionId: number): Activity {
   return {
     id, sectionId, modname: 'page', name: `A${id}`, url: '', purpose: 'content', iconUrl: '', available: true,
-    availableInfo: '', dates: [], media: null,
+    availableInfo: '', lock: '', dates: [], media: null,
     completion: { tracking: CompletionTracking.None, state: CompletionState.Incomplete, automatic: false },
   };
 }
@@ -19,10 +19,10 @@ function activity(id: number, sectionId: number): Activity {
 function world(courseId: number, perSection: number[]): WorldData {
   let next = 1;
   const sections: Section[] = perSection.map((count, i) => ({
-    id: 100 + i, number: i, name: `S${i}`, available: true, availableInfo: '',
+    id: 100 + i, number: i, name: `S${i}`, available: true, availableInfo: '', lock: '',
     activities: Array.from({ length: count }, () => activity(next++, 100 + i)),
   }));
-  return { courseId, courseName: 'C', firstName: 'Mia', sections };
+  return { courseId, courseName: 'C', firstName: 'Mia', sections, nextChange: 0 };
 }
 
 const apart = (a: Circle, b: Circle) => Math.hypot(a.x - b.x, a.z - b.z) >= a.radius + b.radius - 1e-9;

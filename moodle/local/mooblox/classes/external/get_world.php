@@ -91,6 +91,7 @@ class get_world extends external_api {
             'icon' => new external_value(PARAM_URL, 'Module icon URL'),
             'available' => new external_value(PARAM_BOOL, 'Whether the user can open it'),
             'availableinfo' => new external_value(PARAM_RAW, 'Restriction text, empty when none'),
+            'lock' => new external_value(PARAM_TEXT, 'Short lock reason for the world, empty when open'),
             'completion' => new external_value(PARAM_INT, 'Completion tracking: 0 none, 1 manual, 2 automatic'),
             'state' => new external_value(PARAM_INT, 'Overall completion state'),
             'isautomatic' => new external_value(PARAM_BOOL, 'Whether completion is automatic'),
@@ -107,6 +108,7 @@ class get_world extends external_api {
             'name' => new external_value(PARAM_TEXT, 'Section name'),
             'available' => new external_value(PARAM_BOOL, 'Whether the user can open it'),
             'availableinfo' => new external_value(PARAM_RAW, 'Restriction text, empty when none'),
+            'lock' => new external_value(PARAM_TEXT, 'Short lock reason for the world, empty when open'),
             'modules' => new external_multiple_structure($module),
         ]);
         return new external_single_structure([
@@ -114,6 +116,7 @@ class get_world extends external_api {
             'coursename' => new external_value(PARAM_TEXT, 'Course full name'),
             'firstname' => new external_value(PARAM_NOTAGS, 'First name of the user'),
             'sections' => new external_multiple_structure($section),
+            'nextchange' => new external_value(PARAM_INT, 'Earliest future restriction date in the course, 0 when none'),
         ]);
     }
 }

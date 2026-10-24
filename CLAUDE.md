@@ -90,3 +90,15 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `mfixture with 5.2 moodle/local/mooblox -- bash -c "cd ~/moodle-envs/5.2/www && mphp <repo>/.research/testdata/reset.php
     && cd <repo>/client && node tools/moodle.mjs video|quiz|avatar [outdir]"` (reset.php clears the student's attempts,
     completion and avatar). mci quick 7 ok 0 red. Bundle 205 KB gz.
+- T1308, 2026-10-24, version 2026102406, access gates (matrix: `docs/ACCESS.md`):
+  - `get_world` mirrors the course page: sections by `format->is_section_visible()`, no activities in a closed
+    section, activities by `is_visible_on_course_page()` (stealth and eye-off restrictions left out). New `lock`
+    (kid sign text) per section and cm from `local\lock_reason` (date, completion, grade, group/grouping/profile;
+    else Moodle's text) and `nextchange` (earliest future date condition in the course). Lang `lock_*`, `gate_open`.
+  - Client: `world/access-fence.ts` + `player/fenced-collider.ts` (closed island, shore and bridge past the gate,
+    any height), `world/gates/` (Gate model + GateLayer, swings open live), `world/rebuild.ts` (relayout when
+    sections or activities come or go; the player moves with its zone), `state/access-clock.ts` (refresh at
+    `nextchange`), book lists closed sections with the reason and disables "Go there"; `goToPlot` refuses.
+  - Fixture: demo course gains "Lava lab" (after the page, with page "Lava lab notes") and "Space camp" (opens
+    on a date). Live e2e `node tools/moodle.mjs gates [outdir]` 8/8. PHPUnit 27 tests (11-row data provider),
+    vitest 26 files 99 tests, mci quick 7 ok 0 red. Bundle 210 KB gz.

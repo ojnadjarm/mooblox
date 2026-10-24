@@ -18,7 +18,7 @@ export class ActivityInteraction {
   private readonly closed = new Set<ClosedListener>();
 
   constructor(
-    private readonly plots: readonly Plot[],
+    private readonly plots: () => readonly Plot[],
     private readonly world: () => WorldData,
     private readonly openers: OpenerRegistry,
     private readonly panel: Panel,
@@ -40,7 +40,7 @@ export class ActivityInteraction {
 
   /** Follows the player; call once per frame. */
   update(x: number, z: number): void {
-    const next = nearestPlot(this.plots, x, z, this.current);
+    const next = nearestPlot(this.plots(), x, z, this.current);
     if (next !== this.current) {
       this.current = next;
       this.refreshPrompt();
@@ -51,7 +51,7 @@ export class ActivityInteraction {
   refreshPrompt(): void {
     const a = this.activity;
     this.prompt.show(
-      a ? { name: a.name, locked: a.available ? null : htmlToText(a.availableInfo) || '', openable: this.openers.resolve(a) !== null } : null,
+      a ? { name: a.name, locked: a.available ? null : a.lock || htmlToText(a.availableInfo), openable: this.openers.resolve(a) !== null } : null,
     );
   }
 

@@ -85,6 +85,18 @@ export class Player {
     this.camera.follow(this.body.position, 0, true);
   }
 
+  /** Moves the player and its camera by (dx, dz), keeping height, heading and speed. */
+  shift(dx: number, dz: number): void {
+    if (dx === 0 && dz === 0) {
+      return;
+    }
+    this.body.position.x += dx;
+    this.body.position.z += dz;
+    this.prev.copy(this.body.position);
+    this.avatar.root.position.copy(this.body.position);
+    this.camera.follow(this.body.position, 0, true);
+  }
+
   respawn(): void {
     this.body.position.copy(this.spawn);
     this.body.velocity.set(0, 0, 0);

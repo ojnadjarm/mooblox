@@ -1,4 +1,4 @@
-// Live e2e on the 5.2 dev site with local_mooblox installed: node tools/moodle.mjs <video|quiz|avatar> [outdir]
+// Live e2e on the 5.2 dev site with local_mooblox installed: node tools/moodle.mjs <video|quiz|avatar|gates> [outdir]
 // Run inside `mfixture with 5.2 moodle/local/mooblox -- ...` after the demo reset (see CLAUDE.md).
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -11,9 +11,9 @@ const out = process.argv[3];
 const site = process.env.MOOBLOX_MOODLE ?? 'http://localhost:8052';
 const env = process.env.MOOBLOX_ENV ?? '5.2';
 const mdbPath = process.env.MDB ?? join(homedir(), '.claude/skills/moodle-ci/scripts/mdb');
-const scenarios = { video, quiz, avatar };
+const scenarios = { video, quiz, avatar, gates };
 if (!scenarios[scenario]) {
-  console.error('usage: node tools/moodle.mjs <video|quiz|avatar> [outdir]');
+  console.error('usage: node tools/moodle.mjs <video|quiz|avatar|gates> [outdir]');
   process.exit(2);
 }
 if (out) {
@@ -165,4 +165,88 @@ async function avatar(page) {
   await page.keyboard.press('Escape');
   const bubble = await page.evaluate(() => window.mooblox.guide.bubble.textContent);
   check('guide greets the learner by first name', bubble.includes('Hi Mia!'), bubble.trim().slice(0, 40));
+}
+
+/** Stands the player a few metres before a zone's gate, facing it. */
+function standAtGate(page, sectionId) {
+  return page.evaluate((id) => {
+    const m = window.mooblox;
+    const zone = m.view.layout.zones.find((z) => z.sectionId === id);
+    const d = Math.hypot(zone.x, zone.z);
+    const t = d - zone.radius - 2.8 - 8.5;
+    m.player.teleport((zone.x / d) * t, (zone.z / d) * t, Math.atan2(zone.x, zone.z));
+  }, sectionId);
+}
+
+async function gates(page) {
+  const sectionid = Number(sql("SELECT id FROM {course_sections} WHERE course = ? AND name = 'Lava lab'", courseid));
+  const pageid = cmid('page');
+  const section = () => page.evaluate((id) => {
+    const m = window.mooblox;
+    const s = m.view.world.sections.find((x) => x.id === id);
+    return { available: s.available, lock: s.lock, plots: m.view.layout.zones.find((z) => z.sectionId === id).plots.length,
+      open: m.gates.get(id)?.isOpen ?? null, fenced: m.fence.isClosed(id) };
+  }, sectionid);
+  await page.evaluate(() => (window.moobloxNoReload = true));
+  const before = await section();
+  check('Lava lab arrives closed with the kid reason', !before.available && before.lock === 'Finish How volcanoes work first', JSON.stringify(before));
+  check('its gate is shut and the fence closes the zone', before.open === false && before.fenced && before.plots === 0, JSON.stringify(before));
+
+  const inside = await page.evaluate(async (id) => {
+    const m = window.mooblox;
+    const zone = m.view.layout.zones.find((z) => z.sectionId === id);
+    m.player.teleport(zone.x, zone.z, 0);
+    await new Promise((r) => setTimeout(r, 600));
+    const p = m.player.body.position;
+    return { d: Math.hypot(p.x - zone.x, p.z - zone.z), r: zone.radius };
+  }, sectionid);
+  check('a body dropped into the closed zone is pushed out', inside.d > inside.r + 2, JSON.stringify(inside));
+
+  await page.keyboard.press('KeyB');
+  const lock = page.locator('.mooblox-book-section', { hasText: 'Lava lab' }).locator('.mooblox-book-lock');
+  await lock.waitFor({ timeout: 5000 });
+  check('the book lists Lava lab locked with the same reason', (await lock.textContent()).includes('Finish How volcanoes work first'));
+  await page.keyboard.press('Escape');
+  await page.locator('.mooblox-panel-backdrop').waitFor({ state: 'hidden' });
+
+  await standAtGate(page, sectionid);
+  await page.waitForTimeout(1200);
+  if (out) {
+    await page.screenshot({ path: `${out}/gate-closed-1366.png` });
+    await page.setViewportSize({ width: 400, height: 860 });
+    await standAtGate(page, sectionid);
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: `${out}/gate-closed-400.png` });
+    await page.setViewportSize({ width: 1366, height: 768 });
+  }
+
+  await openActivity(page, pageid);
+  await page.locator('.mooblox-panel iframe').waitFor({ timeout: 10000 });
+  await waitFor(() => completion(pageid) === '1');
+  check('the page is complete in the DB', completion(pageid) === '1', `completionstate ${completion(pageid)}`);
+  await page.locator('.mooblox-panel-close').click();
+  await page.waitForFunction((id) => window.mooblox.gates.get(id)?.isOpen === true, sectionid, { timeout: 15000 }).catch(() => {});
+  const after = await section();
+  check('closing the panel opens Lava lab: gate open, fence gone, its page placed', after.available && after.open === true && !after.fenced && after.plots === 1, JSON.stringify(after));
+  check('no page reload', await page.evaluate(() => window.moobloxNoReload === true));
+  await standAtGate(page, sectionid);
+  await page.waitForTimeout(1500);
+  const walked = await page.evaluate(async (id) => {
+    const m = window.mooblox;
+    const zone = m.view.layout.zones.find((z) => z.sectionId === id);
+    m.player.teleport(zone.x, zone.z, 0);
+    await new Promise((r) => setTimeout(r, 600));
+    const p = m.player.body.position;
+    return Math.hypot(p.x - zone.x, p.z - zone.z) < 1;
+  }, sectionid);
+  check('the open zone accepts the player', walked);
+  if (out) {
+    await standAtGate(page, sectionid);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${out}/gate-open-1366.png` });
+    await page.setViewportSize({ width: 400, height: 860 });
+    await standAtGate(page, sectionid);
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: `${out}/gate-open-400.png` });
+  }
 }
