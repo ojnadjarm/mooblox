@@ -53,4 +53,14 @@ final class facts {
         public readonly ?int $coursecompleted = null,
     ) {
     }
+
+    /**
+     * Whether an activity is complete; a failed attempt counts, because trying counts.
+     *
+     * @param int $cmid course module id
+     * @return bool
+     */
+    public function is_complete(int $cmid): bool {
+        return ($this->completions[$cmid]['state'] ?? COMPLETION_INCOMPLETE) > COMPLETION_INCOMPLETE;
+    }
 }

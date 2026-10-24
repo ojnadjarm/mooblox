@@ -104,7 +104,7 @@ final class backup_restore_test extends \advanced_testcase {
         $this->runAdhocTasks();
         $DB->insert_record('local_mooblox_course', ['courseid' => $course->id, 'manualxp' => 1, 'weekdays' => 3,
             'timemodified' => time()]);
-        foreach (['gem:' . $cm->id, 'crystal:' . $cm->section, 'star:1'] as $key) {
+        foreach (['gem:' . $cm->id, 'crystal:' . $cm->section, 'star:' . $cm->section . ':1'] as $key) {
             $DB->insert_record('local_mooblox_found', ['courseid' => $course->id, 'userid' => $student->id,
                 'itemkey' => $key, 'timefound' => time()]);
         }
@@ -113,7 +113,8 @@ final class backup_restore_test extends \advanced_testcase {
         $pages = get_fast_modinfo($newid)->get_instances_of('page');
         $newcm = reset($pages);
         $keys = $DB->get_fieldset('local_mooblox_found', 'itemkey', ['courseid' => $newid, 'userid' => $student->id]);
-        $this->assertEqualsCanonicalizing(['gem:' . $newcm->id, 'crystal:' . $newcm->section, 'star:1'], $keys);
+        $expected = ['gem:' . $newcm->id, 'crystal:' . $newcm->section, 'star:' . $newcm->section . ':1'];
+        $this->assertEqualsCanonicalizing($expected, $keys);
         $this->assertEquals(3, $DB->get_field('local_mooblox_course', 'weekdays', ['courseid' => $newid]));
         $this->assertEquals(1, $DB->count_records('local_mooblox_day', ['courseid' => $newid]));
         $this->assertSame(0, $DB->count_records('local_mooblox_ledger', ['courseid' => $newid]));

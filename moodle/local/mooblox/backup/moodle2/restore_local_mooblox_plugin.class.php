@@ -112,18 +112,18 @@ class restore_local_mooblox_plugin extends restore_local_plugin {
     }
 
     /**
-     * Maps gem:<cmid> and crystal:<sectionid> to the restored ids; other keys stay.
+     * Maps gem:<cmid>, crystal:<sectionid> and star:<sectionid>:<n> to the restored ids; other keys stay.
      *
      * @param string $key key from the backup
      * @return string|null new key, null when its activity or section was not restored
      */
     private function remap_key(string $key): ?string {
-        $types = ['gem' => 'course_module', 'crystal' => 'course_section'];
-        [$prefix, $id] = array_pad(explode(':', $key, 2), 2, '');
+        $types = ['gem' => 'course_module', 'crystal' => 'course_section', 'star' => 'course_section'];
+        [$prefix, $id, $rest] = array_pad(explode(':', $key, 3), 3, null);
         if (!isset($types[$prefix])) {
             return $key;
         }
         $newid = $this->get_mappingid($types[$prefix], $id);
-        return $newid ? "$prefix:$newid" : null;
+        return $newid ? "$prefix:$newid" . ($rest === null ? '' : ":$rest") : null;
     }
 }
