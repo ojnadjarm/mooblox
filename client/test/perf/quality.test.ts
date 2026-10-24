@@ -12,6 +12,21 @@ describe('quality tiers', () => {
     expect(pickTier({ ...base, query: 'ultra' })).toBe('high');
   });
 
+  it('picks xhigh only for strong desktop GPUs, and ?quality= overrides it', () => {
+    const base = { query: null, memoryGb: 16, cores: 12, coarse: false };
+    for (const gpu of ['ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0)', 'AMD Radeon RX 7800 XT', 'Apple M3 Max', 'ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics)']) {
+      expect(pickTier({ ...base, gpu }), gpu).toBe('xhigh');
+    }
+    for (const gpu of ['ANGLE (Intel, Vulkan 1.4 (Intel(R) Iris(R) Xe Graphics (ADL GT2)))', 'Intel(R) UHD Graphics 620', 'Mali-G78', 'Adreno (TM) 740', 'llvmpipe (LLVM 17.0.6, 256 bits)', 'SwiftShader', 'Apple M2', '']) {
+      expect(pickTier({ ...base, gpu }), gpu).toBe('high');
+    }
+    const strong = { ...base, gpu: 'NVIDIA GeForce RTX 3080' };
+    expect(pickTier({ ...strong, coarse: true })).toBe('medium');
+    expect(pickTier({ ...strong, cores: 6 })).toBe('high');
+    expect(pickTier({ ...strong, query: 'high' })).toBe('high');
+    expect(pickTier({ ...base, gpu: 'Intel(R) Iris(R) Xe Graphics', query: 'xhigh' })).toBe('xhigh');
+  });
+
   it('clamps the pixel ratio per tier', () => {
     expect(pixelRatio('low', 2, 1)).toBe(1);
     expect(pixelRatio('medium', 2, 1)).toBe(1.5);

@@ -11,13 +11,14 @@ import {
   NoColorSpace,
   RGBAFormat,
   RepeatWrapping,
+  TextureLoader,
   type BufferGeometry,
   type Material,
   type Texture,
 } from 'three';
 
-/** Rendering tier the kit builds its materials for. */
-export type MaterialTier = 'standard' | 'low';
+/** Rendering tier the kit builds its materials for; `rich` adds world-space detail textures (xhigh). */
+export type MaterialTier = 'standard' | 'low' | 'rich';
 
 /** Flyweight: the few shared materials of the whole world; parts carry colour as vertex colours. */
 export class MaterialKit {
@@ -33,13 +34,32 @@ export class MaterialKit {
   readonly scenery: Material;
   /** Seconds the sway runs on; the frame loop advances it. */
   readonly time = { value: 0 };
+  /** Packed greyscale detail atlases (rich tier); grey until `loadDetail` swaps the real ones in. */
+  private readonly detail = { a: { value: flatDetail() as Texture }, b: { value: flatDetail() as Texture } };
 
   constructor(private readonly tier: MaterialTier = 'standard') {
     this.plastic = plasticMaterial(tier, null);
     this.studs = plasticMaterial(tier, studNormalMap());
+    if (tier === 'rich') withDetail(this.studs as MeshStandardMaterial, this.detail, 'mooblox-studs-rich', false);
     this.sky = new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, depthWrite: false });
     this.glow = new MeshBasicMaterial({ vertexColors: true, color: new Color().setScalar(tier === 'low' ? 1 : 2.5) });
     this.scenery = swayMaterial(tier, this.time);
+    if (tier === 'rich') withDetail(this.scenery as MeshStandardMaterial, this.detail, 'mooblox-sway-rich', true);
+  }
+
+  /** Loads the detail atlases (`<base>detail/detail-a.png`, `-b.png`) for the rich tier; a no-op on other tiers. */
+  async loadDetail(base: string): Promise<void> {
+    if (this.tier !== 'rich') return;
+    const loader = new TextureLoader();
+    const [a, b] = await Promise.all(['a', 'b'].map((k) => loader.loadAsync(`${base}detail/detail-${k}.png`)));
+    for (const [slot, t] of [[this.detail.a, a!], [this.detail.b, b!]] as const) {
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.colorSpace = NoColorSpace;
+      t.anisotropy = 8;
+      t.premultiplyAlpha = false;
+      slot.value.dispose();
+      slot.value = t;
+    }
   }
 
   /** A material for one painted texture (signs), lit like the plastic. */
@@ -122,4 +142,76 @@ function studNormalMap(size = 32): DataTexture {
   t.colorSpace = NoColorSpace;
   t.needsUpdate = true;
   return t;
+}
+
+function flatDetail(): DataTexture {
+  const t = new DataTexture(new Uint8Array([128, 128, 128, 128]), 1, 1, RGBAFormat);
+  t.needsUpdate = true;
+  return t;
+}
+
+/**
+ * Rich tier: world-space detail textures by surface (dominant-axis planar mapping), albedo and roughness variation and
+ * a bump from the detail's screen-space slope. `fromAttribute` reads the `surface` attribute; otherwise green parts
+ * count as grass. Channels: a = grass, foliage, wood, rock; b = roof, plaster, brick, ground (surfaces 1 to 8).
+ */
+function withDetail(m: MeshStandardMaterial, detail: { a: { value: Texture }; b: { value: Texture } }, key: string, fromAttribute: boolean): void {
+  const before = m.onBeforeCompile.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    before(shader, renderer);
+    shader.uniforms['uDetailA'] = detail.a;
+    shader.uniforms['uDetailB'] = detail.b;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${fromAttribute ? 'attribute float surface;' : ''}\nflat varying float vSurface;\nvarying vec3 vDetailPos;\nvarying vec3 vDetailNormal;`)
+      .replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>\nvDetailPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvDetailNormal = normalize(mat3(modelMatrix) * objectNormal);\nvSurface = ${fromAttribute ? 'surface' : '-1.0'};`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+uniform sampler2D uDetailA;
+uniform sampler2D uDetailB;
+flat varying float vSurface;
+varying vec3 vDetailPos;
+varying vec3 vDetailNormal;
+const float SCALE[10] = float[10](0.0, 0.32, 0.9, 0.85, 0.45, 0.7, 0.55, 0.6, 0.4, 0.0);
+const float STRENGTH[10] = float[10](0.0, 0.55, 0.6, 0.6, 0.65, 0.7, 0.35, 0.6, 0.5, 0.0);
+const float BUMP[10] = float[10](0.0, 1.2, 1.4, 1.6, 2.2, 2.4, 0.8, 2.0, 1.2, 0.0);
+const float ROUGH[10] = float[10](0.62, 0.85, 0.72, 0.7, 0.88, 0.55, 0.9, 0.86, 0.95, 0.38);
+vec3 mbPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
+  vec3 sx = normalize(dFdx(surfPos));
+  vec3 sy = normalize(dFdy(surfPos));
+  vec3 r1 = cross(sy, surfNorm);
+  vec3 r2 = cross(surfNorm, sx);
+  float det = dot(sx, r1) * faceDir;
+  vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+  return normalize(abs(det) * surfNorm - grad);
+}`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+int mbS = int(vSurface + 0.5);
+if (vSurface < -0.5) mbS = (vColor.g > vColor.r * 1.08 && vColor.g > vColor.b) ? 1 : 0;
+vec3 mbN = abs(vDetailNormal);
+vec2 mbUv = mbN.y >= max(mbN.x, mbN.z) ? vDetailPos.xz : (mbN.x >= mbN.z ? vDetailPos.zy : vDetailPos.xy);
+mbUv *= SCALE[mbS];
+vec4 mbA = texture2D(uDetailA, mbUv);
+vec4 mbB = texture2D(uDetailB, mbUv);
+float mbD = 0.5;
+if (mbS == 1) mbD = mbA.r; else if (mbS == 2) mbD = mbA.g; else if (mbS == 3) mbD = mbA.b; else if (mbS == 4) mbD = mbA.a;
+else if (mbS == 5) mbD = mbB.r; else if (mbS == 6) mbD = mbB.g; else if (mbS == 7) mbD = mbB.b; else if (mbS == 8) mbD = mbB.a;
+float mbFade = 1.0 - smoothstep(40.0, 140.0, length(vViewPosition));
+float mbK = STRENGTH[mbS] * mbFade;
+diffuseColor.rgb *= 1.0 + (mbD - 0.5) * 1.3 * mbK;`,
+      )
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(ROUGH[mbS] + (0.5 - mbD) * 0.25 * mbK, 0.05, 1.0);')
+      .replace(
+        '#include <normal_fragment_maps>',
+        '#include <normal_fragment_maps>\nnormal = mbPerturb(-vViewPosition, normal, vec2(dFdx(mbD), dFdy(mbD)) * BUMP[mbS] * mbFade, faceDirection);',
+      );
+  };
+  m.customProgramCacheKey = () => key;
 }

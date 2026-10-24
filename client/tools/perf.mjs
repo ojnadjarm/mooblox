@@ -1,6 +1,7 @@
 // Course-shape perf + stills: node tools/perf.mjs <outdir> [shapes] [tiers]
-// shapes: comma list of demo|1x2|8x12|20x30|<counts>; tiers: high,low. Per shape x tier: overview and play view at 1366x768
-// (frame draw calls and triangles with shadows and post, main-pass triangles, programs, fps), stills at 1366 and 400 (overview).
+// shapes: comma list of demo|1x2|8x12|20x30|<counts>; tiers: xhigh,high,medium,low. Per shape x tier: overview and play view at 1366x768
+// (frame draw calls and triangles with shadows and post, main-pass triangles, programs, fps), stills at 1366, plus 400 and
+// 2560 overviews for high and xhigh.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServer } from 'vite';
@@ -65,8 +66,9 @@ try {
         results.push({ shape, tier, view, ...m });
         console.log(shape, tier, view, JSON.stringify(m));
       }
-      if (tier === 'high') {
+      if (tier === 'high' || tier === 'xhigh') {
         await measure(`${sq}scene=overview&quality=${tier}`, 400, 860, join(out, `${shape}-${tier}-overview-400.png`));
+        await measure(`${sq}scene=overview&quality=${tier}`, 2560, 1440, join(out, `${shape}-${tier}-overview-2560.png`));
       }
     }
   }
