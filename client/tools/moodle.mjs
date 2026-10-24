@@ -1,5 +1,5 @@
-// Live e2e on the 5.2 dev site with local_mooblox installed: node tools/moodle.mjs <video|quiz|avatar|gates> [outdir]
-// Run inside `mfixture with 5.2 moodle/local/mooblox -- ...` after the demo reset (see CLAUDE.md).
+// Live e2e on the 5.2 dev site with local_mooblox installed: node tools/moodle.mjs <video|quiz|avatar|gates|rewards> [outdir]
+// Run inside `mfixture with 5.2 moodle/local/mooblox -- ...` after the demo reset; rewards after rewards_reset.php (see CLAUDE.md).
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -11,9 +11,9 @@ const out = process.argv[3];
 const site = process.env.MOOBLOX_MOODLE ?? 'http://localhost:8052';
 const env = process.env.MOOBLOX_ENV ?? '5.2';
 const mdbPath = process.env.MDB ?? join(homedir(), '.claude/skills/moodle-ci/scripts/mdb');
-const scenarios = { video, quiz, avatar, gates };
+const scenarios = { video, quiz, avatar, gates, rewards };
 if (!scenarios[scenario]) {
-  console.error('usage: node tools/moodle.mjs <video|quiz|avatar|gates> [outdir]');
+  console.error('usage: node tools/moodle.mjs <video|quiz|avatar|gates|rewards> [outdir]');
   process.exit(2);
 }
 if (out) {
@@ -43,8 +43,9 @@ async function waitFor(fn, ms = 15000) {
   }
 }
 
-const courseid = Number(sql("SELECT id FROM {course} WHERE shortname = 'mooblox_demo'"));
-const userid = Number(sql("SELECT id FROM {user} WHERE username = 'mooblox_student'"));
+const [shortname, username] = scenario === 'rewards' ? ['mooblox_rewards', 'rewards_kid1'] : ['mooblox_demo', 'mooblox_student'];
+const courseid = Number(sql('SELECT id FROM {course} WHERE shortname = ?', shortname));
+const userid = Number(sql('SELECT id FROM {user} WHERE username = ?', username));
 const cmid = (modname) => Number(sql('SELECT cm.id FROM {course_modules} cm JOIN {modules} m ON m.id = cm.module WHERE cm.course = ? AND m.name = ?', courseid, modname));
 const completion = (id) => sql('SELECT completionstate FROM {course_modules_completion} WHERE coursemoduleid = ? AND userid = ?', id, userid);
 
@@ -53,11 +54,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   page.on('console', (m) => m.type() === 'error' && console.error('page:', m.text()));
   page.on('pageerror', (e) => console.error('pageerror:', e.message));
-  await page.goto(`${site}/login/index.php`);
-  await page.fill('#username', 'mooblox_student');
-  await page.fill('#password', 'Testdata1!');
-  await Promise.all([page.waitForNavigation(), page.click('#loginbtn')]);
-  await openPlay(page);
+  await login(page, username);
+  if (scenario !== 'rewards') {
+    await openPlay(page);
+  }
   await scenarios[scenario](page);
 } finally {
   await browser.close();
@@ -65,6 +65,13 @@ try {
 const ok = checks.length > 0 && checks.every(Boolean);
 console.log(`moodle ${scenario}: ${checks.filter(Boolean).length}/${checks.length} ${ok ? 'PASS' : 'FAIL'}`);
 process.exit(ok ? 0 : 1);
+
+async function login(page, name) {
+  await page.goto(`${site}/login/index.php`);
+  await page.fill('#username', name);
+  await page.fill('#password', 'Testdata1!');
+  await Promise.all([page.waitForNavigation(), page.click('#loginbtn')]);
+}
 
 async function openPlay(page) {
   await page.goto(`${site}/local/mooblox/play.php?id=${courseid}`);
@@ -258,3 +265,74 @@ async function gates(page) {
     await page.screenshot({ path: `${out}/gate-open-400.png` });
   }
 }
+
+/** Calls one ajax function with the page's session; resolves to the data or { error: errorcode }. */
+function ajax(page, methodname, args) {
+  return page.evaluate(async ([name, a]) => {
+    const r = await fetch(`${M.cfg.wwwroot}/lib/ajax/service.php?sesskey=${M.cfg.sesskey}&info=${name}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([{ index: 0, methodname: name, args: a }]),
+    });
+    const [first] = await r.json();
+    return first.error ? { error: first.exception.errorcode } : first.data;
+  }, [methodname, args]);
+}
+
+/** Server-side rewards loop: complete -> XP, gem, level-up item; untick -> no XP; course off -> disabled. */
+async function rewards(page) {
+  const named = (table, name) => Number(sql(`SELECT cm.id FROM {course_modules} cm JOIN {modules} m ON m.id = cm.module AND m.name = '${table}'
+    JOIN {${table}} i ON i.id = cm.instance WHERE cm.course = ? AND i.name = ?`, courseid, name));
+  const video = named('url', 'Lava flow');
+  const journal = named('page', 'Lava lab journal');
+  await page.goto(`${site}/course/view.php?id=${courseid}`);
+  const get = () => ajax(page, 'local_mooblox_get_rewards', { courseid });
+  const gem = (r, key) => r.collectibles.find((c) => c.key === key);
+
+  const start = await get();
+  check('starts at 45 XP, level 0, the video gem hidden', start.enabled && start.xp === 45 && start.level === 0 && !gem(start, `gem:${video}`).unlocked,
+    `xp ${start.xp} level ${start.level}`);
+  const locked = await ajax(page, 'local_mooblox_claim_collectible', { courseid, key: `gem:${video}` });
+  check('a hidden gem cannot be claimed', locked.error === 'collectiblelocked', JSON.stringify(locked));
+
+  await ajax(page, 'local_mooblox_view_activity', { cmid: video });
+  const up = await get();
+  const newItems = up.unlocks.filter((u) => !start.unlocks.includes(u));
+  check('watching the video gives XP and level 1', up.xp === 50 && up.level === 1 && up.peaklevel === 1, `xp ${up.xp} level ${up.level}`);
+  check('level-up and the Cinema quest unlock new items', newItems.length >= 1, newItems.join(','));
+  check('its gem is now unlocked', gem(up, `gem:${video}`).unlocked);
+  const claim = await ajax(page, 'local_mooblox_claim_collectible', { courseid, key: `gem:${video}` });
+  const again = await ajax(page, 'local_mooblox_claim_collectible', { courseid, key: `gem:${video}` });
+  check('the gem is claimed once, a second claim changes nothing', claim.found >= 1 && again.found === claim.found, `${claim.found} ${again.found}`);
+  const look = await ajax(page, 'local_mooblox_set_look', { outfit: '', hat: '', pet: 'pet-cat' });
+  check('wearing a locked pet is refused', look.error === 'itemlocked', JSON.stringify(look));
+
+  const tick = (completed) => ajax(page, 'core_completion_update_activity_completion_status_manually', { cmid: journal, completed });
+  await tick(true);
+  const ticked = await get();
+  await tick(false);
+  const unticked = await get();
+  check('a manual tick earns 3 XP, unticking takes it back', ticked.xp === 53 && unticked.xp === 50, `${ticked.xp} -> ${unticked.xp}`);
+  check('unticking keeps the peak level and the items', unticked.peaklevel === 1 && unticked.unlocks.length === ticked.unlocks.length);
+
+  const teacher = await page.context().browser().newPage({ viewport: { width: 1366, height: 768 } });
+  await login(teacher, 'rewards_teacher');
+  const toggle = async (on) => {
+    await teacher.goto(`${site}/local/mooblox/rewards.php?id=${courseid}`);
+    await teacher.getByLabel('Rewards in this course').setChecked(on);
+    await Promise.all([teacher.waitForNavigation(), teacher.getByRole('button', { name: 'Save changes' }).click()]);
+  };
+  await toggle(false);
+  if (out) {
+    await teacher.screenshot({ path: `${out}/rewards-settings-1366.png`, fullPage: true });
+    await teacher.setViewportSize({ width: 400, height: 860 });
+    await teacher.screenshot({ path: `${out}/rewards-settings-400.png`, fullPage: true });
+  }
+  const off = await get();
+  const offclaim = await ajax(page, 'local_mooblox_claim_collectible', { courseid, key: `gem:${video}` });
+  check('teacher switches rewards off: get_rewards says disabled, claims refused', off.enabled === false && off.quests.length === 0
+    && offclaim.error === 'rewardsoff', JSON.stringify({ enabled: off.enabled, claim: offclaim.error }));
+  await toggle(true);
+  const back = await get();
+  check('switching on again back-fills from Moodle state', back.enabled && back.xp === 50, `xp ${back.xp}`);
+  await teacher.close();
+}
+

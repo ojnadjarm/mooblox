@@ -206,3 +206,24 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     10 programs, no post) and medium (Iris Xe 1366: 58 fps, 60 draws) plus all-tier heap 150 MB, GPU estimate 200 MB, worst
     frame 50 ms, Fast 4G load 3 s / 3 MB, 20x30 within 1.5x demo. `npm run test:perf`; `npm run test:all` = vitest + gate.
     `npm test` stays vitest only while the gate is red (it would fail every parallel agent's unit run).
+- Gamification phase G3 (T1363 fixture, T1348-T1351), 2026-10-24, version 2026102411:
+  - Fixture: `.research/testdata/rewards.php` (helpers in `lib.php`, shared with `setup.php`) builds `mooblox_rewards`
+    (4 sections, 3 pages, 2 YouTube urls, 2 quizzes pass/fail, manual journal, course completion, badges Bookworm/Quiz
+    champ/Helper, teacher `rewards_teacher`, kids `rewards_kid1..6`) and syncs XP; `rewards_reset.php` puts Mia back at 45 XP.
+    Scripts need `lib.php`, so copy the dir into the installed plugin: `mfixture with 5.2 moodle/local/mooblox -- bash -c
+    'cp -r <repo>/.research/testdata $MFIXTURE_DIR/testdata && cd ~/moodle-envs/5.2/www && mexec local/mooblox/testdata/rewards.php'`.
+    Live e2e `node tools/moodle.mjs rewards [outdir]` (server loop over ajax, no HUD yet): 11/11 in 15 s.
+  - Pure: `rewards\course_shape` (tracked cms per section, kind video/quiz/page/other, pass grade, earnable badges, course
+    completion), `quest_generator` (`sec:<id>`, `mod:video|quiz|page`, `badge:<id>`, `course`; each quest's item is a crc32 pick
+    per course from hats + outfits, unique in the course, named before it is done), `collectible_catalog` (`gem:<cmid>`,
+    `crystal:<sectionid>`, `star:<sectionid>:<n>` 1 per 3 cms; restore remaps star keys too). A failed attempt counts as done.
+  - Moodle: `moodle_course_shape` (modinfo + 4 queries), `summary` (get_rewards: one fact load shared with the sync, quest items
+    granted on read), `collector::claim`, `wardrobe` (`local_mooblox_look` JSON {hat, outfit, pet}, set only by set_look).
+    Externals `local_mooblox_get_rewards` / `claim_collectible` / `set_look` (ajax, write; errors `collectiblelocked`,
+    `itemlocked`, `rewardsoff`).
+  - Teacher: `rewards.php?id=` (moodleform: rewards, manual XP, learning days 1-5, class goal + target; goal off = target 0,
+    automatic = null), cap `local/mooblox:managerewards`, "MOOBLOX rewards" in the course More menu; site settings
+    `gamification` and `rewardsdefault` (course without a choice).
+  - Client: `domain/rewards*.ts` (types, wire DTO, mapper + `assertRewardsDto` exact shape), `MoodleGateway.getRewards |
+    claimCollectible | setLook` in Ajax and Fake; `test/fixtures/get_rewards_demo.json` captured from 5.2. Not wired to boot yet.
+  - Tests: PHPUnit 77, Behat 4 scenarios, vitest +2 files (rewards 9 tests), `mci full` 15 ok 0 red 1 skip (mustache: no java).
