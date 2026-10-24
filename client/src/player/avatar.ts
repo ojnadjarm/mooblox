@@ -1,4 +1,5 @@
 import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Mesh, type Object3D } from 'three';
+import { sense } from './attention';
 import { CLIP_FOR, type AvatarState } from './clips';
 import { Layered } from './layered';
 import { IDLE, JUMP, M, motionState, RUN, stepMotion, WALK, type MotionCode } from './motion';
@@ -87,6 +88,7 @@ export class Avatar {
     const m = this.m;
     this.torso?.restore();
     this.head?.restore();
+    sense(m, this.root, this);
     stepMotion(m, CODE[state], dt);
     this.actions.get(state)!.timeScale = m[M.rate]!;
     this.mixer.update(dt);

@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { focus } from './attention';
 import type { Avatar } from './avatar';
 import type { Collider } from './collider';
 import { Physics, stepBody, type Body } from './controller';
@@ -124,6 +125,11 @@ export class Player {
       this.stride = 0;
       this.onFeet?.(root.position.x - Math.sin(this.facing) * 0.4, root.position.y, root.position.z - Math.cos(this.facing) * 0.4, 1, 0.2);
     }
+    focus.owner = this.model;
+    focus.space = root.parent;
+    focus.x = root.position.x;
+    focus.y = root.position.y;
+    focus.z = root.position.z;
     this.avatar.update(dt);
     this.camera.follow(root.position, dt, false, this.velocity);
   }
