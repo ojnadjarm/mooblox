@@ -192,3 +192,6 @@ file,pack,author,license,source,sha256_16
 "kit-hd/pirate/structure-platform-dock.glb","Kenney Pirate Kit (bevelled by tools/bevel-kit.py)","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/pirate-kit","26483b663bd30b93"
 "detail/detail-a.png","ambientCG Grass004 Foliage001 Planks021 Rock030 (packed by tools/pack-detail.py)","ambientCG (ambientcg.com)","CC0-1.0","https://ambientcg.com/view?id=Grass004 https://ambientcg.com/view?id=Foliage001 https://ambientcg.com/view?id=Planks021 https://ambientcg.com/view?id=Rock030","9fbf2051d3b5f267"
 "detail/detail-b.png","ambientCG RoofingTiles006 Plaster001 Bricks059 Ground054 (packed by tools/pack-detail.py)","ambientCG (ambientcg.com)","CC0-1.0","https://ambientcg.com/view?id=RoofingTiles006 https://ambientcg.com/view?id=Plaster001 https://ambientcg.com/view?id=Bricks059 https://ambientcg.com/view?id=Ground054","a39e082d845d3baf"
+"cosmetics/pets.glb","Kenney Cube Pets 2.0","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/cube-pets","0b6315598ba508ef"
+"cosmetics/head.glb","Kenney Mini Characters","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/mini-characters","02a44556d6428a3e"
+"built:boxes","MOOBLOX box-built hats and trophy pedestals (client/src/rewards)","MOOBLOX contributors","GPL-3.0-or-later","client/src/rewards",""
