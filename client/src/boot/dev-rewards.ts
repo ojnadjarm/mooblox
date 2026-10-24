@@ -79,6 +79,18 @@ function devCollectibles(world: WorldDto): RewardsDto['collectibles'] {
   });
 }
 
+const BADGE_NAMES = ['Bookworm', 'Quiz champ', 'Helper', 'Star reader', 'Explorer', 'Team player', 'Night owl', 'Speedy', 'Inventor', 'Artist', 'Scientist', 'Kind heart'];
+const BADGE_COLOURS = ['#2fa39a', '#e0844f', '#a774f0', '#1e88e5', '#5db761', '#f6c445'];
+
+/** `n` badges with drawn SVG images (data URIs: no server needed). */
+function devTrophies(n: number): RewardsDto['trophies'] {
+  return Array.from({ length: n }, (_, i) => {
+    const c = BADGE_COLOURS[i % BADGE_COLOURS.length]!;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="${c}"/><path d="M50 16l9 22 24 2-18 16 6 24-21-13-21 13 6-24-18-16 24-2z" fill="#fff"/><text x="50" y="62" font-size="22" font-family="sans-serif" font-weight="900" text-anchor="middle" fill="${c}">${i + 1}</text></svg>`;
+    return { badgeid: i + 1, name: BADGE_NAMES[i % BADGE_NAMES.length]!, image: `data:image/svg+xml,${encodeURIComponent(svg)}`, timeissued: 1792847382 + i * 3600 };
+  });
+}
+
 const levelOf = (xp: number): number => Math.floor((Math.sqrt(1 + (4 * xp) / 25) - 1) / 2);
 
 /** Dev page for the rewards UI: the demo course and the captured rewards, no Moodle needed. */
@@ -96,6 +108,7 @@ async function boot(): Promise<void> {
     rewards.look.pet = params.get('pet')!;
     rewards.unlocks.push(rewards.look.pet);
   }
+  if (params.has('trophies')) rewards.trophies = devTrophies(Number(params.get('trophies')));
   const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp), params.get('collect') === 'all');
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));

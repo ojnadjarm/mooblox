@@ -130,7 +130,64 @@ const frameSpot = (page, key, dist) => page.evaluate(([k, dd]) => {
   });
 }, [key, dist]);
 
+/** Frames the trophy hall from its open side; the player stands beside the camera. */
+const frameHall = (page) => page.evaluate(() => {
+  const v = window.mooblox;
+  const s = v.dressing.hall;
+  const [dx, dz] = [Math.sin(s.face), Math.cos(s.face)];
+  const [cx, cz] = [s.x + dx * (s.r + 4.2), s.z + dz * (s.r + 4.2)];
+  v.player.teleport(s.x + dx * (s.r + 1.4) + dz * 2.6, s.z + dz * (s.r + 1.4) - dx * 2.6, s.face + Math.PI);
+  window.__still?.();
+  window.__still = v.onFrame(() => {
+    v.stage.camera.position.set(cx, 3, cz);
+    v.stage.camera.lookAt(s.x, 1.2, s.z);
+  });
+  return s;
+});
+
+/** Whether a capsule standing on the back column of the hall is pushed out (the hall is solid). */
+const hallSolid = (page) => page.evaluate(() => {
+  const v = window.mooblox;
+  const s = v.dressing.hall;
+  const ring = s.r - 0.3;
+  const a = v.player.avatar.root.position.clone().set(-ring * Math.sin(s.face), 0.6, -ring * Math.cos(s.face));
+  a.x += s.x;
+  a.z += s.z;
+  const b = a.clone();
+  b.y += 1;
+  return v.collider.resolve(a, b, 0.4).length() > 0.05;
+});
+
 const modes = {
+  async hall() {
+    for (const [tier, w, h] of [['low', 400, 860], ['medium', 1366, 768], ['high', 1366, 768], ['xhigh', 1366, 768]]) {
+      const p = await open(w, h, `trophies=3&quality=${tier}`);
+      await p.waitForFunction(() => window.mooblox.rewards.hall?.mesh, null, { timeout: 20000 });
+      const site = await frameHall(p);
+      await p.waitForTimeout(1200);
+      const shown = await p.evaluate(() => window.mooblox.rewards.hall.shown);
+      check(shown === 3, `${tier}: 3 badges on pedestals (site r ${site.r} at ${site.x.toFixed(1)},${site.z.toFixed(1)})`);
+      const e = await extraOf(p, 'trophy-hall');
+      const b = EXTRA[tier];
+      check(e.calls >= 1 && e.calls <= b.calls && e.tris <= b.tris && e.programs <= b.programs, `${tier}: hall adds ${e.calls} draws, ${e.tris} tris, ${e.programs} programs (budget ${b.calls}/${b.tris}/${b.programs})`);
+      await p.screenshot({ path: join(out, `hall-${tier}-${w}.png`) });
+      if (tier === 'high') check(await hallSolid(p), 'high: the hall columns block the player');
+      await p.close();
+    }
+    for (const [n, want] of [[0, 0], [14, 8]]) {
+      const p = await open(1366, 768, `trophies=${n}&quality=high`);
+      await p.waitForFunction(() => window.mooblox.rewards.hall?.mesh, null, { timeout: 20000 });
+      await frameHall(p);
+      await p.waitForTimeout(1200);
+      check((await p.evaluate(() => window.mooblox.rewards.hall.shown)) === want, `${n} trophies: ${want} badges stand${n ? ' and a +6 plaque' : ', one empty pedestal'}`);
+      await p.screenshot({ path: join(out, `hall-${n}-1366.png`) });
+      await p.close();
+    }
+    const off = await open(1366, 768, 'trophies=3&off');
+    await off.waitForTimeout(800);
+    check(await off.evaluate(() => !window.mooblox.stage.scene.getObjectByName('trophy-hall')), 'rewards off: no hall');
+    await off.close();
+  },
   async book() {
     for (const [w, h] of WIDTHS) {
       const page = await open(w, h, 'collect=all');

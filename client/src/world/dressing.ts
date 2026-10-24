@@ -136,7 +136,20 @@ export interface Dressing {
   readonly focus: { readonly x: number; readonly z: number } | null;
   /** Ground every placed model claimed (read-only), for later placement such as collectibles. */
   readonly occupancy: GroundQuery;
+  /** Calm lawn kept free on the spawn hub for the trophy hall (built only while rewards are on), or null. */
+  readonly hall: HallSite | null;
 }
+
+/** A round site and the yaw its open side faces (the hub centre). */
+export interface HallSite {
+  readonly x: number;
+  readonly z: number;
+  readonly r: number;
+  readonly face: number;
+}
+
+/** Trophy hall site radii tried on the spawn hub, largest first. */
+const HALL_RADII = [3.6, 3.1, 2.6];
 
 interface Footprint {
   readonly h: number;
@@ -242,6 +255,7 @@ class Designer {
   private theme: DistrictTheme = HUB_THEME;
   private readonly entries = new Set<Segment>();
   private focus: { x: number; z: number } | null = null;
+  private hall: HallSite | null = null;
   private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
   private readonly random: () => number;
   private district!: District;
@@ -274,6 +288,7 @@ class Designer {
       if (i === 0) this.hub(hub);
       else this.plaza(hub, i);
       this.themed(hub, i === 0 ? HUB_THEME.corners : ['plaza'], i === 0 ? 2 : 1);
+      if (i === 0) this.hall = this.hallSite(hub);
       this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8);
       this.shore(hub);
     });
@@ -298,6 +313,7 @@ class Designer {
       districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges,
       critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks,
       occupancy: this.occ,
+      hall: this.hall,
     };
   }
 
@@ -409,6 +425,28 @@ class Designer {
       }
     }
     this.dock(hub, true);
+  }
+
+  /**
+   * Keeps a calm round lawn on the hub for the trophy hall: the first free site on rings out from the plaza, angles nearest
+   * the landmark first (so it frames with the tower from the spawn); no random draws.
+   */
+  private hallSite(hub: Circle): HallSite | null {
+    const back = this.focus ? Math.atan2(this.focus.z - hub.z, this.focus.x - hub.x) : 0;
+    for (const r of HALL_RADII) {
+      for (let d = PLAZA + r + 1.2; d <= hub.radius - r - 1.6; d += 0.5) {
+        const n = Math.max(24, Math.round((2 * Math.PI * d) / 0.75));
+        for (let k = 0; k < n; k++) {
+          const a = back + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * ((2 * Math.PI) / n);
+          const x = hub.x + Math.cos(a) * d;
+          const z = hub.z + Math.sin(a) * d;
+          if (this.near(x, z, r) || this.nearBridge(x, z, r + 1.6) || this.pathIndex.within(x, z, r + 0.5)) continue;
+          this.reserve(x, z, r + 0.4);
+          return { x, z, r, face: Math.atan2(hub.x - x, hub.z - z) };
+        }
+      }
+    }
+    return null;
   }
 
   /** A further plaza: paving, a fountain in the middle and lamps between its bridges. */

@@ -10,6 +10,8 @@ export interface ColliderPart {
 /** Static world collision made of parts that come and go (streamed districts): each part the capsule touches pushes in turn. */
 export class CompositeCollider implements Collider {
   private parts: readonly ColliderPart[] = [];
+  /** Parts outside streaming (the trophy hall, the monument); `set` keeps them. */
+  private statics: ColliderPart[] = [];
   private readonly a = new Vector3();
   private readonly b = new Vector3();
   private readonly box = new Box3();
@@ -18,6 +20,14 @@ export class CompositeCollider implements Collider {
   /** Replaces the parts (after a district was built or freed). */
   set(parts: readonly ColliderPart[]): void {
     this.parts = parts;
+  }
+
+  /** Adds a part that stays until its remover runs. */
+  addStatic(part: ColliderPart): () => void {
+    this.statics = [...this.statics, part];
+    return () => {
+      this.statics = this.statics.filter((p) => p !== part);
+    };
   }
 
   resolve(start: Vector3, end: Vector3, radius: number): Vector3 {
@@ -30,13 +40,14 @@ export class CompositeCollider implements Collider {
     box.max.x += radius + 1;
     box.max.y += radius + 1;
     box.max.z += radius + 1;
-    const parts = this.parts;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i]!;
-      if (!part.bounds.intersectsBox(box)) continue;
-      const p = part.collider.resolve(a, b, radius);
-      a.add(p);
-      b.add(p);
+    for (const parts of [this.parts, this.statics]) {
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]!;
+        if (!part.bounds.intersectsBox(box)) continue;
+        const p = part.collider.resolve(a, b, radius);
+        a.add(p);
+        b.add(p);
+      }
     }
     return this.push.subVectors(a, start);
   }

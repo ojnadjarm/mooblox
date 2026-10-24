@@ -17,6 +17,7 @@ import { DEFAULT_WARDROBE_STRINGS, wardrobeItems } from '../ui/wardrobe-model';
 import type { Activities, WorldView } from './app';
 import { startCollectibles, type CollectiblesRuntime } from './collectibles';
 import { addRewardsPages } from './book-pages';
+import { startTrophyHall, type TrophyHallRuntime } from './trophy-hall';
 
 /** What the rewards wiring needs from the rest of the client. */
 export interface RewardsDeps {
@@ -42,6 +43,8 @@ export interface RewardsRuntime {
   readonly pet: PetFollower;
   /** Gems, crystals and stars in the world; null while rewards are off. */
   readonly collectibles: CollectiblesRuntime | null;
+  /** The trophy hall in the hub; null while rewards are off. */
+  readonly hall: TrophyHallRuntime | null;
   /** Re-reads the rewards from Moodle. */
   refresh(): Promise<void>;
 }
@@ -54,6 +57,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
   const host = view.stage.canvasHost;
   let hud: HudRewards | null = null;
   let collectibles: CollectiblesRuntime | null = null;
+  let hall: TrophyHallRuntime | null = null;
   let worn: Look = NO_LOOK;
   let dressing: Promise<void> | null = null;
   const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe') });
@@ -129,6 +133,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
     if (next.enabled && !collectibles) {
       collectibles = startCollectibles(view, deps.player, store, deps.gateway, deps.courseId, deps.strings);
       addRewardsPages(interaction.book, store, () => view.world, deps.strings);
+      hall = startTrophyHall(view, store);
     }
     const up = levelUp(previous, next);
     if (up) moment.play(up);
@@ -152,6 +157,9 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
     pet,
     get collectibles() {
       return collectibles;
+    },
+    get hall() {
+      return hall;
     },
     refresh,
   };

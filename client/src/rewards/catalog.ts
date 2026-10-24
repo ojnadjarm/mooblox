@@ -3,13 +3,13 @@ export type Slot = 'hat' | 'outfit' | 'pet' | 'trophy';
 
 export interface CosmeticArt {
   readonly slot: Slot;
-  /** `<asset file>#<node>`, `palette:<name>` or `boxes:<recipe>`. */
+  /** `<asset file>#<node>`, `palette:<name>` or `designed:<model>` (built in code). */
   readonly art: string;
   /** Key of the LICENSES.csv row that covers the art. */
   readonly licence: string;
 }
 
-const boxes = (slot: Slot, id: string): CosmeticArt => ({ slot, art: `boxes:${id}`, licence: 'built:boxes' });
+const trophy = (metal: string): CosmeticArt => ({ slot: 'trophy', art: `designed:pedestal-${metal}`, licence: 'built:trophy-hall' });
 const hat = (id: string): CosmeticArt => ({ slot: 'hat', art: `cosmetics/hats.glb#${id}`, licence: 'cosmetics/hats.glb' });
 const outfit = (name: string): CosmeticArt => ({ slot: 'outfit', art: `palette:${name}`, licence: 'kenney-blocky.glb' });
 const pet = (node: string): CosmeticArt => ({ slot: 'pet', art: `cosmetics/pets.glb#${node}`, licence: 'cosmetics/pets.glb' });
@@ -42,7 +42,7 @@ export const COSMETICS: Readonly<Record<string, CosmeticArt>> = {
   'pet-fox': pet('animal-fox'),
   'pet-panda': pet('animal-panda'),
   'pet-penguin': pet('animal-penguin'),
-  'trophy-bronze': boxes('trophy', 'bronze'),
-  'trophy-silver': boxes('trophy', 'silver'),
-  'trophy-gold': boxes('trophy', 'gold'),
+  'trophy-bronze': trophy('bronze'),
+  'trophy-silver': trophy('silver'),
+  'trophy-gold': trophy('gold'),
 };

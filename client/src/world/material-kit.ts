@@ -74,6 +74,14 @@ export class MaterialKit {
     return new MeshStandardMaterial({ map, roughness: 0.7, metalness: 0 });
   }
 
+  /** Vertex-coloured plastic times one painted atlas (the trophy hall). */
+  paintedPlastic(map: Texture): Material {
+    if (this.tier === 'low') {
+      return new MeshLambertMaterial({ map, vertexColors: true });
+    }
+    return new MeshStandardMaterial({ map, vertexColors: true, roughness: 0.6, metalness: 0 });
+  }
+
   dispose(): void {
     for (const m of [this.plastic, this.studs, this.sky, this.glow, this.scenery, this.sceneryInstanced]) {
       m.dispose();
