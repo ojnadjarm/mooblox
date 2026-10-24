@@ -2,8 +2,10 @@ import fixture from '../../test/fixtures/get_world_demo.json';
 import { FakeGateway } from '../moodle/fake-gateway';
 import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
 import type { AvatarState } from '../player/clips';
+import { NO_INPUT, type InputSource, type InputState } from '../player/input';
+import type { Player } from '../player/player';
 import { Palette } from '../world/palette';
-import { startWorld, type WorldView } from './app';
+import { startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
 
@@ -13,9 +15,68 @@ async function boot(): Promise<void> {
   const gateway = new FakeGateway(fixture);
   const view = startWorld(root, await gateway.getWorld(fixture.courseid));
   const probe: Record<string, unknown> = {};
+  const params = new URLSearchParams(location.search);
   Object.assign(window, { mooblox: { ...view, probe } });
-  if (new URLSearchParams(location.search).get('scene') === 'avatars') {
+  const scene = params.get('scene');
+  if (scene === 'avatars') {
     await avatarLineup(view, probe);
+  } else if (scene !== 'overview') {
+    const walk = Number(params.get('walk') ?? 0);
+    const pilot = new Autopilot();
+    const player = await startPlayer(view, ASSETS, { skin: 'b', tint: Palette.red }, [pilot]);
+    Object.assign(window, { mooblox: { ...view, probe, player } });
+    if (walk) {
+      pilot.drive(view, player, walk, probe);
+    }
+  }
+  probe['ready'] = true;
+}
+
+/** Scripted input that walks the player over the bridge to an activity's plot. */
+class Autopilot implements InputSource {
+  private state: InputState = NO_INPUT;
+
+  read(): InputState {
+    return this.state;
+  }
+
+  drive(view: WorldView, player: Player, cmid: number, probe: Record<string, unknown>): void {
+    const zone = view.layout.zones.find((z) => z.plots.some((p) => p.activityId === cmid));
+    const plot = zone?.plots.find((p) => p.activityId === cmid);
+    if (!zone || !plot) {
+      throw new Error(`no plot for cm ${cmid}`);
+    }
+    const waypoints = [
+      { x: zone.x, z: zone.z, r: 1.5 },
+      { x: plot.x, z: plot.z, r: plot.radius - 1 },
+    ];
+    probe['target'] = { x: plot.x, z: plot.z, radius: plot.radius };
+    probe['reached'] = false;
+    const start = performance.now();
+    view.onFrame(() => {
+      const p = player.body.position;
+      const w = waypoints[0];
+      probe['position'] = { x: p.x, y: p.y, z: p.z };
+      if (!w) {
+        this.state = NO_INPUT;
+        return;
+      }
+      const dx = w.x - p.x;
+      const dz = w.z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d < w.r) {
+        waypoints.shift();
+        if (waypoints.length === 0) {
+          probe['reached'] = true;
+          probe['seconds'] = (performance.now() - start) / 1000;
+        }
+        return;
+      }
+      const yaw = player.camera.yaw;
+      const s = Math.sin(yaw);
+      const c = Math.cos(yaw);
+      this.state = { x: (dx * c - dz * s) / d, z: (-dx * s - dz * c) / d, run: true, jump: false };
+    });
   }
 }
 
@@ -38,7 +99,7 @@ async function avatarLineup(view: WorldView, probe: Record<string, unknown>): Pr
     clips.push(avatar.clipNames);
   }
   probe['clips'] = clips;
-  probe['ready'] = true;
+  view.stopOverview();
   view.stage.camera.position.set(-1.2, 2.6, 6.4);
   view.stage.camera.lookAt(0, 1.5, -1);
   view.stage.focusShadow(0, -1, 12);

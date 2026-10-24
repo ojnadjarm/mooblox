@@ -1,5 +1,11 @@
+import { Vector3, type Group } from 'three';
 import type { WorldData } from '../domain/types';
 import { FrameGate } from '../perf/frame-gate';
+import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
+import { BvhCollider } from '../player/collider';
+import { FollowCamera } from '../player/follow-camera';
+import { CombinedInput, KeyboardInput, type InputSource } from '../player/input';
+import { Player } from '../player/player';
 import { scatterDecor } from '../world/decor';
 import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
@@ -13,6 +19,9 @@ export interface WorldView {
   readonly layout: WorldLayout;
   readonly stage: Stage;
   readonly gate: FrameGate;
+  readonly islands: Group;
+  /** Hands the camera from the overview to the caller. */
+  stopOverview(): void;
   /** Adds a per-frame step that runs before the render; returns its remover. */
   onFrame(step: (dt: number) => void): () => void;
 }
@@ -23,7 +32,9 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   const kit = new MaterialKit('standard');
   const stage = new Stage(root, kit, { antialias: true, shadowMapSize: 2048 });
   const layout = new IslandLayout().layout(world);
-  stage.add(new IslandBuilder(kit).build(world, layout, scatterDecor(layout, world.courseId)));
+  const islands = new IslandBuilder(kit).build(world, layout, scatterDecor(layout, world.courseId));
+  stage.add(islands);
+  let overview = true;
 
   const e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
@@ -37,7 +48,9 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
   });
   const resize = (): void => {
     stage.resize(Math.min(window.devicePixelRatio || 1, 2));
-    frameOverview(stage, e);
+    if (overview) {
+      frameOverview(stage, e);
+    }
     gate.invalidate();
   };
   window.addEventListener('resize', resize);
@@ -49,11 +62,40 @@ export function startWorld(root: HTMLElement, world: WorldData): WorldView {
     layout,
     stage,
     gate,
+    islands,
+    stopOverview: () => {
+      overview = false;
+    },
     onFrame: (step) => {
       steps.add(step);
       return () => steps.delete(step);
     },
   };
+}
+
+const SPAWN_HEIGHT = 2;
+const SHADOW_RADIUS = 30;
+
+/** Loads the avatar and starts the local player at the spawn, driven by the keyboard plus `inputs`. */
+export async function startPlayer(
+  view: WorldView,
+  assetBase: string,
+  look: AvatarLook,
+  inputs: readonly InputSource[] = [],
+): Promise<Player> {
+  const kit = await AvatarKit.load(assetBase);
+  const avatar = await kit.create(look);
+  view.stage.add(avatar.root);
+  const collider = BvhCollider.fromMeshes(view.islands.children.filter((o) => o.name === 'land' || o.name === 'tops'));
+  const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement);
+  const spawn = new Vector3(view.layout.spawn.x, SPAWN_HEIGHT, view.layout.spawn.z);
+  view.stopOverview();
+  const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), ...inputs]), camera);
+  view.onFrame((dt) => {
+    player.update(dt);
+    view.stage.focusShadow(avatar.root.position.x, avatar.root.position.z, SHADOW_RADIUS);
+  });
+  return player;
 }
 
 /** Overview camera that keeps the whole island in view, pulling back on portrait screens. */

@@ -30,7 +30,7 @@ try {
     page.on('console', (m) => m.type() === 'error' && console.error('page:', m.text()));
     await page.goto(`${url}?${query}`);
     await page.waitForSelector('#mooblox-root[data-ready="1"]', { timeout: 60000 });
-    await page.waitForFunction(() => !new URLSearchParams(location.search).get('scene') || window.mooblox?.probe?.ready, null, { timeout: 60000 });
+    await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 60000 });
     await page.waitForTimeout(400);
     const info = await page.evaluate(() => {
       const r = window.mooblox.stage.renderer;
