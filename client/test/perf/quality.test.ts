@@ -48,18 +48,22 @@ describe('quality tiers', () => {
 });
 
 describe('DynamicResolution', () => {
-  const feed = (d: DynamicResolution, ms: number, seconds: number) => {
+  const feed = (d: DynamicResolution, ms: number, seconds: number, work = 0) => {
+    let changes = 0;
     for (let t = 0; t < seconds * 1000; t += ms) {
-      d.sample(ms);
+      if (d.sample(ms, work)) changes++;
     }
+    return changes;
   };
 
-  it('drops the scale below 50 fps down to its floor, then reports starvation', () => {
+  it('drops the scale below 50 fps in steps sized from the frame time down to its floor, then reports starvation', () => {
     const d = new DynamicResolution(0.6);
     feed(d, 25, 1);
-    expect(d.scale).toBeCloseTo(0.9);
-    feed(d, 25, 3);
-    expect(d.scale).toBeCloseTo(0.6);
+    expect(d.scale).toBe(0.8);
+    feed(d, 25, 1);
+    expect(d.scale).toBe(0.65);
+    feed(d, 25, 1);
+    expect(d.scale).toBe(0.6);
     expect(d.starved).toBe(false);
     feed(d, 25, 1);
     expect(d.scale).toBeCloseTo(0.6);
@@ -88,5 +92,33 @@ describe('DynamicResolution', () => {
     feed(d, 16.7, 60);
     expect(d.scale).toBe(1);
     expect(d.starved).toBe(false);
+  });
+
+  it('keeps the scale when slow frames are CPU-bound, and asks for a lower tier after 5 such windows', () => {
+    const d = new DynamicResolution(0.6);
+    expect(feed(d, 25, 4, 22)).toBe(0);
+    expect(d.scale).toBe(1);
+    expect(d.cpuBound).toBe(true);
+    expect(d.starved).toBe(false);
+    feed(d, 25, 1, 22);
+    expect(d.starved).toBe(true);
+    expect(d.scale).toBe(1);
+    feed(d, 25, 1, 5);
+    expect(d.cpuBound).toBe(false);
+    expect(d.scale).toBe(0.8);
+  });
+
+  it('never oscillates at a scale on the edge: each failed raise doubles the wait before the next', () => {
+    const d = new DynamicResolution(0.5);
+    // GPU-bound: frames at vsync up to scale 0.7, 22 ms above it.
+    const run = (seconds: number) => {
+      let changes = 0;
+      for (let s = 0; s < seconds; s++) changes += feed(d, d.scale > 0.7 + 1e-9 ? 22 : 16.7, 1);
+      return changes;
+    };
+    expect(run(60)).toBeLessThanOrEqual(10);
+    expect(run(60)).toBeLessThanOrEqual(2);
+    expect(d.scale).toBeGreaterThanOrEqual(0.7);
+    expect(d.scale).toBeLessThanOrEqual(0.75);
   });
 });

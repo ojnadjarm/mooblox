@@ -85,50 +85,102 @@ export function pixelRatio(tier: QualityTier, deviceDpr: number, scale: number):
   return Math.max(0.5, Math.min(deviceDpr || 1, QUALITY[tier].maxDpr) * scale);
 }
 
+const TARGET_MS = 1000 / 60;
 const SLOW_MS = 1000 / 50;
 const FAST_MS = 1000 / 57;
 const WINDOW_MS = 1000;
 const RAISE_AFTER = 3;
+/** Longest wait (windows) before trying a scale again after raises kept failing. */
+const RAISE_MAX = 48;
 /** Share of each window's slowest frames left out of its average: a one-off hitch never moves the scale (a resize is a hitch too). */
 const TRIM = 0.05;
+/** A slow window whose frames spend this share of their interval in main-thread work is CPU-bound: a smaller canvas would not help. */
+const CPU_BOUND = 0.7;
+/** CPU-bound slow windows in a row before the governor asks for a lower tier (fewer draws and districts: less CPU work). */
+const STARVE_CPU = 5;
+const STEP = 0.05;
 
 /**
- * Lowers the render scale while the average frame (slowest 5% left out) misses 50 fps and raises it again after 3 windows at vsync;
- * `starved` turns true when the scale is at its floor and frames are still slow (the governor's cue to drop a tier).
+ * Dynamic render scale. A window (1 s, slowest 5% left out) slower than 50 fps lowers the scale in one step sized from how slow it
+ * was (GPU time follows pixels: scale x sqrt(16.7 / avg), 0.05-0.25), unless the frames' own main-thread work fills their interval
+ * (CPU-bound: the scale stays, each resize is a hitch for nothing). Windows at 57+ fps raise it 0.05 after 3 in a row; a raise
+ * that is slow within 3 windows goes back one step and doubles that wait (up to 48; a raise that holds resets it), so a scale on
+ * the edge never oscillates. `starved` turns true when the
+ * scale is at its floor and frames are still slow, or after 5 CPU-bound slow windows (the cue to drop a tier).
  */
 export class DynamicResolution {
   scale = 1;
   starved = false;
+  /** Whether the last slow window was CPU-bound. */
+  cpuBound = false;
   private sum = 0;
   private readonly frames: number[] = [];
+  private readonly work: number[] = [];
   private good = 0;
+  private slowCpu = 0;
+  private raiseAfter = RAISE_AFTER;
+  /** Windows since the last raise (a drop within RAISE_AFTER of it means the raise failed). */
+  private sinceRaise = Infinity;
 
   constructor(private readonly minScale = 0.6) {}
 
-  /** Feeds one frame time; returns true when the scale changed. */
-  sample(frameMs: number): boolean {
+  /** Feeds one frame interval and its main-thread work (ms; 0 = unknown, taken as GPU-bound); returns true when the scale changed. */
+  sample(frameMs: number, workMs = 0): boolean {
     this.sum += frameMs;
     this.frames.push(frameMs);
+    this.work.push(workMs);
     if (this.sum < WINDOW_MS) {
       return false;
     }
-    const sorted = this.frames.sort((a, b) => a - b);
-    const kept = Math.max(1, sorted.length - Math.floor(sorted.length * TRIM));
+    const n = this.frames.length;
+    const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => this.frames[a]! - this.frames[b]!);
+    const kept = Math.max(1, n - Math.floor(n * TRIM));
     let total = 0;
-    for (let i = 0; i < kept; i++) total += sorted[i]!;
+    let busy = 0;
+    for (let i = 0; i < kept; i++) {
+      total += this.frames[order[i]!]!;
+      busy += this.work[order[i]!]!;
+    }
     const avg = total / kept;
     this.sum = 0;
     this.frames.length = 0;
+    this.work.length = 0;
     const before = this.scale;
     this.starved = false;
+    this.sinceRaise++;
     if (avg > SLOW_MS) {
       this.good = 0;
+      this.cpuBound = busy / kept >= avg * CPU_BOUND;
+      if (this.cpuBound) {
+        this.starved = ++this.slowCpu >= STARVE_CPU;
+        if (this.starved) this.slowCpu = 0;
+        return false;
+      }
+      this.slowCpu = 0;
       this.starved = this.scale <= this.minScale + 1e-9;
-      this.scale = Math.max(this.minScale, this.scale - 0.1);
-    } else if (avg < FAST_MS && ++this.good >= RAISE_AFTER) {
-      this.good = 0;
-      this.scale = Math.min(1, this.scale + 0.05);
+      const failed = this.sinceRaise <= RAISE_AFTER;
+      const step = failed ? STEP : Math.min(0.25, Math.max(STEP, this.scale * (1 - Math.sqrt(TARGET_MS / avg))));
+      this.scale = Math.max(this.minScale, snap(this.scale - step, Math.floor));
+      if (failed) {
+        this.raiseAfter = Math.min(RAISE_MAX, this.raiseAfter * 2);
+        this.sinceRaise = Infinity;
+      }
+    } else {
+      this.slowCpu = 0;
+      if (this.sinceRaise === RAISE_AFTER + 1) this.raiseAfter = RAISE_AFTER;
+      if (avg < FAST_MS && this.scale < 1 && ++this.good >= this.raiseAfter) {
+        this.good = 0;
+        this.scale = Math.min(1, snap(this.scale + STEP, Math.round));
+        this.sinceRaise = 0;
+      } else if (avg >= FAST_MS) {
+        this.good = 0;
+      }
     }
     return this.scale !== before;
   }
+}
+
+/** Rounds a scale to the 0.05 grid. */
+function snap(v: number, round: (x: number) => number): number {
+  return round(v / STEP + 1e-6) / (1 / STEP);
 }

@@ -4,6 +4,12 @@ import { DynamicResolution, QUALITY, lowerTier, pixelRatio, type QualityTier } f
 /** Where a tier step-down is remembered for the next visit. */
 export type TierMemory = (tier: QualityTier) => void;
 
+/** Main-thread work of the current animation frame so far (ms): now minus the frame's time; 0 outside a frame or unknown. */
+export function frameWork(): number {
+  const start = globalThis.document?.timeline?.currentTime;
+  return typeof start === 'number' ? Math.max(0, performance.now() - start) : 0;
+}
+
 /** Applies a quality tier to the stage (pixel ratio, shadow, post), runs dynamic resolution and steps the tier down when frames stay slow. */
 export class QualityManager {
   dynamic: DynamicResolution;
@@ -15,6 +21,8 @@ export class QualityManager {
     private readonly remember: TierMemory | null = null,
     /** Software GL: starts at the scale floor (it ends there anyway, and every step on the way is a canvas resize hitch). */
     private readonly software = false,
+    /** Called at the end of a frame's work (see `frameWork`). */
+    private readonly work: () => number = frameWork,
   ) {
     this.dynamic = this.governor(current);
     this.apply();
@@ -31,11 +39,12 @@ export class QualityManager {
   }
 
   /**
-   * Feeds one frame time in ms; re-applies the pixel ratio only when dynamic resolution moves (a resize reallocates the
-   * canvas: a long frame), drops a tier when it is starved and a lower one exists.
+   * Feeds one frame time in ms, called after the frame's work (its CPU share tells GPU-bound from CPU-bound); re-applies the pixel
+   * ratio only when dynamic resolution moves (a resize reallocates the canvas: a long frame), drops a tier when it is starved and a
+   * lower one exists.
    */
   frame(frameMs: number): void {
-    const moved = this.dynamic.sample(frameMs);
+    const moved = this.dynamic.sample(frameMs, this.work());
     const lower = this.dynamic.starved && this.remember ? lowerTier(this.current) : null;
     if (lower) {
       this.remember!(lower);

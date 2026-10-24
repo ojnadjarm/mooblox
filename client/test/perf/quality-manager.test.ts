@@ -29,4 +29,16 @@ describe('QualityManager', () => {
     for (let i = 0; i < 300; i++) q.frame(50);
     expect(ratios.length).toBe(after);
   });
+
+  it('keeps the canvas size on CPU-bound slow frames and steps the tier down after 5 s of them', () => {
+    const { stage, ratios } = fakeStage();
+    const stored: string[] = [];
+    const q = new QualityManager(stage, 'medium', (t) => void stored.push(t), false, () => 22);
+    const after = ratios.length;
+    for (let i = 0; i < 160; i++) q.frame(25);
+    expect(ratios.length).toBe(after);
+    for (let i = 0; i < 50; i++) q.frame(25);
+    expect(stored).toEqual(['low']);
+    expect(q.tier).toBe('low');
+  });
 });
