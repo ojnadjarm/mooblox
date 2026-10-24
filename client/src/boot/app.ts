@@ -260,7 +260,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
 }
 
 /** Prop LOD distances (from the camera, metres) per tier, and the course size up to which every prop always shows. */
-const PROP_LOD = { low: { near: 30, far: 80 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 }, xhigh: { near: 70, far: 200 } } as const;
+const PROP_LOD = { low: { near: 20, far: 50 }, medium: { near: 40, far: 110 }, high: { near: 50, far: 140 }, xhigh: { near: 70, far: 200 } } as const;
 const PROPS_ALWAYS = 40;
 
 const SPAWN_HEIGHT = 2;
@@ -340,6 +340,8 @@ export async function startGuide(
   const avatar = await avatars.create(GUIDE_LOOK);
   const s = view.layout.spawn;
   avatar.root.position.set(s.x + GUIDE_SPOT.x, PLAZA_TOP, s.z + GUIDE_SPOT.z);
+  const shadow = view.quality.tier === 'high' || view.quality.tier === 'xhigh';
+  avatar.root.traverse((o) => (o.castShadow = shadow));
   view.stage.add(avatar.root);
   const guide = new Guide(avatar, view.stage.camera, view.stage.canvasHost, strings, (id) => goToPlot(view, player, id));
   guide.say(tutor.greet({ world: course.store.world ?? view.world }));

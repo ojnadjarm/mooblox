@@ -185,3 +185,24 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `gem:<cmid>`, `crystal:<sectionid>` remapped in `after_restore_course`, unmapped dropped) and days; ledger/XP rebuilt
     by a queued `sync_course`.
   - Tests: PHPUnit 69 (G2 adds sync_trigger 2, cleanup 3, privacy 2, backup 1), mci quick 7 ok 0 red.
+- T1366, 2026-10-24, optimisation for any device (profile: `~/agent-work/research/2026-10-24/T1366/PROFILE.md`, compare page
+  `~/drop/T1366/index.html`):
+  - Tiers (`perf/quality.ts`): auto pick = phones, tablets, Chromebooks (`CrOS`), <= 4 cores or <= 4 GB, software or mobile
+    GPUs → low; strong desktop GPUs with 8+ cores → high; every other laptop → medium; xhigh only with `?quality=xhigh`.
+    Each tier carries `post`, `ao`, `districtDistance`, `minScale`. `DynamicResolution` aims at 50-57 fps (drops 0.1 per slow
+    second, raises 0.05 after 3 s at vsync); at its floor `QualityManager` steps one tier down live (shadow, post, DPR) and
+    remembers it in `localStorage['mooblox-tier']` (never when `?quality=` is set). Tiers without post get the grade's
+    vignette as a CSS overlay (`.mooblox-vignette`).
+  - World: `scenery.ts` one group per district (base mesh, `detail` group, `minor` group; no duplicate LOD copy),
+    `cullDistricts` hides districts past `districtDistance` (low 45, medium 150, high 260 m; overview shows all), detail past
+    `DETAIL_DISTANCE`, minor past `MINOR_DISTANCE`. Low: baked vertex-colour water (`bakedWaterGeometry`, glow material),
+    coarser island rims, props to 50 m. Water shader loop stops at the island count. Sky and water draw after opaque parts.
+    Boats, buoys, ships, detail meshes and the Guide cast no shadow below high.
+  - Assets: `node tools/pack-kit.mjs` packs `client/kit-src/<pack>/*.glb` (the 97 Kenney sources, moved out of `public/`) into
+    `public/assets/kit.glb` (628 KB, meshopt, tangents dropped); `ModelLibrary` loads it once (MeshoptDecoder, quantized
+    attributes back to Float32). `tools/footprints.mjs` and `bevel-kit.py` read `kit-src/`.
+  - Perf gate: `node tools/perf.mjs [outdir] [--shapes ..] [--tiers low,medium] [--load] [--stills] [--gate]` builds the dev
+    page, walks to the farthest plot (`?walk=far`), asserts low (SwiftShader 400x800, 6x CPU: 58 fps, 40 draws, 80k tris,
+    10 programs, no post) and medium (Iris Xe 1366: 58 fps, 60 draws) plus all-tier heap 150 MB, GPU estimate 200 MB, worst
+    frame 50 ms, Fast 4G load 3 s / 3 MB, 20x30 within 1.5x demo. `npm run test:perf`; `npm run test:all` = vitest + gate.
+    `npm test` stays vitest only while the gate is red (it would fail every parallel agent's unit run).

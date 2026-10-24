@@ -20,7 +20,7 @@ export interface QualitySettings {
 }
 
 export const QUALITY: Readonly<Record<QualityTier, QualitySettings>> = {
-  low: { maxDpr: 1, shadows: false, shadowMapSize: 1024, antialias: false, materials: 'low', post: false, ao: false, districtDistance: 70, minScale: 0.5 },
+  low: { maxDpr: 1, shadows: false, shadowMapSize: 1024, antialias: false, materials: 'low', post: false, ao: false, districtDistance: 45, minScale: 0.5 },
   medium: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, antialias: true, materials: 'standard', post: false, ao: false, districtDistance: 150, minScale: 0.6 },
   high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, antialias: true, materials: 'standard', post: true, ao: false, districtDistance: 260, minScale: 0.6 },
   xhigh: { maxDpr: 2, shadows: true, shadowMapSize: 4096, antialias: true, materials: 'rich', post: true, ao: true, districtDistance: Infinity, minScale: 0.6 },

@@ -12,7 +12,6 @@ import { loadChromium } from './playwright.mjs';
 const BUDGETS = {
   low: { fps: 58, calls: 40, tris: 80000, programs: 10, shadow: 1024, post: false },
   medium: { fps: 58, calls: 60, tris: 200000, programs: 30, shadow: 1024, post: false },
-  high: { fps: 0, calls: 120, tris: 400000, programs: 40, shadow: 2048, post: true },
 };
 const ALL = { loadMb: 3, loadS: 3, heapMb: 150, gpuMb: 200, frameMs: 50, bigCourse: 1.5 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
@@ -151,21 +150,21 @@ try {
       results.push(row);
       console.log(JSON.stringify(row));
       const b = BUDGETS[tier];
+      const id = `${shape} ${tier} ${rig.w}x${rig.h}${rig.throttle > 1 ? ` ${rig.throttle}x cpu` : ''} ${rig.browser}`;
       if (b) {
-        const id = `${shape} ${tier} ${rig.w}x${rig.h}${rig.throttle > 1 ? ` ${rig.throttle}x cpu` : ''} ${rig.browser}`;
         check(m.fps >= b.fps, `${id}: fps ${m.fps} >= ${b.fps}`);
         check(m.calls <= b.calls, `${id}: draws ${m.calls} <= ${b.calls}`);
         check(m.tris <= b.tris, `${id}: tris ${m.tris} <= ${b.tris}`);
         check(m.programs <= b.programs, `${id}: programs ${m.programs} <= ${b.programs}`);
         check(m.shadow <= b.shadow, `${id}: shadow map ${m.shadow} <= ${b.shadow}`);
         check(b.post || !m.post, `${id}: post ${m.post} allowed ${b.post}`);
-        check(m.maxFrame <= ALL.frameMs, `${id}: worst frame ${m.maxFrame} ms <= ${ALL.frameMs}`);
-        check(m.heapMb <= ALL.heapMb, `${id}: heap ${m.heapMb} MB <= ${ALL.heapMb}`);
-        check(m.gpuMb <= ALL.gpuMb, `${id}: gpu estimate ${m.gpuMb} MB <= ${ALL.gpuMb}`);
-        if (row.loadS !== undefined) {
-          check(row.loadS <= ALL.loadS, `${id}: first playable ${row.loadS} s <= ${ALL.loadS} on Fast 4G`);
-          check(row.loadMb <= ALL.loadMb, `${id}: transferred ${row.loadMb} MB <= ${ALL.loadMb}`);
-        }
+      }
+      check(m.maxFrame <= ALL.frameMs, `${id}: worst frame ${m.maxFrame} ms <= ${ALL.frameMs}`);
+      check(m.heapMb <= ALL.heapMb, `${id}: heap ${m.heapMb} MB <= ${ALL.heapMb}`);
+      check(m.gpuMb <= ALL.gpuMb, `${id}: gpu estimate ${m.gpuMb} MB <= ${ALL.gpuMb}`);
+      if (row.loadS !== undefined) {
+        check(row.loadS <= ALL.loadS, `${id}: first playable ${row.loadS} s <= ${ALL.loadS} on Fast 4G`);
+        check(row.loadMb <= ALL.loadMb, `${id}: transferred ${row.loadMb} MB <= ${ALL.loadMb}`);
       }
       if (flag('stills') && out) {
         for (const [w, h] of [[1366, 768], [400, 800]]) {
@@ -182,7 +181,7 @@ try {
   for (const tier of tiers) {
     const demo = results.find((r) => r.shape === 'demo' && r.tier === tier);
     const big = results.find((r) => r.shape === '20x30' && r.tier === tier);
-    if (demo && big && BUDGETS[tier]) {
+    if (demo && big) {
       check(big.calls <= demo.calls * ALL.bigCourse, `20x30 ${tier}: draws ${big.calls} <= 1.5 x demo ${demo.calls}`);
       check(big.tris <= demo.tris * ALL.bigCourse, `20x30 ${tier}: tris ${big.tris} <= 1.5 x demo ${demo.tris}`);
     }

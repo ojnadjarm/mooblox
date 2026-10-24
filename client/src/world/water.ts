@@ -89,7 +89,7 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
  */
 export function bakedWaterGeometry(look: Look, islands: readonly Circle[], extent: number, y: number): BufferGeometry {
   const half = extent + 24;
-  const cells = Math.min(96, Math.max(24, Math.round((half * 2) / 3)));
+  const cells = Math.min(48, Math.max(24, Math.round((half * 2) / 4)));
   const step = (half * 2) / cells;
   const shallow = new Color(look.water.shallow);
   const deep = new Color(look.water.deep);

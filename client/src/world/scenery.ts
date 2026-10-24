@@ -5,7 +5,7 @@ import type { ModelLibrary } from './model-library';
 import { tagSurface } from './surfaces';
 
 /** Distance past which a district drops its detail (flowers, bushes, hedges, lamps, small props) per tier. */
-export const DETAIL_DISTANCE = { low: 30, medium: 70, high: 90, xhigh: 130 } as const;
+export const DETAIL_DISTANCE = { low: 20, medium: 70, high: 90, xhigh: 130 } as const;
 /** Distance past which a district drops its minor dressing (grass tufts, pebbles, rich extras) per tier. */
 export const MINOR_DISTANCE = { low: 0, medium: 25, high: 40, xhigh: 70 } as const;
 
