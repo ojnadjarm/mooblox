@@ -39,6 +39,15 @@ const CSS = `
 .mooblox-hud-book svg { width: 26px; height: 26px; }
 .mooblox-hud-book kbd { font: inherit; font-size: 14px; background: rgba(255, 255, 255, .25); border-radius: 6px; padding: 0 6px; }
 @media (pointer: coarse) { .mooblox-hud-book kbd { display: none; } }
+.mooblox-book-tabbed { display: flex; flex-direction: column; height: 100%; }
+.mooblox-book-tabs { flex: none; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; justify-content: safe center;
+  padding: 12px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)); background: #fff; border-bottom: 3px solid #e3eaf3; }
+.mooblox-book-tab { flex: none; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 3px solid #e3eaf3; background: #fff;
+  color: #2b2f3a; font: 800 16px ${UI_FONT}; cursor: pointer; }
+.mooblox-book-tab[aria-selected="true"] { background: #1e88e5; border-color: #1e88e5; color: #fff; }
+.mooblox-book-tab:focus-visible { outline: 3px solid #ffc21a; outline-offset: 2px; }
+.mooblox-book-page { flex: 1; min-height: 0; }
+@media (max-width: 480px) { .mooblox-book-tabs { gap: 6px; padding-left: 10px; padding-right: 10px; } .mooblox-book-tab { padding: 0 10px; font-size: 14px; } }
 `;
 
 const ICONS = {
@@ -136,6 +145,49 @@ function bookRow(r: BookRow, go: (activityId: number) => void): HTMLElement {
   end.appendChild(button);
   li.append(icon, main, end);
   return li;
+}
+
+/** Pages behind a row of tabs (arrow keys move between tabs); `selected` is shown first. */
+export function bookTabs(pages: readonly { readonly id: string; readonly label: string; render(): HTMLElement }[], selected: string): HTMLElement {
+  injectStyle('mooblox-book-style', CSS);
+  const root = document.createElement('div');
+  root.className = 'mooblox-book-tabbed';
+  const bar = document.createElement('div');
+  bar.className = 'mooblox-book-tabs';
+  bar.setAttribute('role', 'tablist');
+  const body = document.createElement('div');
+  body.className = 'mooblox-book-page';
+  body.setAttribute('role', 'tabpanel');
+  const tabs = pages.map((p) => {
+    const t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'mooblox-book-tab';
+    t.setAttribute('role', 'tab');
+    t.dataset['page'] = p.id;
+    t.textContent = p.label;
+    t.addEventListener('click', () => show(p.id));
+    return t;
+  });
+  const show = (id: string): void => {
+    const page = pages.find((p) => p.id === id) ?? pages[0]!;
+    tabs.forEach((t) => {
+      const on = t.dataset['page'] === page.id;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+    });
+    body.replaceChildren(page.render());
+  };
+  bar.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (i < 0 || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]!;
+    next.focus();
+    show(next.dataset['page']!);
+  });
+  bar.append(...tabs);
+  root.append(bar, body);
+  show(selected);
+  return root;
 }
 
 /** The round "Book" button in the top-left corner. */

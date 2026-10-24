@@ -131,6 +131,53 @@ const frameSpot = (page, key, dist) => page.evaluate(([k, dd]) => {
 }, [key, dist]);
 
 const modes = {
+  async book() {
+    for (const [w, h] of WIDTHS) {
+      const page = await open(w, h, 'collect=all');
+      if (w === 1366) {
+        // Pick up one gem first: the album must show it.
+        await page.waitForFunction(() => window.mooblox.rewards.collectibles?.spots.length > 0, null, { timeout: 20000 });
+        const key = await page.evaluate(() => window.mooblox.rewards.collectibles.spots.find((s) => s.kind === 'gem').key);
+        await standBy(page, key, 0.3);
+        await page.waitForFunction((k) => window.mooblox.rewards.store.rewards.collectibles.find((c) => c.key === k).found, key, { timeout: 5000 }).catch(() => null);
+        page.__gem = key;
+      }
+      await page.keyboard.press('KeyB');
+      await page.locator('.mooblox-book-tabs').waitFor({ timeout: 5000 });
+      const tabs = await page.evaluate(() => [...document.querySelectorAll('.mooblox-book-tab')].map((t) => t.textContent));
+      check(tabs.join() === 'Course,Quests,Collection,Trophies', `${w}: book tabs ${tabs.join('/')}`);
+      for (const id of ['quests', 'collection', 'trophies']) {
+        await page.click(`.mooblox-book-tab[data-page="${id}"]`);
+        await page.waitForTimeout(250);
+        const state = await page.evaluate(() => {
+          const body = document.querySelector('.mooblox-book-page');
+          return {
+            scroll: document.documentElement.scrollWidth,
+            inner: body.firstElementChild.scrollWidth <= body.firstElementChild.clientWidth + 1,
+            text: body.textContent.replace(/\s+/g, ' ').trim(),
+            quests: body.querySelectorAll('.mooblox-bookr-quest').length,
+            found: [...body.querySelectorAll('.mooblox-bookr-slot.is-found')].map((x) => x.dataset.key),
+            slots: body.querySelectorAll('.mooblox-bookr-slot').length,
+            trophies: body.querySelectorAll('.mooblox-bookr-trophy').length,
+          };
+        });
+        check(state.scroll === w && state.inner, `${w} ${id}: no horizontal scroll`);
+        if (id === 'quests') check(state.quests === 10 && /^Read every page ?3\/4 ?Unlocks: Pirate hat/.test(state.text), `${w} quests: 10 cards, first "${state.text.slice(0, 40)}"`);
+        if (id === 'collection') {
+          check(state.slots === 8, `${w} collection: 8 slots (${state.slots})`);
+          if (w === 1366) check(state.found.length === 1 && state.found[0] === page.__gem && /1 of 8 found/.test(state.text), `1366 collection: the picked-up ${page.__gem} shows found (${state.found})`);
+        }
+        if (id === 'trophies') check(state.trophies === 1 && /Bookworm/.test(state.text), `${w} trophies: Bookworm on the shelf`);
+        await page.screenshot({ path: join(out, `book-${id}-${w}.png`) });
+      }
+      await page.close();
+    }
+    const off = await open(1366, 768, 'off');
+    await off.keyboard.press('KeyB');
+    await off.waitForSelector('.mooblox-book', { timeout: 5000 });
+    check(await off.evaluate(() => !document.querySelector('.mooblox-book-tabs')), 'rewards off: the book has no tabs');
+    await off.close();
+  },
   async collect() {
     const page = await open(1366, 768, 'collect=all&quality=high');
     await page.waitForFunction(() => window.mooblox.rewards.collectibles?.spots.length > 0, null, { timeout: 20000 });

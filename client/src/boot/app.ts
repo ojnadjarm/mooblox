@@ -378,8 +378,11 @@ export interface Course {
   readonly gateway: MoodleGateway;
 }
 
+/** The activity interaction plus the course book it shares the panel with. */
+export type Activities = ActivityInteraction & { readonly book: BookController };
+
 /** Prompts at each plot, opens activities in the panel, re-reads the course after each close. */
-export function startActivities(view: WorldView, player: Player, openers: OpenerRegistry, course: Course): ActivityInteraction {
+export function startActivities(view: WorldView, player: Player, openers: OpenerRegistry, course: Course): Activities {
   const host = view.stage.canvasHost;
   const panel = new Panel(host);
   const prompt = new ActivityPrompt(host, () => void interaction.openCurrent());
@@ -407,8 +410,8 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
     interaction.update(player.body.position.x, player.body.position.z);
     view.props.swing(interaction.nearId, dt);
   });
-  new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => goToPlot(view, player, id));
-  return interaction;
+  const book = new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => goToPlot(view, player, id));
+  return Object.assign(interaction, { book });
 }
 
 const GUIDE_LOOK: AvatarLook = { skin: 'n', tint: Palette.yellow };

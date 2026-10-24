@@ -63,6 +63,16 @@ foreach (array_keys(\local_mooblox\character::catalogue()['fields']) as $field) 
 }
 
 $placeholders = [
+    'book_earned' => '{date}',
+    'book_found' => (object) ['found' => '{found}', 'total' => '{total}'],
+    'book_hidden' => null,
+    'book_notrophies' => null,
+    'book_tab_collection' => null,
+    'book_tab_course' => null,
+    'book_tab_quests' => null,
+    'book_tab_trophies' => null,
+    'book_unlocked' => '{item}',
+    'book_unlocks' => '{item}',
     'collect_count' => (object) ['found' => '{found}', 'total' => '{total}'],
     'collect_crystal' => null,
     'collect_gem' => null,

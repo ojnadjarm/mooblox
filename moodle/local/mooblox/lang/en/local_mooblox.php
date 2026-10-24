@@ -25,6 +25,16 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['avatar'] = 'My avatar';
+$string['book_earned'] = 'Earned {$a}';
+$string['book_found'] = '{$a->found} of {$a->total} found';
+$string['book_hidden'] = 'Still hidden';
+$string['book_notrophies'] = 'Earn a badge in this course to put your first trophy on the shelf.';
+$string['book_tab_collection'] = 'Collection';
+$string['book_tab_course'] = 'Course';
+$string['book_tab_quests'] = 'Quests';
+$string['book_tab_trophies'] = 'Trophies';
+$string['book_unlocked'] = 'You got: {$a}';
+$string['book_unlocks'] = 'Unlocks: {$a}';
 $string['collect_count'] = '{$a->found} of {$a->total} found';
 $string['collect_crystal'] = 'Crystal found!';
 $string['collect_gem'] = 'Gem found!';
