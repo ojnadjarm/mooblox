@@ -400,3 +400,9 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     squash, idle looks (owner, ahead, sniff), tail wag + turn swing, penguin wing flaps; `PetModel` layers `body`, `tail`,
     `wing-*` nodes, `setMotion(speed, yaw, y, toOwner)` from `PetFollower`. `motion.ts` push spring (accel 0.004 rad per m/s²,
     max 0.2). Heap tests bound bytes per update (< 1 B). Tools: `T1372/tools/{pet-capture,tree-replay,tree-probe,cam-probe}.mjs`.
+- T1373, 2026-10-24, load and warm-up rounds (log `~/agent-work/research/2026-10-24/T1373/ROUNDS.md`, page `~/drop/T1373/index.html`):
+  - Round 1: Apache (Debian defaults) gzips JS but not .glb. `vite.config.ts` plugin writes `assets/<m>.gz` for `boot/boot-assets.ts`
+    `BOOT_MODELS` (kit.glb, kenney-blocky.glb); `boot/asset-preload.ts` `preloadAssets` fetches them first thing in every boot root
+    (main, dev, dev-rewards), inflates with DecompressionStream (or takes a server-inflated glb), and maps the urls to blobs on
+    three's `DefaultLoadingManager`; no .gz = the old path. Fast 4G cold 975 -> 644 KB, demo 2.04 -> 1.65 s, 20x30 2.70 -> 2.28 s.
+    `node tools/load-probe.mjs [out.json] [--shapes] [--tier] [--runs]`: cold + warm ms to playable, KB by kind, long tasks.
