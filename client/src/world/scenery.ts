@@ -83,7 +83,9 @@ export function buildScenery(dressing: Dressing, lib: ModelLibrary, solid: Mater
 export function cullDistricts(districts: readonly Object3D[], x: number, z: number, distance: number, all: boolean): void {
   for (const d of districts) {
     const u = d.userData as { x: number; z: number; radius: number; detail: number; minor: number };
-    const edge = Math.hypot(u.x - x, u.z - z) - u.radius;
+    const dx = u.x - x;
+    const dz = u.z - z;
+    const edge = Math.sqrt(dx * dx + dz * dz) - u.radius;
     const n = d.children.length;
     d.visible = all || edge < distance;
     d.children[n - 2]!.visible = edge < u.detail;

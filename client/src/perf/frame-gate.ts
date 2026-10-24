@@ -60,9 +60,11 @@ export class FrameGate {
 
   private schedule(): void {
     if (this.handle === null && this.running && (!this.paused || this.dirty)) {
-      this.handle = this.raf((t) => this.tick(t));
+      this.handle = this.raf(this.onFrame);
     }
   }
+
+  private readonly onFrame = (t: number): void => this.tick(t);
 
   private tick(t: number): void {
     this.handle = null;

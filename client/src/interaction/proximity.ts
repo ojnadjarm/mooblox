@@ -7,13 +7,14 @@ export const EXIT_RADIUS = 3.8;
 
 /** The plot the player stands at: the current one until left, else the nearest within reach. */
 export function nearestPlot(plots: readonly Plot[], x: number, z: number, current: Plot | null): Plot | null {
-  if (current && Math.hypot(current.x - x, current.z - z) <= EXIT_RADIUS) {
+  if (current && Math.sqrt((current.x - x) ** 2 + (current.z - z) ** 2) <= EXIT_RADIUS) {
     return current;
   }
   let best: Plot | null = null;
   let bestD = ENTER_RADIUS;
-  for (const p of plots) {
-    const d = Math.hypot(p.x - x, p.z - z);
+  for (let i = 0; i < plots.length; i++) {
+    const p = plots[i]!;
+    const d = Math.sqrt((p.x - x) ** 2 + (p.z - z) ** 2);
     if (d <= bestD) {
       best = p;
       bestD = d;

@@ -18,6 +18,7 @@ import type { WorldView } from '../boot/app';
 import type { Avatar } from '../player/avatar';
 import type { AvatarFactory } from '../player/avatar-kit';
 import { paintPlace, type Critter, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
+import { INSTANCED_DEPTH } from './depth-materials';
 import type { ModelLibrary } from './model-library';
 import { seededRandom } from './random';
 import { sceneryGeometry, singleModel } from './scenery';
@@ -41,10 +42,10 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
     const d = view.dressing;
     for (const kind of ['flag', 'boat'] as const) {
       const spots = d.life.filter((s) => s.kind === kind);
-      if (spots.length) movers.push(instanced(view, singleModel(lib, spots[0]!.id, 1), spots, view.kit.scenery, teardown));
+      if (spots.length) movers.push(instanced(view, singleModel(lib, spots[0]!.id, 1), spots, view.kit.sceneryInstanced, teardown));
     }
     const buoys = d.life.filter((s) => s.kind === 'buoy');
-    if (buoys.length) movers.push(instanced(view, buoyGeometry(), buoys, view.kit.scenery, teardown));
+    if (buoys.length) movers.push(instanced(view, buoyGeometry(), buoys, view.kit.sceneryInstanced, teardown));
     if (d.sails.length) movers.push(ships(view, lib, d.sails, teardown));
     if (minor) {
       for (const kind of ['duck', 'cat', 'dog'] as const) {
@@ -72,6 +73,7 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
   const mesh = new InstancedMesh(geometry, material, spots.length);
   // Water receives no shadow: only flags (over land) cast one.
   mesh.castShadow = spots[0]?.kind === 'flag';
+  mesh.customDepthMaterial = INSTANCED_DEPTH;
   mesh.frustumCulled = false;
   view.stage.add(mesh);
   teardown.push(() => {
@@ -81,7 +83,8 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
   });
   const m = new Object3D();
   return (t) => {
-    spots.forEach((s, i) => {
+    for (let i = 0; i < spots.length; i++) {
+      const s = spots[i]!;
       const phase = s.x * 0.37 + s.z * 0.11;
       m.position.set(s.x, s.y, s.z);
       m.scale.setScalar(s.height);
@@ -94,7 +97,7 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
       }
       m.updateMatrix();
       mesh.setMatrixAt(i, m.matrix);
-    });
+    }
     mesh.instanceMatrix.needsUpdate = true;
   };
 }
@@ -113,7 +116,7 @@ function buoyGeometry(): BufferGeometry {
 /** Sailing ships looping their circles round the archipelago. */
 function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teardown: (() => void)[]): Mover {
   const geometry = singleModel(lib, 'pirate/ship-small', 7);
-  const mesh = new InstancedMesh(geometry, view.kit.scenery, sails.length);
+  const mesh = new InstancedMesh(geometry, view.kit.sceneryInstanced, sails.length);
   mesh.castShadow = false;
   mesh.frustumCulled = false;
   view.stage.add(mesh);
@@ -124,14 +127,15 @@ function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teard
   });
   const m = new Object3D();
   return (t) => {
-    sails.forEach((s, i) => {
+    for (let i = 0; i < sails.length; i++) {
+      const s = sails[i]!;
       const dir = i % 2 ? -1 : 1;
       const a = dir * t * (5 / s.r) + i * 2.1;
       m.position.set(s.x + Math.cos(a) * s.r, -3.4 + Math.sin(t * 0.8 + i) * 0.1, s.z + Math.sin(a) * s.r);
       m.rotation.set(0, -a + (dir > 0 ? Math.PI : 0), Math.sin(t * 0.7 + i) * 0.05);
       m.updateMatrix();
       mesh.setMatrixAt(i, m.matrix);
-    });
+    }
     mesh.instanceMatrix.needsUpdate = true;
   };
 }
@@ -162,8 +166,9 @@ function animalGeometry(kind: 'duck' | 'cat' | 'dog'): BufferGeometry {
 function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly Critter[], teardown: (() => void)[]): Mover {
   const per = kind === 'duck' ? 4 : 1;
   const geometry = animalGeometry(kind);
-  const mesh = new InstancedMesh(geometry, view.kit.scenery, list.length * per);
+  const mesh = new InstancedMesh(geometry, view.kit.sceneryInstanced, list.length * per);
   mesh.castShadow = kind !== 'duck';
+  mesh.customDepthMaterial = INSTANCED_DEPTH;
   mesh.frustumCulled = false;
   view.stage.add(mesh);
   teardown.push(() => {
@@ -173,7 +178,8 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
   });
   const m = new Object3D();
   return (t) => {
-    list.forEach((c, i) => {
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i]!;
       for (let k = 0; k < per; k++) {
         const phase = i * 1.7 + k * 0.9;
         const speed = kind === 'duck' ? 0.25 : 0.35;
@@ -186,7 +192,7 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
         m.updateMatrix();
         mesh.setMatrixAt(i * per + k, m.matrix);
       }
-    });
+    }
     mesh.instanceMatrix.needsUpdate = true;
   };
 }
@@ -202,7 +208,7 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
   for (let v = 0; v < 12; v++) (v % 3 === 0 ? accent : colour).toArray(cols, v * 3);
   flat.setAttribute('color', new BufferAttribute(cols, 3));
   const wing = sceneryGeometry(flat);
-  const mesh = new InstancedMesh(wing, view.kit.scenery, list.length * per);
+  const mesh = new InstancedMesh(wing, view.kit.sceneryInstanced, list.length * per);
   mesh.frustumCulled = false;
   view.stage.add(mesh);
   teardown.push(() => {
@@ -211,7 +217,8 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
   });
   const m = new Object3D();
   return (t) => {
-    list.forEach((c, i) => {
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i]!;
       for (let k = 0; k < per; k++) {
         const p = i * 2.3 + k * 3.1;
         const a = t * (0.6 + k * 0.2) + p;
@@ -221,7 +228,7 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
         m.updateMatrix();
         mesh.setMatrixAt(i * per + k, m.matrix);
       }
-    });
+    }
     mesh.instanceMatrix.needsUpdate = true;
   };
 }
@@ -241,7 +248,8 @@ function smoke(view: WorldView, sources: readonly { x: number; y: number; z: num
     g.dispose();
   });
   return (t) => {
-    sources.forEach((s, i) => {
+    for (let i = 0; i < sources.length; i++) {
+      const s = sources[i]!;
       for (let k = 0; k < per; k++) {
         const life = (t * 0.35 + k / per + i * 0.13) % 1;
         const o = (i * per + k) * 3;
@@ -249,7 +257,7 @@ function smoke(view: WorldView, sources: readonly { x: number; y: number; z: num
         pos[o + 1] = s.y + life * 3.2;
         pos[o + 2] = s.z + Math.cos(life * 3 + k) * 0.3 * life;
       }
-    });
+    }
     g.getAttribute('position').needsUpdate = true;
   };
 }
@@ -331,7 +339,9 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
     const walk = walks[i];
     const draw = (move: Mover): Mover => (t, dt) => {
       const eye = view.stage.camera.position;
-      avatar.root.visible = Math.hypot(eye.x - avatar.root.position.x, eye.z - avatar.root.position.z) < KID_DRAW;
+      const kx = eye.x - avatar.root.position.x;
+      const kz = eye.z - avatar.root.position.z;
+      avatar.root.visible = kx * kx + kz * kz < KID_DRAW * KID_DRAW;
       if (avatar.root.visible) move(t, dt);
     };
     if (hang) out.push(draw(hangout(avatar, hang, i)));

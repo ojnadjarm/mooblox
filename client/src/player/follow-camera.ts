@@ -10,6 +10,7 @@ const DRAG_SPEED = 0.008;
 export class FollowCamera {
   yaw = 0;
   private readonly goal = new Vector3();
+  private readonly dir = { x: 0, z: 0 };
   private readonly look = new Vector3();
 
   constructor(
@@ -43,9 +44,12 @@ export class FollowCamera {
   }
 
   /** Turns camera-relative input (x right, z forward) into a world direction. */
-  toWorld(x: number, z: number): { x: number; z: number } {
+  /** Camera-relative (x, z) in world axes; the object is reused by the next call. */
+  toWorld(x: number, z: number): { readonly x: number; readonly z: number } {
     const s = Math.sin(this.yaw);
     const c = Math.cos(this.yaw);
-    return { x: x * c - z * s, z: -x * s - z * c };
+    this.dir.x = x * c - z * s;
+    this.dir.z = -x * s - z * c;
+    return this.dir;
   }
 }

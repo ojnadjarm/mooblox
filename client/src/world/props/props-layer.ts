@@ -44,7 +44,9 @@ export class PropsLayer {
   cull(x: number, z: number, near: number, far: number, keep: number): void {
     const all = this.props.size <= keep;
     for (const prop of this.props.values()) {
-      const d = Math.hypot(prop.root.position.x - x, prop.root.position.z - z);
+      const dx = prop.root.position.x - x;
+      const dz = prop.root.position.z - z;
+      const d = Math.sqrt(dx * dx + dz * dz);
       prop.root.visible = all || d < far;
       prop.detail.visible = all || d < near;
     }

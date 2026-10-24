@@ -22,7 +22,7 @@ import { GateLayer, type GateStrings } from '../world/gates/gate-layer';
 import { structureKey, shiftFor } from '../world/rebuild';
 import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
-import type { WorldLayout } from '../world/layout';
+import type { Plot, WorldLayout } from '../world/layout';
 import { designWorld, type Dressing } from '../world/dressing';
 import { CAMPUS } from '../world/look';
 import type { ModelLibrary } from '../world/model-library';
@@ -307,7 +307,15 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
   const host = view.stage.canvasHost;
   const panel = new Panel(host);
   const prompt = new ActivityPrompt(host, () => void interaction.openCurrent());
-  const plots = () => view.layout.zones.flatMap((z) => z.plots);
+  let plotsOf: WorldLayout | null = null;
+  let allPlots: readonly Plot[] = [];
+  const plots = () => {
+    if (plotsOf !== view.layout) {
+      plotsOf = view.layout;
+      allPlots = plotsOf.zones.flatMap((z) => z.plots);
+    }
+    return allPlots;
+  };
   const toggle = (a: Activity) => completionToggle(a, (done) => course.gateway.setManualCompletion(a.id, done));
   const interaction = new ActivityInteraction(plots, () => course.store.world ?? view.world, openers, panel, prompt, view.gate, toggle);
   const sync = new CourseSync(course.gateway, course.store, view.world.courseId);

@@ -1,4 +1,4 @@
-import type { InputSource, InputState } from '../player/input';
+import type { InputSource, InputState, MutableInput } from '../player/input';
 
 const RUN_AT = 0.95;
 const STYLE_ID = 'mooblox-touch-style';
@@ -26,6 +26,7 @@ export class TouchControls implements InputSource {
   private x = 0;
   private z = 0;
   private jump = false;
+  private readonly state: MutableInput = { x: 0, z: 0, run: false, jump: false };
 
   constructor(host: HTMLElement, show: boolean) {
     if (!document.getElementById(STYLE_ID)) {
@@ -50,8 +51,12 @@ export class TouchControls implements InputSource {
   }
 
   read(): InputState {
-    const len = Math.hypot(this.x, this.z);
-    return { x: this.x, z: this.z, run: len >= RUN_AT, jump: this.jump };
+    const s = this.state;
+    s.x = this.x;
+    s.z = this.z;
+    s.run = Math.sqrt(this.x * this.x + this.z * this.z) >= RUN_AT;
+    s.jump = this.jump;
+    return s;
   }
 
   private bindStick(stick: HTMLElement): void {

@@ -32,6 +32,8 @@ export class MaterialKit {
   readonly glow: Material;
   /** Kit-model dressing: vertex colours plus a wind sway in the vertex shader, weighted by the `sway` attribute. */
   readonly scenery: Material;
+  /** The scenery material for instanced meshes: its own program state, so draws do not switch programs every frame. */
+  readonly sceneryInstanced: Material;
   /** Seconds the sway runs on; the frame loop advances it. */
   readonly time = { value: 0 };
   /** Packed greyscale detail atlases (rich tier); grey until `loadDetail` swaps the real ones in. */
@@ -45,6 +47,8 @@ export class MaterialKit {
     this.glow = new MeshBasicMaterial({ vertexColors: true, color: new Color().setScalar(tier === 'low' ? 1 : 2.5) });
     this.scenery = swayMaterial(tier, this.time);
     if (tier === 'rich') withDetail(this.scenery as MeshStandardMaterial, this.detail, 'mooblox-sway-rich', true);
+    this.sceneryInstanced = swayMaterial(tier, this.time);
+    if (tier === 'rich') withDetail(this.sceneryInstanced as MeshStandardMaterial, this.detail, 'mooblox-sway-rich', true);
   }
 
   /** Loads the detail atlases (`<base>detail/detail-a.png`, `-b.png`) for the rich tier; a no-op on other tiers. */
@@ -71,7 +75,7 @@ export class MaterialKit {
   }
 
   dispose(): void {
-    for (const m of [this.plastic, this.studs, this.sky, this.glow, this.scenery]) {
+    for (const m of [this.plastic, this.studs, this.sky, this.glow, this.scenery, this.sceneryInstanced]) {
       m.dispose();
     }
   }

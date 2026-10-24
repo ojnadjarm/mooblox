@@ -15,6 +15,14 @@ export class Player {
   private readonly prev = new Vector3();
   private readonly fixed = new FixedStep(Physics.step);
   private facing = Math.PI;
+  private readonly move = { x: 0, z: 0, run: false, jump: false };
+  private readonly tick = (): void => {
+    this.prev.copy(this.body.position);
+    stepBody(this.body, this.move, Physics.step, this.collider);
+    if (this.body.position.y < KILL_Y) {
+      this.respawn();
+    }
+  };
 
   constructor(
     private model: Avatar,
@@ -52,17 +60,15 @@ export class Player {
   update(dt: number): void {
     const raw = this.input.read();
     const dir = this.camera.toWorld(raw.x, raw.z);
-    const move = { x: dir.x, z: dir.z, run: raw.run, jump: raw.jump };
-    const alpha = this.fixed.advance(dt, () => {
-      this.prev.copy(this.body.position);
-      stepBody(this.body, move, Physics.step, this.collider);
-      if (this.body.position.y < KILL_Y) {
-        this.respawn();
-      }
-    });
+    const move = this.move;
+    move.x = dir.x;
+    move.z = dir.z;
+    move.run = raw.run;
+    move.jump = raw.jump;
+    const alpha = this.fixed.advance(dt, this.tick);
     const root = this.avatar.root;
     root.position.lerpVectors(this.prev, this.body.position, alpha);
-    const moving = Math.hypot(move.x, move.z) > 0.1;
+    const moving = move.x * move.x + move.z * move.z > 0.01;
     if (moving) {
       const target = Math.atan2(move.x, move.z);
       const delta = Math.atan2(Math.sin(target - this.facing), Math.cos(target - this.facing));

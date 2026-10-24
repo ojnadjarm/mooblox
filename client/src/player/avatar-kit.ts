@@ -20,6 +20,7 @@ import { buildGeometry } from './character/mesh';
 import { BONES } from './character/parts';
 import { jumpClip } from './clips';
 import { toCharacter } from './look';
+import { SKINNED_DEPTH } from '../world/depth-materials';
 
 /** A built character, or a T1302 preset body with a shirt tint (migrated on create). */
 export type AvatarLook = CharacterLook | LegacyLook;
@@ -68,6 +69,7 @@ export class AvatarKit implements AvatarFactory {
     const geometry = buildGeometry(composeParts(toCharacter(look), wearables));
     const mesh = new SkinnedMesh(geometry, this.material);
     mesh.castShadow = true;
+    mesh.customDepthMaterial = SKINNED_DEPTH;
     root.add(mesh);
     mesh.bind(new Skeleton(bones));
     return new Avatar(root, this.clips);
