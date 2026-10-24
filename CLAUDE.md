@@ -202,10 +202,24 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `public/assets/kit.glb` (628 KB, meshopt, tangents dropped); `ModelLibrary` loads it once (MeshoptDecoder, quantized
     attributes back to Float32). `tools/footprints.mjs` and `bevel-kit.py` read `kit-src/`.
   - Perf gate: `node tools/perf.mjs [outdir] [--shapes ..] [--tiers low,medium] [--load] [--stills] [--gate]` builds the dev
-    page, walks to the farthest plot (`?walk=far`), asserts low (SwiftShader 400x800, 6x CPU: 58 fps, 40 draws, 80k tris,
-    10 programs, no post) and medium (Iris Xe 1366: 58 fps, 60 draws) plus all-tier heap 150 MB, GPU estimate 200 MB, worst
+    page, walks to the farthest plot (`?walk=far`), asserts low (T1367: Iris Xe 400x800 DPR 1, 4x CPU: 58 fps, 40 draws, 80k tris,
+    10 programs, no post; plus the SwiftShader 6x stress floor) and medium (Iris Xe 1366: 58 fps, 60 draws) plus all-tier heap 150 MB, GPU estimate 200 MB, worst
     frame 50 ms, Fast 4G load 3 s / 3 MB, 20x30 within 1.5x demo. `npm run test:perf`; `npm run test:all` = vitest + gate.
     `npm test` stays vitest only while the gate is red (it would fail every parallel agent's unit run).
+- T1367, 2026-10-24, optimisation round 2 (PROFILE.md "Round 2", compare `~/drop/T1366/index.html#round2`):
+  - Streaming: `world/district-streamer.ts` (`DistrictStreamer`: `buildNear` = the area within 25 m of the spawn before
+    the first frame, `pump` = nearest unbuilt district first in 4-8 ms slices per frame, frees past `drop`: low 70/100 m,
+    medium 170/200 m, xhigh never; `pending` on `view.streaming`). `scenery.ts` `DistrictBuild` (sliced build, `unload`,
+    per-district collider + bounds, triangle counts in `userData.tris`) + `buildGlow`; `player/composite-collider.ts`
+    (island BVH + built districts; `view.collider` replaces `view.solids`). Gates, fence, props stay layout-driven.
+  - `cullDistricts(..., budget)`: nearest first within `QUALITY[tier].sceneryTris` (low 55k, others uncapped).
+  - Designer: `world/segment-index.ts` + plot `Occupancy` in `free()` (same output); surface classes only on xhigh.
+  - Allocations: `kit.sceneryInstanced` and `world/depth-materials.ts` (instanced/skinned casters) end per-draw program
+    switches; colliders, fence (`pushPoint`), inputs (`MutableInput`), camera `toWorld`, player tick, movers, culls and the
+    frame gate reuse objects. `test/player/step-allocation.test.ts` heap-samples 20k steps: 0 B from `client/src`.
+  - Perf gate: low = Iris Xe DPR 1 400x800 4x CPU (58 fps) + stress SwiftShader 6x (30 fps, worst frame 100 ms); stills
+    wait for `streaming.pending === 0`. Gate 85 pass / 15 fail (medium big-course draws/tris, 20x30 heap/GPU/load, stress
+    worst frames; causes and costs in PROFILE.md). vitest 35 files 187 tests.
 - Gamification phase G3 (T1363 fixture, T1348-T1351), 2026-10-24, version 2026102411:
   - Fixture: `.research/testdata/rewards.php` (helpers in `lib.php`, shared with `setup.php`) builds `mooblox_rewards`
     (4 sections, 3 pages, 2 YouTube urls, 2 quizzes pass/fail, manual journal, course completion, badges Bookworm/Quiz
