@@ -16,6 +16,7 @@ import { LevelUpMoment } from '../ui/level-up';
 import { WardrobeTab } from '../ui/wardrobe';
 import { DEFAULT_WARDROBE_STRINGS, wardrobeItems } from '../ui/wardrobe-model';
 import type { WorldView } from './app';
+import { startCollectibles, type CollectiblesRuntime } from './collectibles';
 
 /** What the rewards wiring needs from the rest of the client. */
 export interface RewardsDeps {
@@ -39,6 +40,8 @@ export interface RewardsRuntime {
   readonly worn: Look;
   /** The pet walking after the player. */
   readonly pet: PetFollower;
+  /** Gems, crystals and stars in the world; null while rewards are off. */
+  readonly collectibles: CollectiblesRuntime | null;
   /** Re-reads the rewards from Moodle. */
   refresh(): Promise<void>;
 }
@@ -50,6 +53,7 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
   const wardrobeStrings = { ...DEFAULT_WARDROBE_STRINGS, ...deps.strings };
   const host = view.stage.canvasHost;
   let hud: HudRewards | null = null;
+  let collectibles: CollectiblesRuntime | null = null;
   let worn: Look = NO_LOOK;
   let dressing: Promise<void> | null = null;
   const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe') });
@@ -122,6 +126,7 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
     if (shown && !hud) hud = new HudRewards(host);
     hud?.show(shown);
     if (next.enabled && !dressing) dressing = dress(next.look).catch((e: unknown) => console.error('mooblox: loading the wardrobe failed', e));
+    if (next.enabled && !collectibles) collectibles = startCollectibles(view, deps.player, store, deps.gateway, deps.courseId, deps.strings);
     const up = levelUp(previous, next);
     if (up) moment.play(up);
   });
@@ -142,6 +147,9 @@ export async function startRewards(view: WorldView, interaction: ActivityInterac
       return worn;
     },
     pet,
+    get collectibles() {
+      return collectibles;
+    },
     refresh,
   };
 }

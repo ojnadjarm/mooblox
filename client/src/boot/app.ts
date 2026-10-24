@@ -74,6 +74,8 @@ export interface WorldView {
   stopOverview(): void;
   /** Adds a per-frame step that runs before the render; returns its remover. */
   onFrame(step: (dt: number) => void): () => void;
+  /** A burst of gold sparkles at a point (pick-ups, completions). */
+  sparkle(x: number, y: number, z: number): void;
 }
 
 let pickedTier: QualityTier | null = null;
@@ -298,6 +300,10 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     onFrame: (step) => {
       steps.add(step);
       return () => steps.delete(step);
+    },
+    sparkle: (x, y, z) => {
+      sparkles.kick(x, y, z, 18, 1);
+      gate.invalidate();
     },
   };
 }

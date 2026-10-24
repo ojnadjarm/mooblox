@@ -32,11 +32,28 @@ class DevRewardsGateway extends FakeGateway {
     world: WorldDto,
     rewards: RewardsDto,
     private readonly startXp: number,
+    private readonly allUnlocked: boolean,
   ) {
-    super(world, rewards);
+    super(world, { ...rewards, collectibles: devCollectibles(world) });
+  }
+
+  /** Unlocks gems of done activities and crystals of finished sections (all of them with `?collect=all`). */
+  private async unlock(courseId: number): Promise<void> {
+    const sections = (await this.getWorld(courseId)).sections;
+    for (const c of this.rewards.collectibles) {
+      const acts = sections.find((s) => s.id === c.sectionid)?.activities.filter((a) => a.completion.tracking !== 0) ?? [];
+      const done = c.kind === 'gem' ? acts.some((a) => a.id === c.cmid && isDone(a.completion)) : acts.length > 0 && acts.every((a) => isDone(a.completion));
+      c.unlocked = this.allUnlocked || done;
+    }
+  }
+
+  override async claimCollectible(courseId: number, key: string): Promise<number> {
+    await this.unlock(courseId);
+    return super.claimCollectible(courseId, key);
   }
 
   override async getRewards(courseId: number): Promise<Rewards> {
+    await this.unlock(courseId);
     const r = await super.getRewards(courseId);
     const done = (await this.getWorld(courseId)).sections.flatMap((s) => s.activities).filter((a) => isDone(a.completion)).length;
     this.baseline ??= done;
@@ -46,6 +63,20 @@ class DevRewardsGateway extends FakeGateway {
     const unlocks = peak > r.peakLevel && !r.unlocks.includes(LEVEL_REWARD) ? [...r.unlocks, LEVEL_REWARD] : r.unlocks;
     return { ...r, xp, level, peakLevel: peak, levelStart: 25 * level * (level + 1), levelNext: 25 * (level + 1) * (level + 2), unlocks };
   }
+}
+
+/** The server's keys for the demo world: a gem per tracked activity, a crystal per section, a star where 2+ are tracked. */
+function devCollectibles(world: WorldDto): RewardsDto['collectibles'] {
+  return world.sections.flatMap((sec) => {
+    const tracked = sec.modules.filter((m) => m.completion !== 0);
+    if (!tracked.length) return [];
+    const item = (key: string, kind: 'gem' | 'crystal' | 'star', cmid: number) => ({ key, kind, sectionid: sec.id, cmid, unlocked: false, found: false });
+    return [
+      ...tracked.map((m) => item(`gem:${m.id}`, 'gem', m.id)),
+      item(`crystal:${sec.id}`, 'crystal', 0),
+      ...(tracked.length >= 2 ? [item(`star:${sec.id}:0`, 'star', 0)] : []),
+    ];
+  });
 }
 
 const levelOf = (xp: number): number => Math.floor((Math.sqrt(1 + (4 * xp) / 25) - 1) / 2);
@@ -65,7 +96,7 @@ async function boot(): Promise<void> {
     rewards.look.pet = params.get('pet')!;
     rewards.unlocks.push(rewards.look.pet);
   }
-  const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp));
+  const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp), params.get('collect') === 'all');
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));
   const models = await ModelLibrary.load(ASSETS, modelIds(), bootTier() === 'xhigh');

@@ -17,7 +17,7 @@ const REWARDS_OFF: RewardsDto = {
 export class FakeGateway implements MoodleGateway {
   readonly preferences = new Map<string, string>();
   private readonly dto: WorldDto;
-  private readonly rewards: RewardsDto;
+  protected readonly rewards: RewardsDto;
 
   constructor(fixture: WorldDto, rewards: RewardsDto = REWARDS_OFF) {
     this.dto = structuredClone(fixture);

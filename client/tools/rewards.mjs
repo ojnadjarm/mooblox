@@ -1,4 +1,4 @@
-// Headless checks of the rewards UI on rewards.html: node tools/rewards.mjs <hud|levelup|wardrobe|pet> [outdir]
+// Headless checks of the rewards UI on rewards.html: node tools/rewards.mjs <hud|levelup|wardrobe|pet|collect> [outdir]
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServer } from 'vite';
@@ -59,7 +59,133 @@ const countCards = (page) => page.evaluate(() => {
   }).observe(document.body, { childList: true, subtree: true });
 });
 
+/** Extra draws / triangles / programs of the plan's section 8 per tier (whole rewards layer). */
+const EXTRA = { low: { calls: 5, tris: 4000, programs: 2 }, medium: { calls: 7, tris: 8000, programs: 2 }, high: { calls: 8, tris: 15000, programs: 3 }, xhigh: { calls: 10, tris: 30000, programs: 3 } };
+
+/** Renders once with `name` hidden and once shown; returns the difference in draws, triangles and programs. */
+const extraOf = (page, name) => page.evaluate((n) => {
+  const v = window.mooblox;
+  const r = v.stage.renderer;
+  const g = v.stage.scene.getObjectByName(n);
+  const measure = (on) => {
+    g.visible = on;
+    v.stage.render();
+    return { calls: r.info.render.calls, tris: r.info.render.triangles, programs: r.info.programs.length };
+  };
+  const off = measure(false);
+  const on = measure(true);
+  const own = r.info.programs.filter((p) => p.cacheKey.includes(`mooblox-${n.replace(/s$/, '')}`)).length;
+  return { calls: on.calls - off.calls, tris: on.tris - off.tris, programs: own };
+}, name);
+
+/** Puts the player `back` metres from a spot on the side towards its district centre, facing it. */
+const standBy = (page, key, back) => page.evaluate(([k, b]) => {
+  const v = window.mooblox;
+  const s = v.rewards.collectibles.spots.find((x) => x.key === k);
+  const z = v.layout.zones.find((x) => x.sectionId === s.sectionId);
+  const others = v.rewards.collectibles.spots.filter((x) => x.key !== k);
+  const d = Math.hypot(z.x - s.x, z.z - s.z);
+  const a0 = d > 0.5 ? Math.atan2(z.z - s.z, z.x - s.x) : 0;
+  let best = [s.x, s.z, -1];
+  for (let i = 0; i < 16 && b > 1; i++) {
+    const a = a0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 8);
+    const [x, zz] = [s.x + Math.cos(a) * b, s.z + Math.sin(a) * b];
+    const clear = Math.min(99, ...others.map((o) => Math.hypot(o.x - x, o.z - zz)));
+    if (Math.hypot(x - z.x, zz - z.z) < z.radius - 1 && clear > best[2]) best = [x, zz, clear];
+    if (clear > 2.5) break;
+  }
+  v.player.teleport(best[0], best[1], Math.atan2(s.x - best[0], s.z - best[1]));
+  return { x: s.x, z: s.z };
+}, [key, back]);
+
+/** Frames a spot for a still: the camera `dist` m away on the clearest side, the player beside the spot. */
+const frameSpot = (page, key, dist) => page.evaluate(([k, dd]) => {
+  const v = window.mooblox;
+  const s = v.rewards.collectibles.spots.find((x) => x.key === k);
+  const obstacles = v.dressing.obstacles;
+  let best = [0, -1];
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * 2 * Math.PI;
+    let clear = 99;
+    for (let t = 0.3; t <= 1; t += 0.1) {
+      const [x, z] = [s.x + Math.cos(a) * dd * t, s.z + Math.sin(a) * dd * t];
+      for (const o of obstacles) clear = Math.min(clear, Math.hypot(o.x - x, o.z - z) - o.r);
+    }
+    if (clear > best[1]) best = [a, clear];
+  }
+  const [cx, cz] = [s.x + Math.cos(best[0]) * dd, s.z + Math.sin(best[0]) * dd];
+  // The player stands beside the line of sight, clear of every other collectible.
+  let stand = [cx, cz, -1];
+  for (const side of [1.3, -1.3, 1.8, -1.8]) {
+    const a = best[0] + Math.PI / 2;
+    const [x, z] = [s.x + Math.cos(best[0]) * 2.2 + Math.cos(a) * side, s.z + Math.sin(best[0]) * 2.2 + Math.sin(a) * side];
+    const clear = Math.min(99, ...v.rewards.collectibles.spots.map((o) => Math.hypot(o.x - x, o.z - z)));
+    if (clear > stand[2]) stand = [x, z, clear];
+  }
+  v.player.teleport(stand[0], stand[1], Math.atan2(s.x - cx, s.z - cz));
+  window.__still?.();
+  window.__still = v.onFrame(() => {
+    v.stage.camera.position.set(cx, 2.5, cz);
+    v.stage.camera.lookAt(s.x, 1.1, s.z);
+  });
+}, [key, dist]);
+
 const modes = {
+  async collect() {
+    const page = await open(1366, 768, 'collect=all&quality=high');
+    await page.waitForFunction(() => window.mooblox.rewards.collectibles?.spots.length > 0, null, { timeout: 20000 });
+    const spots = await page.evaluate(() => window.mooblox.rewards.collectibles.spots.map((s) => s.kind));
+    const kinds = ['gem', 'crystal', 'star'].map((k) => spots.filter((x) => x === k).length);
+    check(spots.length === 8 && kinds.join() === '4,3,1', `demo course: ${spots.length} spots placed (gems/crystals/stars ${kinds.join('/')})`);
+    const key = await page.evaluate(() => window.mooblox.rewards.collectibles.spots.find((s) => s.kind === 'gem').key);
+    for (const kind of ['gem', 'crystal', 'star']) {
+      const k = await page.evaluate((kk) => window.mooblox.rewards.collectibles.spots.find((s) => s.kind === kk).key, kind);
+      await frameSpot(page, k, 5);
+      await page.waitForTimeout(1200);
+      await page.screenshot({ path: join(out, `collect-${kind}-1366.png`) });
+    }
+    await page.evaluate(() => window.__still());
+    const before = await page.evaluate(() => window.mooblox.rewards.store.rewards.collectibles.filter((c) => c.found).length);
+    await standBy(page, key, 0.3);
+    await page.waitForSelector('.mooblox-collect-toast.is-on', { timeout: 5000 }).catch(() => null);
+    const toast = await page.evaluate(() => document.querySelector('.mooblox-collect-toast.is-on')?.textContent);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(out, 'collect-pickup-1366.png') });
+    const after = await page.evaluate((k) => {
+      const v = window.mooblox;
+      return {
+        found: v.rewards.store.rewards.collectibles.filter((c) => c.found).length,
+        key: v.rewards.store.rewards.collectibles.find((c) => c.key === k).found,
+        server: v.gateway.rewards.collectibles.find((c) => c.key === k).found,
+        remaining: v.rewards.collectibles.layer.remaining.length,
+      };
+    }, key);
+    check(after.found === before + 1 && after.key && after.server, `walking into ${key} claims it: album found ${before} -> ${after.found}, server found ${after.server}`);
+    check(after.remaining === spots.length - after.found, `the gem left the world (${after.remaining} left of ${spots.length}, ${after.found} found)`);
+    check(new RegExp(`Gem found!.*${after.found} of 8 found`).test(toast ?? ''), `toast "${toast}"`);
+    await page.close();
+    for (const [tier, w, h] of [['low', 400, 860], ['medium', 1366, 768], ['high', 1366, 768], ['xhigh', 1366, 768]]) {
+      const p = await open(w, h, `collect=all&quality=${tier}`);
+      await p.waitForFunction(() => window.mooblox.rewards.collectibles?.spots.length > 0, null, { timeout: 20000 });
+      const k = await p.evaluate(() => window.mooblox.rewards.collectibles.spots.find((s) => s.kind === 'star').key);
+      await standBy(p, k, 4);
+      await p.waitForTimeout(1000);
+      const e = await extraOf(p, 'collectibles');
+      const b = EXTRA[tier];
+      // xhigh draws each mesh twice (the GTAO normal pass).
+      check(e.calls >= 1 && e.calls <= (tier === 'xhigh' ? 6 : 3) && e.calls <= b.calls && e.tris <= b.tris && e.programs <= b.programs, `${tier}: collectibles add ${e.calls} draws, ${e.tris} tris, ${e.programs} programs (budget ${b.calls}/${b.tris}/${b.programs})`);
+      if (tier === 'low') {
+        await frameSpot(p, k, 5);
+        await p.waitForTimeout(800);
+        await p.screenshot({ path: join(out, 'collect-low-400.png') });
+      }
+      await p.close();
+    }
+    const off = await open(1366, 768, 'collect=all&off');
+    await off.waitForTimeout(800);
+    check(await off.evaluate(() => !window.mooblox.stage.scene.getObjectByName('collectibles') && !document.querySelector('.mooblox-collect-toast')), 'rewards off: no collectibles, no toast');
+    await off.close();
+  },
   async hud() {
     for (const [w, h] of WIDTHS) {
       const page = await open(w, h, 'weeks=3');

@@ -63,6 +63,10 @@ foreach (array_keys(\local_mooblox\character::catalogue()['fields']) as $field) 
 }
 
 $placeholders = [
+    'collect_count' => (object) ['found' => '{found}', 'total' => '{total}'],
+    'collect_crystal' => null,
+    'collect_gem' => null,
+    'collect_star' => null,
     'hud_alldone' => null,
     'hud_level' => '{level}',
     'hud_progress' => (object) ['done' => '{done}', 'total' => '{total}'],

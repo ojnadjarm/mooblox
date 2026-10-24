@@ -25,6 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['avatar'] = 'My avatar';
+$string['collect_count'] = '{$a->found} of {$a->total} found';
+$string['collect_crystal'] = 'Crystal found!';
+$string['collect_gem'] = 'Gem found!';
+$string['collect_star'] = 'Bonus star found!';
 $string['collectiblelocked'] = 'This treasure is still hidden. Finish its activity first.';
 $string['creator_cancel'] = 'Cancel';
 $string['creator_clothes'] = 'Clothes';
