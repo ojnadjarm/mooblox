@@ -23,6 +23,28 @@
  */
 
 /**
+ * Adds the rewards settings page to the course navigation for teachers who manage rewards.
+ *
+ * @param navigation_node $navigation course navigation node
+ * @param stdClass $course course
+ * @param context $context course context
+ */
+function local_mooblox_extend_navigation_course(navigation_node $navigation, stdClass $course, context $context): void {
+    if (get_config('local_mooblox', 'gamification') === '0' || !has_capability('local/mooblox:managerewards', $context)) {
+        return;
+    }
+    $url = new moodle_url('/local/mooblox/rewards.php', ['id' => $course->id]);
+    $navigation->add(
+        get_string('rewardssettings', 'local_mooblox'),
+        $url,
+        navigation_node::TYPE_SETTING,
+        null,
+        'local_mooblox_rewards',
+        new pix_icon('i/settings', '')
+    );
+}
+
+/**
  * Returns the user preferences the world may set for the current user.
  *
  * @return array[]

@@ -37,7 +37,7 @@ require_once(__DIR__ . '/../../../../lib/behat/behat_base.php');
  */
 class behat_local_mooblox extends behat_base {
     /**
-     * Resolves "<course shortname>" "local_mooblox > Play" to the play page URL.
+     * Resolves "<course shortname>" "local_mooblox > Play|Rewards" to the play or rewards settings page URL.
      *
      * @param string $type page type
      * @param string $identifier course shortname
@@ -47,8 +47,27 @@ class behat_local_mooblox extends behat_base {
         switch (strtolower($type)) {
             case 'play':
                 return new moodle_url('/local/mooblox/play.php', ['id' => $this->get_course_id($identifier)]);
+            case 'rewards':
+                return new moodle_url('/local/mooblox/rewards.php', ['id' => $this->get_course_id($identifier)]);
             default:
                 throw new Exception('Unrecognised local_mooblox page type "' . $type . '."');
+        }
+    }
+
+    /**
+     * Checks what get_rewards returns to a user: whether rewards are on in a course.
+     *
+     * @Then /^the MOOBLOX rewards of "(?P<username>[^"]*)" in "(?P<shortname>[^"]*)" should be (?P<state>on|off)$/
+     * @param string $username user name
+     * @param string $shortname course short name
+     * @param string $state on or off
+     */
+    public function the_mooblox_rewards_should_be(string $username, string $shortname, string $state): void {
+        global $DB;
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $enabled = \local_mooblox\rewards\summary::build($this->get_course_id($shortname), $userid)['enabled'];
+        if ($enabled !== ($state === 'on')) {
+            throw new \Behat\Mink\Exception\ExpectationException("Rewards of $username are not $state", $this->getSession());
         }
     }
 }

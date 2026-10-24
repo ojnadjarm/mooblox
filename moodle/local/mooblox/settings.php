@@ -35,5 +35,17 @@ if ($hassiteconfig) {
             get_string('enabled_desc', 'local_mooblox'),
             1
         ));
+        $settings->add(new admin_setting_configcheckbox(
+            'local_mooblox/gamification',
+            get_string('gamification', 'local_mooblox'),
+            get_string('gamification_desc', 'local_mooblox'),
+            1
+        ));
+        $settings->add(new admin_setting_configcheckbox(
+            'local_mooblox/rewardsdefault',
+            get_string('rewardsdefault', 'local_mooblox'),
+            get_string('rewardsdefault_desc', 'local_mooblox'),
+            1
+        ));
     }
 }

@@ -37,6 +37,9 @@ final class course_switch {
             return false;
         }
         $enabled = $DB->get_field('local_mooblox_course', 'enabled', ['courseid' => $courseid]);
-        return $enabled === false || $enabled === null || (bool) $enabled;
+        if ($enabled === false || $enabled === null) {
+            return get_config('local_mooblox', 'rewardsdefault') !== '0';
+        }
+        return (bool) $enabled;
     }
 }
