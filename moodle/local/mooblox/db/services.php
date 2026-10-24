@@ -33,4 +33,11 @@ $functions = [
         'capabilities' => 'local/mooblox:play',
         'services' => [MOODLE_OFFICIAL_MOBILE_SERVICE],
     ],
+    'local_mooblox_view_activity' => [
+        'classname' => 'local_mooblox\external\view_activity',
+        'description' => 'Marks an activity as viewed through its module view function.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'local/mooblox:play',
+    ],
 ];

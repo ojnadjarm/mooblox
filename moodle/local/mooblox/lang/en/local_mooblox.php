@@ -28,5 +28,6 @@ $string['disabled'] = 'MOOBLOX is turned off on this site.';
 $string['enabled'] = 'Enable MOOBLOX';
 $string['enabled_desc'] = 'When on, students and teachers can open each course as a 3D world.';
 $string['pluginname'] = 'MOOBLOX';
+$string['notviewable'] = 'This activity cannot be marked as viewed from the world.';
 $string['mooblox:play'] = 'Play the course world';
 $string['privacy:metadata'] = 'The MOOBLOX plugin does not store any personal data.';
