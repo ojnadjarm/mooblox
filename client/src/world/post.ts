@@ -1,4 +1,4 @@
-import { HalfFloatType, Vector2, WebGLRenderTarget, type Camera, type Scene, type WebGLRenderer } from 'three';
+import { HalfFloatType, Vector2, WebGLRenderTarget, type Camera, type ShaderMaterial, type Scene, type WebGLRenderer } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -41,7 +41,15 @@ export class PostChain {
     const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(scene, camera));
-    this.composer.addPass(new UnrealBloomPass(new Vector2(1, 1), look.post.bloom, 0.5, 1.4));
+    const bloom = new UnrealBloomPass(new Vector2(1, 1), look.post.bloom, 0.5, 1.4);
+    // One blur kernel on every mip: one shader program instead of five (lower mips still spread wider).
+    const blur = bloom as unknown as { separableBlurMaterials: ShaderMaterial[]; _getSeparableBlurMaterial(radius: number): ShaderMaterial };
+    blur.separableBlurMaterials.forEach((m, i) => {
+      if (i === 0) return;
+      m.dispose();
+      blur.separableBlurMaterials[i] = blur._getSeparableBlurMaterial(6);
+    });
+    this.composer.addPass(bloom);
     const grade = new ShaderPass(GRADE);
     grade.uniforms['uSaturation']!.value = look.post.saturation;
     grade.uniforms['uContrast']!.value = look.post.contrast;

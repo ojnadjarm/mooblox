@@ -102,3 +102,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Fixture: demo course gains "Lava lab" (after the page, with page "Lava lab notes") and "Space camp" (opens
     on a date). Live e2e `node tools/moodle.mjs gates [outdir]` 8/8. PHPUnit 27 tests (11-row data provider),
     vitest 26 files 99 tests, mci quick 7 ok 0 red. Bundle 210 KB gz.
+- T1309, 2026-10-24, look B "Cosy campus", procedural for any course shape:
+  - `world/island-layout.ts`: hub r 22, one district island per section with plots on rings (pitch 6.5 m, ring step 7 m,
+    entry gap), zones packed greedily round the hub with straight bridges clear of every island. Fallback past ~12
+    sections: an archipelago of small plazas (r 13) linked by always-open bridges (`layout.hubs`, `layout.links`,
+    `Zone.anchor`); 20x30 = 13 plazas, extent 284 m. Same course id → same world.
+  - `world/dressing.ts` (pure data, node-testable via `model-footprints.json` from `node tools/footprints.mjs`): rim cliffs,
+    hub hall terrace, plaza walks to every bridge, brick ring walks, houses, mesas, hedges, lamps, docks, trees, flowers.
+    `world/scenery.ts`: one LOD per district (far drops detail), one sway material, one glow mesh; solid parts feed
+    the BVH collider (real bridges, rails, buildings, trees). `world/life.ts`: instanced flags and boats, gulls, petals,
+    2 NPC kids (not on low). Props past 40 drop sign/flag/lock beyond 50 m and hide beyond 140 m (low 30/80).
+  - Dev: `?shape=8x12` or `?shape=3,0,5&course=N` (`domain/course-shape.ts`). Perf + stills: `node tools/perf.mjs <dir>
+    [shapes] [tiers]` (merges `numbers.json`). Kit: 34 CC0 Kenney models in `public/assets/kit`; KayKit packs removed.
+  - Demo high 1366: 86 draws, 147k tris all passes (76k on screen), 30 shaders; low tier 60 fps on all 4 shapes.
+    vitest 26 files 133 tests (`campus-shapes.test.ts`: determinism, no overlaps, BFS walk from spawn to every plot
+    for 4 shapes + 6 random). Live `tools/moodle.mjs gates` 8/8.

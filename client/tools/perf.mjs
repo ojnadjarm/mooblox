@@ -1,7 +1,7 @@
 // Course-shape perf + stills: node tools/perf.mjs <outdir> [shapes] [tiers]
 // shapes: comma list of demo|1x2|8x12|20x30|<counts>; tiers: high,low. Per shape x tier: overview and play view at 1366x768
 // (frame draw calls and triangles with shadows and post, main-pass triangles, programs, fps), stills at 1366 and 400 (overview).
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { loadChromium } from './playwright.mjs';
@@ -74,4 +74,8 @@ try {
   await browser.close();
   await server.close();
 }
-writeFileSync(join(out, 'numbers.json'), `${JSON.stringify(results, null, 1)}\n`);
+const file = join(out, 'numbers.json');
+const key = (r) => `${r.shape} ${r.tier} ${r.view}`;
+const fresh = new Set(results.map(key));
+const kept = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).filter((r) => !fresh.has(key(r))) : [];
+writeFileSync(file, `${JSON.stringify([...kept, ...results], null, 1)}\n`);

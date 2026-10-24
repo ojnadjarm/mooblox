@@ -51,7 +51,7 @@ only place that instantiates concrete classes. The 10 modules it wires:
 | 1 | `domain/` | Course, Section, Activity, Completion types + mapper from DTOs (anti-corruption layer) |
 | 2 | `moodle/` | `MoodleGateway` interface · `AjaxGateway` (session + sesskey) · `FakeGateway` (fixture JSON) · later `RestGateway` |
 | 3 | `state/` | `CourseStore` (Observer: book, props, tutor subscribe to completion and availability) |
-| 4 | `world/` | `LayoutPolicy` (Strategy; `IslandLayout` v1) · `MaterialKit` (Flyweight palette material) · `PropRegistry` + factories |
+| 4 | `world/` | `LayoutPolicy` (Strategy; `IslandLayout`: plot rings, plaza archipelago past ~12 sections) · `designWorld` (pure dressing data) → `buildScenery` (merged district LODs + collision) · `MaterialKit` (Flyweight: one sway material for all scenery) · `PropRegistry` + factories |
 | 5 | `player/` | Avatar (glTF + AnimationMixer) · Controller (BVH capsule, fixed 60 Hz step) · keyboard and touch input · camera |
 | 6 | `interaction/` | Proximity triggers · `OpenerRegistry` (Strategy + fallback chain): `FrameOpener` (default), `VideoOpener` |
 | 7 | `ui/` | Panel (frame/native host, focus trap, Esc) · Book · HUD · Settings; DOM over the canvas |

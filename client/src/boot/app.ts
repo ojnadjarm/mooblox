@@ -358,7 +358,7 @@ function frameOverview(stage: Stage, layout: WorldLayout): void {
   const cz = (minZ + maxZ) / 2;
   const extent = Math.max(maxX - minX, maxZ - minZ) / 2;
   const pull = Math.pow(Math.max(1, 1.4 / stage.camera.aspect), 0.6);
-  stage.camera.position.set(cx - extent * 0.45 * pull, extent * 0.8 * Math.pow(pull, 0.7), cz + extent * 1.35 * pull);
+  stage.camera.position.set(cx - extent * 0.45 * pull, extent * 0.8 * Math.pow(pull, 2), cz + extent * 1.35 * Math.pow(pull, 0.8));
   stage.camera.lookAt(cx, -2, cz + extent * 0.12);
   const fog = stage.scene.fog;
   if (fog instanceof Fog) {
