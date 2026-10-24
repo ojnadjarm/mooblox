@@ -72,3 +72,4 @@ $string['pluginname'] = 'MOOBLOX';
 $string['privacy:metadata:preference:avatar'] = 'The character the user built for the world, as JSON: version, skin tone, hairstyle and hair colour, eye shape and colour, eyebrows, mouth, glasses and outfit (top, bottom, shoes, each with a colour). Older values hold a preset body letter and shirt colour.';
 $string['strftimegateday'] = '%a %e %b';
 $string['strftimegatetime'] = 'at %H:%M';
+$string['task_reconcile'] = 'Recalculate MOOBLOX rewards of active users';

@@ -45,4 +45,16 @@ $observers = [
         'eventname' => '\core\event\course_completed',
         'callback' => [\local_mooblox\rewards\observer::class, 'fact_changed'],
     ],
+    [
+        'eventname' => '\core\event\course_deleted',
+        'callback' => [\local_mooblox\rewards\observer::class, 'course_deleted'],
+    ],
+    [
+        'eventname' => '\core\event\user_deleted',
+        'callback' => [\local_mooblox\rewards\observer::class, 'user_deleted'],
+    ],
+    [
+        'eventname' => '\core\event\course_reset_ended',
+        'callback' => [\local_mooblox\rewards\observer::class, 'course_reset_ended'],
+    ],
 ];

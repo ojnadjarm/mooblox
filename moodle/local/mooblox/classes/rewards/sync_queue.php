@@ -16,10 +16,11 @@
 
 namespace local_mooblox\rewards;
 
+use local_mooblox\task\sync_course;
 use local_mooblox\task\sync_user;
 
 /**
- * Queues one deduplicated background sync per user and course when rewards are on.
+ * Queues deduplicated background syncs of a user or a whole course when rewards are on.
  *
  * @package    local_mooblox
  * @copyright  2026 Oscar Nadjar <oscar.nadjar@gmail.com>
@@ -38,6 +39,20 @@ final class sync_queue {
         }
         $task = new sync_user();
         $task->set_custom_data(['courseid' => $courseid, 'userid' => $userid]);
+        \core\task\manager::queue_adhoc_task($task, true);
+    }
+
+    /**
+     * Queues a re-sync of every user with stored rewards in a course unless one is already waiting.
+     *
+     * @param int $courseid course id
+     */
+    public static function course(int $courseid): void {
+        if (!course_switch::is_on($courseid)) {
+            return;
+        }
+        $task = new sync_course();
+        $task->set_custom_data(['courseid' => $courseid]);
         \core\task\manager::queue_adhoc_task($task, true);
     }
 }
