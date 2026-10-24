@@ -256,3 +256,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     30/70 m, streaming keep/drop 125/150 m, rims 2.5 segments per metre; island land casts no shadow (all tiers).
   - `node tools/art-stills.mjs <dir> [--shapes demo,8x12] [--prefix after] [--video]`: overview 1366 + play 1366 (high),
     play 400 (low) JPEGs and a 12 s `walk.webm`. Round 1 gate 8 over budget (HEAD 17); medium draws/tris pass on all shapes.
+- Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
+  - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
+    `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.
+  - HUD: `rewards/rewards-store.ts`, `ui/hud-model.ts` (level curve 25·n·(n+1), next quest = closest to done), `ui/hud-rewards.ts`
+    (card under Book: level chip, XP bar, leaf weeks, quest line, pet badge on low tier).
+  - Level-up: `rewards/level-up.ts` (peak level rose since the last read), `ui/level-up.ts` (confetti, card, "Try it on" opens
+    the wardrobe; reduced motion: static card), `ui/chime.ts` (Web Audio, -12.7 dBFS peak), names `rewards/item-names.ts`.
+  - Wardrobe: `ui/avatar-picker.ts` `CreatorTab` seam (`addTab`, `openTab`), `ui/wardrobe*.ts`. `player/attachments.ts`
+    `Outfitter` (AvatarFactory decorator: hat Wearable on the head, outfit = clothes swap). Hats: `tools/hats.py` in Blender
+    -> `cosmetics/hats.glb` (12, 2160 tris, CC0), `player/hats.ts`, new `mesh` Part kind.
+  - Pet: `player/pet-steering.ts` (pure: follow point beside and behind, leader velocity fed forward, snap > 12 m),
+    `player/pets.ts` (Kenney cube pet merged to 1 SkinnedMesh on its node rig, idle/walk/run), `player/pet.ts` (PetFollower,
+    fed the avatar root; no world code). Tiers: none on low (HUD badge), no shadow on medium, shadow on high/xhigh.
+  - Checks: `node tools/rewards.mjs hud|levelup|wardrobe|hats|pet [outdir]`; stills `~/drop/T1276/T1352..T1355/`. vitest 222,
+    mci quick 6 ok 0 red 1 skip (phpunit: plugin not in a Moodle root).
