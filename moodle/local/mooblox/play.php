@@ -77,6 +77,8 @@ $placeholders = [
     'collect_crystal' => null,
     'collect_gem' => null,
     'collect_star' => null,
+    'goal_reached' => null,
+    'goal_together' => '{target}',
     'hud_alldone' => null,
     'hud_level' => '{level}',
     'hud_progress' => (object) ['done' => '{done}', 'total' => '{total}'],

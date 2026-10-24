@@ -158,7 +158,73 @@ const hallSolid = (page) => page.evaluate(() => {
   return v.collider.resolve(a, b, 0.4).length() > 0.05;
 });
 
+/** Frames the class goal monument from the plaza side. */
+const frameMonument = (page) => page.evaluate(() => {
+  const v = window.mooblox;
+  const s = v.dressing.monument;
+  const [dx, dz] = [Math.sin(s.face), Math.cos(s.face)];
+  window.__still?.();
+  window.__still = v.onFrame(() => {
+    v.stage.camera.position.set(s.x + dx * 6 - dz * 1.5, 3.2, s.z + dz * 6 + dx * 1.5);
+    v.stage.camera.lookAt(s.x, 2, s.z);
+  });
+  return s;
+});
+
 const modes = {
+  async goal() {
+    const page = await open(1366, 768, 'goal=5/6&xp=60&quality=high');
+    await page.waitForFunction(() => window.mooblox.rewards.goal?.monument, null, { timeout: 20000 });
+    const site = await frameMonument(page);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: join(out, 'goal-progress-1366.png') });
+    check((await page.evaluate(() => window.mooblox.rewards.goal.shows)) === 0, `5/6: monument on the plaza (${site.x.toFixed(1)},${site.z.toFixed(1)}), no fireworks`);
+    await page.evaluate(() => window.__still?.());
+    await openAndClose(page, 42);
+    await page.waitForFunction(() => window.mooblox.rewards.goal.shows === 1, null, { timeout: 8000 }).catch(() => null);
+    await page.waitForTimeout(900);
+    const live = await page.evaluate(() => ({ shows: window.mooblox.rewards.goal.shows, points: !!window.mooblox.stage.scene.getObjectByName('fireworks'),
+      lit: window.mooblox.stage.scene.getObjectByName('monument')?.userData.reached === true, programs: window.mooblox.stage.renderer.info.programs.filter((p) => p.cacheKey.includes('mooblox-fireworks')).length }));
+    check(live.shows === 1 && live.points && live.lit, `goal reached: monument lit, fireworks once (${live.shows}), ${live.programs} extra program while they fly`);
+    await page.screenshot({ path: join(out, 'goal-fireworks-1366.png') });
+    await page.waitForTimeout(4500);
+    check(!(await page.evaluate(() => !!window.mooblox.stage.scene.getObjectByName('fireworks'))), 'fireworks removed after the show');
+    await openAndClose(page, 43);
+    await page.waitForTimeout(2000);
+    check((await page.evaluate(() => window.mooblox.rewards.goal.shows)) === 1, 'another completion: no second show');
+    await page.reload();
+    await page.waitForFunction(() => window.mooblox?.rewards?.goal?.monument, null, { timeout: 60000 });
+    await page.waitForTimeout(2500);
+    check((await page.evaluate(() => window.mooblox.rewards.goal.shows)) === 0, 'reload: no fireworks again');
+    await page.close();
+    for (const [tier, w, h] of [['low', 400, 860], ['medium', 1366, 768], ['high', 1366, 768], ['xhigh', 1366, 768]]) {
+      const p = await open(w, h, `goal=6/6&trophies=3&collect=all&quality=${tier}`);
+      await p.waitForFunction(() => window.mooblox.rewards.goal?.monument && window.mooblox.rewards.hall?.mesh, null, { timeout: 20000 });
+      await p.waitForTimeout(2200);
+      if (tier === 'low') {
+        const burst = await p.evaluate(() => ({ dom: document.querySelectorAll('.mooblox-burst i').length, points: !!window.mooblox.stage.scene.getObjectByName('fireworks') }));
+        check(burst.dom > 0 && !burst.points, `low: page burst (${burst.dom} sparks), no WebGL fireworks`);
+        await p.screenshot({ path: join(out, 'goal-burst-low-400.png') });
+      }
+      await p.waitForTimeout(3500);
+      const all = {};
+      for (const name of ['collectibles', 'trophy-hall', 'monument']) all[name] = await extraOf(p, name);
+      const sum = Object.values(all).reduce((a, e) => ({ calls: a.calls + e.calls, tris: a.tris + e.tris, programs: a.programs + e.programs }), { calls: 0, tris: 0, programs: 0 });
+      const b = EXTRA[tier];
+      check(all.monument.calls >= 1 && all.monument.programs === 0, `${tier}: monument ${all.monument.calls} draws, ${all.monument.tris} tris, no new program`);
+      check(sum.calls <= b.calls && sum.tris <= b.tris && sum.programs <= b.programs, `${tier}: collectibles + hall + monument from the spawn ${sum.calls} draws, ${sum.tris} tris, ${sum.programs} programs (budget ${b.calls}/${b.tris}/${b.programs})`);
+      if (tier === 'high') {
+        await frameMonument(p);
+        await p.waitForTimeout(800);
+        await p.screenshot({ path: join(out, 'goal-lit-1366.png') });
+      }
+      await p.close();
+    }
+    const off = await open(1366, 768, 'goal=6/6&off');
+    await off.waitForTimeout(2500);
+    check(await off.evaluate(() => !window.mooblox.stage.scene.getObjectByName('monument') && !document.querySelector('.mooblox-burst')), 'rewards off: no monument, no fireworks');
+    await off.close();
+  },
   async hall() {
     for (const [tier, w, h] of [['low', 400, 860], ['medium', 1366, 768], ['high', 1366, 768], ['xhigh', 1366, 768]]) {
       const p = await open(w, h, `trophies=3&quality=${tier}`);

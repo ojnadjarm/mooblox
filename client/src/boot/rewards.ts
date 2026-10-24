@@ -18,6 +18,7 @@ import type { Activities, WorldView } from './app';
 import { startCollectibles, type CollectiblesRuntime } from './collectibles';
 import { addRewardsPages } from './book-pages';
 import { startTrophyHall, type TrophyHallRuntime } from './trophy-hall';
+import { startClassGoal, type ClassGoalRuntime } from './class-goal';
 
 /** What the rewards wiring needs from the rest of the client. */
 export interface RewardsDeps {
@@ -45,6 +46,8 @@ export interface RewardsRuntime {
   readonly collectibles: CollectiblesRuntime | null;
   /** The trophy hall in the hub; null while rewards are off. */
   readonly hall: TrophyHallRuntime | null;
+  /** The class goal monument and its fireworks; null while rewards are off. */
+  readonly goal: ClassGoalRuntime | null;
   /** Re-reads the rewards from Moodle. */
   refresh(): Promise<void>;
 }
@@ -58,6 +61,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
   let hud: HudRewards | null = null;
   let collectibles: CollectiblesRuntime | null = null;
   let hall: TrophyHallRuntime | null = null;
+  let goal: ClassGoalRuntime | null = null;
   let worn: Look = NO_LOOK;
   let dressing: Promise<void> | null = null;
   const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe') });
@@ -134,6 +138,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
       collectibles = startCollectibles(view, deps.player, store, deps.gateway, deps.courseId, deps.strings);
       addRewardsPages(interaction.book, store, () => view.world, deps.strings);
       hall = startTrophyHall(view, store);
+      goal = startClassGoal(view, store, deps.courseId, deps.strings);
     }
     const up = levelUp(previous, next);
     if (up) moment.play(up);
@@ -160,6 +165,9 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
     },
     get hall() {
       return hall;
+    },
+    get goal() {
+      return goal;
     },
     refresh,
   };

@@ -33,6 +33,7 @@ class DevRewardsGateway extends FakeGateway {
     rewards: RewardsDto,
     private readonly startXp: number,
     private readonly allUnlocked: boolean,
+    private readonly goal: readonly [number, number] | null = null,
   ) {
     super(world, { ...rewards, collectibles: devCollectibles(world) });
   }
@@ -61,7 +62,9 @@ class DevRewardsGateway extends FakeGateway {
     const level = levelOf(xp);
     const peak = Math.max(level, r.peakLevel);
     const unlocks = peak > r.peakLevel && !r.unlocks.includes(LEVEL_REWARD) ? [...r.unlocks, LEVEL_REWARD] : r.unlocks;
-    return { ...r, xp, level, peakLevel: peak, levelStart: 25 * level * (level + 1), levelNext: 25 * (level + 1) * (level + 2), unlocks };
+    const goal = this.goal && { week: 202643, target: this.goal[1], progress: Math.min(this.goal[1], this.goal[0] + done - this.baseline), reached: false, timeReached: 0 };
+    if (goal) goal.reached = goal.progress >= goal.target;
+    return { ...r, xp, level, peakLevel: peak, levelStart: 25 * level * (level + 1), levelNext: 25 * (level + 1) * (level + 2), unlocks, goal };
   }
 }
 
@@ -91,6 +94,12 @@ function devTrophies(n: number): RewardsDto['trophies'] {
   });
 }
 
+/** `?goal=3/6`: class goal progress and target (completions on the page add to it). */
+function devGoal(value: string | null): [number, number] | null {
+  const m = /^(\d+)\/(\d+)$/.exec(value ?? '');
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
 const levelOf = (xp: number): number => Math.floor((Math.sqrt(1 + (4 * xp) / 25) - 1) / 2);
 
 /** Dev page for the rewards UI: the demo course and the captured rewards, no Moodle needed. */
@@ -109,7 +118,7 @@ async function boot(): Promise<void> {
     rewards.unlocks.push(rewards.look.pet);
   }
   if (params.has('trophies')) rewards.trophies = devTrophies(Number(params.get('trophies')));
-  const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp), params.get('collect') === 'all');
+  const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp), params.get('collect') === 'all', devGoal(params.get('goal')));
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));
   const models = await ModelLibrary.load(ASSETS, modelIds(), bootTier() === 'xhigh');

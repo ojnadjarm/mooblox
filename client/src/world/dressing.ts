@@ -138,6 +138,8 @@ export interface Dressing {
   readonly occupancy: GroundQuery;
   /** Calm lawn kept free on the spawn hub for the trophy hall (built only while rewards are on), or null. */
   readonly hall: HallSite | null;
+  /** Spot on the spawn plaza for the class goal monument, facing the plaza centre, or null. */
+  readonly monument: HallSite | null;
 }
 
 /** A round site and the yaw its open side faces (the hub centre). */
@@ -150,6 +152,9 @@ export interface HallSite {
 
 /** Trophy hall site radii tried on the spawn hub, largest first. */
 const HALL_RADII = [3.6, 3.1, 2.6];
+/** Monument footprint radius and its distance from the plaza centre (between the spawn pad and the plaza rim). */
+const MONUMENT_R = 1.4;
+const MONUMENT_D = 4.9;
 
 interface Footprint {
   readonly h: number;
@@ -256,6 +261,7 @@ class Designer {
   private readonly entries = new Set<Segment>();
   private focus: { x: number; z: number } | null = null;
   private hall: HallSite | null = null;
+  private monument: HallSite | null = null;
   private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
   private readonly random: () => number;
   private district!: District;
@@ -288,7 +294,10 @@ class Designer {
       if (i === 0) this.hub(hub);
       else this.plaza(hub, i);
       this.themed(hub, i === 0 ? HUB_THEME.corners : ['plaza'], i === 0 ? 2 : 1);
-      if (i === 0) this.hall = this.hallSite(hub);
+      if (i === 0) {
+        this.hall = this.hallSite(hub);
+        this.monument = this.monumentSite(hub);
+      }
       this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8);
       this.shore(hub);
     });
@@ -314,6 +323,7 @@ class Designer {
       critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks,
       occupancy: this.occ,
       hall: this.hall,
+      monument: this.monument,
     };
   }
 
@@ -444,6 +454,28 @@ class Designer {
           this.reserve(x, z, r + 0.4);
           return { x, z, r, face: Math.atan2(hub.x - x, hub.z - z) };
         }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The monument spot on the spawn plaza: beside the avenue to the landmark, on the side away from the trophy hall, off every
+   * line from the pad to a bridge; no random draws.
+   */
+  private monumentSite(hub: Circle): HallSite | null {
+    const back = this.focus ? Math.atan2(this.focus.z - hub.z, this.focus.x - hub.x) : 0;
+    const hall = this.hall ? wrap(Math.atan2(this.hall.z - hub.z, this.hall.x - hub.x) - back) : 1;
+    const side = hall > 0 ? -1 : 1;
+    const bearings = this.bearingsAt(0);
+    for (let off = 0.8; off <= Math.PI; off += 0.1) {
+      for (const sign of [side, -side]) {
+        const a = back + sign * off;
+        if (bearings.some((b) => Math.abs(wrap(a - b)) < 0.45)) continue;
+        const x = hub.x + Math.cos(a) * MONUMENT_D;
+        const z = hub.z + Math.sin(a) * MONUMENT_D;
+        this.reserve(x, z, MONUMENT_R);
+        return { x, z, r: MONUMENT_R, face: Math.atan2(hub.x - x, hub.z - z) };
       }
     }
     return null;

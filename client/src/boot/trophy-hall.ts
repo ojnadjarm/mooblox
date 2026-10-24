@@ -61,8 +61,8 @@ export function startTrophyHall(view: WorldView, store: RewardsStore): TrophyHal
     const { geometry } = hallGeometry(site, metals, entries.map((_, i) => atlasCell(i)), ATLAS_WHITE);
     mesh = new Mesh(geometry, material);
     mesh.name = 'trophy-hall';
-    const tier = view.quality.tier;
-    mesh.castShadow = tier === 'high' || tier === 'xhigh';
+    // xhigh already draws it twice (the GTAO normal pass): a shadow too would break the draw budget.
+    mesh.castShadow = view.quality.tier === 'high';
     mesh.receiveShadow = true;
     view.stage.add(mesh);
     mesh.updateMatrixWorld(true);
