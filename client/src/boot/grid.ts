@@ -1,7 +1,8 @@
-import { Color, DirectionalLight, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { Color, DirectionalLight, HemisphereLight, NeutralToneMapping, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { Avatar } from '../player/avatar';
 import { AvatarKit } from '../player/avatar-kit';
 import { DEFAULT_LOOK, randomLook, type CharacterLook } from '../player/character/look';
+import { CAMPUS } from '../world/look';
 
 /** Twelve hand-picked kids for the stills (row by row), blonde ones included. */
 const SHOWCASE: Partial<CharacterLook>[] = [
@@ -19,7 +20,7 @@ const SHOWCASE: Partial<CharacterLook>[] = [
   { skin: 's4', hair: 'long', hairc: 'purple', eyes: 'sparkle', eyec: 'pink', top: 'tank', topc: 'yellow', bottom: 'skirt', bottomc: 'pink', mouth: 'grin' },
 ];
 
-/** Standalone characters: `?n=12` (3x4 showcase, one cell each) or `?n=20&random=1` (a crowd); exposes draw calls per frame. */
+/** Standalone characters: `?n=12` (3x4 showcase, one cell each; `&turn=<rad>` yaw) or `?n=20&random=1` (a crowd); exposes draw calls per frame. */
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const n = Number(params.get('n') ?? 12);
@@ -27,12 +28,14 @@ async function main(): Promise<void> {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = false;
+  renderer.toneMapping = NeutralToneMapping;
+  renderer.toneMappingExposure = CAMPUS.exposure;
   document.body.appendChild(renderer.domElement);
   const scene = new Scene();
   scene.background = new Color(0xcdeeff);
-  scene.add(new HemisphereLight(0xffffff, 0x8fb58a, 2.2));
-  const sun = new DirectionalLight(0xffffff, 1.6);
-  sun.position.set(3, 6, 8);
+  scene.add(new HemisphereLight(CAMPUS.hemi.sky, CAMPUS.hemi.ground, CAMPUS.hemi.intensity));
+  const sun = new DirectionalLight(CAMPUS.sun.color, CAMPUS.sun.intensity);
+  sun.position.set(...CAMPUS.sun.dir);
   scene.add(sun);
   const kit = await AvatarKit.load('/assets/');
   const showcase = !params.has('random');
@@ -45,7 +48,7 @@ async function main(): Promise<void> {
     const look = showcase ? { ...DEFAULT_LOOK, ...SHOWCASE[i % SHOWCASE.length] } : randomLook(random);
     const avatar = await kit.create(look as CharacterLook);
     if (showcase) {
-      avatar.root.rotation.y = -0.35;
+      avatar.root.rotation.y = Number(params.get('turn') ?? -0.35);
     } else {
       avatar.root.position.set((i % cols - (cols - 1) / 2) * 2.2, 0, (Math.floor(i / cols) - (rows - 1) / 2) * 3);
       avatar.root.rotation.y = random() - 0.5;

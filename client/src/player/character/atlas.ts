@@ -7,7 +7,7 @@ export const ATLAS_SIZE = 512;
 export type TileRect = readonly [number, number, number, number];
 
 function layout(): Record<string, TileRect> {
-  const tiles: Record<string, TileRect> = { solid: [448, 0, 64, 64] };
+  const tiles: Record<string, TileRect> = { solid: [448, 0, 64, 64], blush: [448, 64, 64, 32] };
   OPTIONS.eyes.forEach((s, i) => {
     tiles[`eye-${s}`] = [i * 64, 0, 64, 64];
     tiles[`hl-${s}`] = [i * 64, 64, 64, 64];
@@ -18,7 +18,7 @@ function layout(): Record<string, TileRect> {
   return tiles;
 }
 
-/** Every tile of the atlas by id (`solid`, `eye-<shape>`, `hl-<shape>`, `brow-*`, `mouth-*`, `glasses-*`). */
+/** Every tile of the atlas by id (`solid`, `blush`, `eye-<shape>`, `hl-<shape>`, `brow-*`, `mouth-*`, `glasses-*`). */
 export const TILES: Readonly<Record<string, TileRect>> = layout();
 
 /** UV rectangle [u0, v0, u1, v1] of a tile for a flipY texture (v up). */
@@ -43,7 +43,8 @@ export function paintAtlas(ctx: CanvasRenderingContext2D): void {
     if (kind === 'solid') {
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, w, h);
-    } else if (kind === 'eye') eye(ctx, shape);
+    } else if (kind === 'blush') ellipse(ctx, 32, 16, 29, 13, '#fff');
+    else if (kind === 'eye') eye(ctx, shape);
     else if (kind === 'hl') highlight(ctx, shape);
     else if (kind === 'brow') brow(ctx, shape);
     else if (kind === 'mouth') mouth(ctx, shape);

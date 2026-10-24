@@ -95,9 +95,10 @@ describe('character parts', () => {
     expect(minY).toBeCloseTo(0, 5);
   });
 
-  it('box faces wind counter-clockwise outward', () => {
-    const box: BoxPart = { kind: 'box', bone: 'root', min: [0, 0, 0], max: [1, 1, 1], colour: 0 };
+  it.each([0, 0.2])('box faces wind counter-clockwise outward and normals point away from the centre (bevel %s)', (bevel) => {
+    const box: BoxPart = { kind: 'box', bone: 'root', min: [0, 0, 0], max: [1, 1, 1], colour: 0, bevel };
     const g = buildGeometry([box]);
+    expect(g.index!.count / 3).toBe(triangles(box));
     const p = g.getAttribute('position');
     const n = g.getAttribute('normal');
     const idx = g.index!;
@@ -107,6 +108,8 @@ describe('character parts', () => {
       const e2 = [p.getX(c) - p.getX(a), p.getY(c) - p.getY(a), p.getZ(c) - p.getZ(a)];
       const cross = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
       expect(cross[0]! * n.getX(a) + cross[1]! * n.getY(a) + cross[2]! * n.getZ(a)).toBeGreaterThan(0);
+      const out = (p.getX(a) - 0.5) * n.getX(a) + (p.getY(a) - 0.5) * n.getY(a) + (p.getZ(a) - 0.5) * n.getZ(a);
+      expect(out).toBeGreaterThan(0);
     }
   });
 

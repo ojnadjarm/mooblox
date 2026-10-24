@@ -13,6 +13,8 @@ export interface BoxPart {
   readonly colour: number;
   /** `crown` = hair above the head top, which a hat slot may hide. */
   readonly tag?: 'crown';
+  /** Chamfer of the four vertical edges (metres): an eight-sided block that catches the light on its corners. */
+  readonly bevel?: number;
 }
 
 /** A four-sided pyramid: base rectangle at min.y, apex anywhere. */
@@ -65,6 +67,11 @@ export function box(bone: BoneName, x0: number, x1: number, y0: number, y1: numb
   return tag ? { kind: 'box', bone, min: [x0, y0, z0], max: [x1, y1, z1], colour, tag } : { kind: 'box', bone, min: [x0, y0, z0], max: [x1, y1, z1], colour };
 }
 
+/** A box with chamfered vertical edges. */
+export function block(bone: BoneName, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, colour: number, bevel: number): BoxPart {
+  return { kind: 'box', bone, min: [x0, y0, z0], max: [x1, y1, z1], colour, bevel };
+}
+
 /** Both sides of a part built for +x, mirrored to -x. */
 export function mirrored(make: (sign: 1 | -1) => Part[]): Part[] {
   return [...make(1), ...make(-1)];
@@ -78,5 +85,5 @@ export function shade(hex: number, k: number): number {
 
 /** Triangles a part adds to the merged mesh. */
 export function triangles(part: Part): number {
-  return part.kind === 'box' ? 12 : part.kind === 'spike' ? 6 : part.kind === 'mesh' ? part.positions.length / 9 : 2;
+  return part.kind === 'box' ? (part.bevel ? 28 : 12) : part.kind === 'spike' ? 6 : part.kind === 'mesh' ? part.positions.length / 9 : 2;
 }

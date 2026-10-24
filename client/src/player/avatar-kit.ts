@@ -3,7 +3,7 @@ import {
   CanvasTexture,
   Group,
   LinearMipmapLinearFilter,
-  MeshLambertMaterial,
+  type MeshLambertMaterial,
   Skeleton,
   SkinnedMesh,
   SRGBColorSpace,
@@ -16,6 +16,7 @@ import { Avatar } from './avatar';
 import { ATLAS_SIZE, paintAtlas } from './character/atlas';
 import { composeParts, type Wearable } from './character/compose';
 import { LEGACY_BODIES, type CharacterLook, type LegacyLook } from './character/look';
+import { characterMaterial } from './character/material';
 import { buildGeometry } from './character/mesh';
 import { BONES } from './character/parts';
 import { jumpClip } from './clips';
@@ -56,7 +57,7 @@ export class AvatarKit implements AvatarFactory {
     const atlas = new CanvasTexture(canvas);
     atlas.colorSpace = SRGBColorSpace;
     atlas.minFilter = LinearMipmapLinearFilter;
-    const material = new MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5 });
+    const material = characterMaterial(atlas);
     return new AvatarKit(gltf.scene, [...gltf.animations, jumpClip()], material);
   }
 

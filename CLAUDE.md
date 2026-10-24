@@ -281,6 +281,12 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `tools/art-stills.mjs` renders them too (`--views` filter).
     Numbers: demo low 60 fps (clean A/B vs HEAD: +3.4k tris of clouds, programs 10 = 10, 1 draw fewer), xhigh 28 -> 56 fps;
     gate 76 pass / 8 fail under load 8-11 with T1369's WIP in the tree.
+  - Round 6 (creator kids): `BoxPart.bevel` + `block()` = eight-sided blocks (28 tris) for every body block, shoe and skirt;
+    `mesh.ts` `formShade` (each bone's block shades top to bottom, `FORM` 0.09); `outfit.ts` hems, cuffs, shorts turn-ups, hoodie
+    hood, collar or scoop neck (`PROUD` 0.012); `face.ts` cheeks (`blush` tile, skin pulled to rose); `character/material.ts`
+    `characterMaterial` = Lambert with the sun wrapped past the terminator (`WRAP` 0.55, own program key); `grid.html` and the
+    creator preview use `CAMPUS` light + Neutral tone mapping (`?turn=<rad>`, `tools/characters.mjs --turn=`). 12 kids 12 draws,
+    639 tris per kid. Dist not rebuilt in this round (T1369 work in progress in the tree).
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

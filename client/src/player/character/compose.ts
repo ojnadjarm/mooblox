@@ -29,7 +29,7 @@ export function composeParts(look: CharacterLook, wearables: readonly Wearable[]
   return [
     ...upperBody(look.top, CLOTH[look.topc]!, skin),
     ...lowerBody(look.bottom, CLOTH[look.bottomc]!, look.shoes, CLOTH[look.shoesc]!, skin),
-    ...faceParts(look.eyes, EYE_COLOUR[look.eyec]!, look.brows, hairColour, look.mouth),
+    ...faceParts(look.eyes, EYE_COLOUR[look.eyec]!, look.brows, hairColour, look.mouth, skin),
     ...hair,
     ...(bySlot.has('face') ? [] : glassesParts(look.glasses, CLOTH[look.glassesc]!)),
     ...worn.flatMap((w) => w.parts(look)),

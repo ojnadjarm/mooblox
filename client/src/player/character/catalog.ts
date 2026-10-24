@@ -46,7 +46,7 @@ export const HAIR_COLOUR: Readonly<Record<string, number>> = {
   blonde: 0xf2cc5c,
   platinum: 0xf3ecd6,
   brown: 0x7a4a26,
-  black: 0x2a2220,
+  black: 0x35292a,
   auburn: 0x8f3a1c,
   red: 0xd2541f,
   pink: 0xff7eb6,
@@ -66,7 +66,7 @@ export const EYE_COLOUR: Readonly<Record<string, number>> = {
   pink: 0xf25c9b,
 };
 
-/** Clothes in the art bible's palette: its accents and purpose colours, cream for white, lavender for grey, ink for black. */
+/** Clothes in the art bible's palette: its accents and purpose colours, cream for white, lavender for grey, ink lifted a step for black. */
 export const CLOTH: Readonly<Record<string, number>> = {
   red: 0xe5484d,
   orange: 0xff9a3c,
@@ -79,7 +79,7 @@ export const CLOTH: Readonly<Record<string, number>> = {
   pink: 0xf07aa8,
   white: 0xf6ead3,
   grey: 0x8e86a3,
-  black: 0x2b2f3a,
+  black: 0x3a3f54,
   denim: 0x4a6fa5,
   brown: 0x8a5636,
 };

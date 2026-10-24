@@ -18,7 +18,7 @@ class Buffers {
   vertex(p: Vec3, n: Vec3, c: Color, u: number, v: number, bone: number): void {
     this.position.push(p[0], p[1], p[2]);
     this.normal.push(n[0], n[1], n[2]);
-    const k = bakedShade(p[1], n[1]);
+    const k = Math.min(1, bakedShade(p[1], n[1]) + formShade(bone, p[1]));
     this.color.push(c.r * (1 - k) + SHADE.r * k, c.g * (1 - k) + SHADE.g * k, c.b * (1 - k) + SHADE.b * k);
     this.uv.push(u, v);
     this.skinIndex.push(bone, 0, 0, 0);
@@ -31,6 +31,17 @@ const SHADE = new Color(0x4b5a8c).multiplyScalar(0.6);
 function bakedShade(y: number, ny: number): number {
   const t = Math.min(1, Math.max(0, y / 0.8));
   return 0.24 * (1 - t * t * (3 - 2 * t)) + (ny < -0.5 ? 0.12 : 0);
+}
+
+/** Each body block shades from its top (as painted) to `FORM` at its bottom, so stacked segments read as one rounded form. */
+const FORM = 0.09;
+const FORM_SPAN: readonly (readonly [number, number] | null)[] = [null, [0, 1.0], [0, 1.0], [1.0, 1.9], [0.8, 1.9], [0.8, 1.9], [1.9, 2.7]];
+
+function formShade(bone: number, y: number): number {
+  const span = FORM_SPAN[bone];
+  if (!span) return 0;
+  const t = Math.min(1, Math.max(0, (y - span[0]) / (span[1] - span[0])));
+  return FORM * (1 - t);
 }
 
 const SOLID = tileUv('solid');
@@ -48,7 +59,8 @@ export function buildGeometry(parts: readonly Part[]): BufferGeometry {
       continue;
     }
     colour.setHex(part.colour);
-    if (part.kind === 'box') addBox(b, part.min, part.max, colour, bone);
+    if (part.kind === 'box' && part.bevel) addBlock(b, part.min, part.max, part.bevel, colour, bone);
+    else if (part.kind === 'box') addBox(b, part.min, part.max, colour, bone);
     else if (part.kind === 'spike') addSpike(b, part.min, part.max, part.apex, colour, bone);
     else addQuad(b, part.centre, part.width, part.height, tileUv(part.tile), part.mirror ?? false, colour, bone);
   }
@@ -86,6 +98,37 @@ function addBox(b: Buffers, min: Vec3, max: Vec3, c: Color, bone: number): void 
       b.vertex(p, n, c, SOLID_U, SOLID_V, bone);
     }
     b.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+}
+
+/** An eight-sided prism: the box with its four vertical edges chamfered by `bevel`, capped top and bottom. */
+function addBlock(b: Buffers, min: Vec3, max: Vec3, bevel: number, c: Color, bone: number): void {
+  const [x0, y0, z0] = min;
+  const [x1, y1, z1] = max;
+  const k = Math.min(bevel, (x1 - x0) / 2, (z1 - z0) / 2);
+  const ring: [number, number][] = [
+    [x1 - k, z1],
+    [x1, z1 - k],
+    [x1, z0 + k],
+    [x1 - k, z0],
+    [x0 + k, z0],
+    [x0, z0 + k],
+    [x0, z1 - k],
+    [x0 + k, z1],
+  ];
+  for (let i = 0; i < 8; i++) {
+    const [ax, az] = ring[i]!;
+    const [bx, bz] = ring[(i + 1) % 8]!;
+    const len = Math.hypot(bx - ax, bz - az);
+    const n: Vec3 = [-(bz - az) / len, 0, (bx - ax) / len];
+    const base = b.count;
+    for (const p of [[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]] as Vec3[]) b.vertex(p, n, c, SOLID_U, SOLID_V, bone);
+    b.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  for (const [y, ny] of [[y1, 1], [y0, -1]] as const) {
+    const base = b.count;
+    for (const [x, z] of ring) b.vertex([x, y, z], [0, ny, 0], c, SOLID_U, SOLID_V, bone);
+    for (let i = 1; i < 7; i++) b.index.push(...(ny > 0 ? [base, base + i, base + i + 1] : [base, base + i + 1, base + i]));
   }
 }
 

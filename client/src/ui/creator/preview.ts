@@ -1,7 +1,8 @@
-import { DirectionalLight, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { DirectionalLight, HemisphereLight, NeutralToneMapping, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { Avatar } from '../../player/avatar';
 import type { AvatarFactory } from '../../player/avatar-kit';
 import type { CharacterLook } from '../../player/character/look';
+import { CAMPUS } from '../../world/look';
 
 const SPIN = 0.6;
 const MAX_DPR = 1.5;
@@ -25,9 +26,9 @@ export class CreatorPreview {
     readonly host: HTMLElement,
     private readonly factory: AvatarFactory,
   ) {
-    this.scene.add(new HemisphereLight(0xffffff, 0x9fb7d0, 2.4));
-    const sun = new DirectionalLight(0xffffff, 1.5);
-    sun.position.set(2, 4, 6);
+    this.scene.add(new HemisphereLight(CAMPUS.hemi.sky, CAMPUS.hemi.ground, CAMPUS.hemi.intensity));
+    const sun = new DirectionalLight(CAMPUS.sun.color, CAMPUS.sun.intensity);
+    sun.position.set(...CAMPUS.sun.dir);
     this.scene.add(sun);
     host.addEventListener('pointerdown', (e) => {
       if (e.target !== this.renderer?.domElement) return;
@@ -62,6 +63,8 @@ export class CreatorPreview {
     if (!this.renderer) {
       this.renderer = new WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
       this.renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_DPR));
+      this.renderer.toneMapping = NeutralToneMapping;
+      this.renderer.toneMappingExposure = CAMPUS.exposure;
       this.host.appendChild(this.renderer.domElement);
       this.resize = new ResizeObserver(() => this.fit());
       this.resize.observe(this.host);
