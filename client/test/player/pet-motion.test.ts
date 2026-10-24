@@ -166,7 +166,7 @@ describe('PetModel motion layer', () => {
       walk(profile.head, false);
       bytes = Math.min(bytes, sum);
     }
-    // One 16 B number per frame would be 48 KB; under a loaded CPU V8's own interrupts add a few hundred bytes to the frame on top.
+    // Under 1 B per update: one 16 B number per update would be 48 KB; under a loaded CPU V8 adds a few hundred bytes on top.
     expect(bytes).toBeLessThan(3000);
   });
 });

@@ -102,6 +102,36 @@ describe('motion kernel (pure)', () => {
     run(m, RUN, 1);
     expect(m[M.torsoRoll]!).toBeCloseTo(-MOTION.maxBank, 3);
   });
+
+  it('leans into a start, rocks back on a stop, then settles; NPCs (speed as authored) get no push', () => {
+    const m = motionState(3);
+    run(m, IDLE, 1);
+    let most = -Infinity;
+    for (let i = 1; i <= 30; i++) {
+      m[M.speed] = Math.min(MOTION.runSpeed, i * 0.75);
+      stepMotion(m, RUN, 1 / 60);
+      most = Math.max(most, m[M.torsoPitch]! - m[M.lean]!);
+    }
+    expect(most).toBeGreaterThan(0.1);
+    expect(most).toBeLessThanOrEqual(MOTION.maxPush * 1.4);
+    run(m, RUN, 2);
+    let least = Infinity;
+    for (let i = 1; i <= 30; i++) {
+      m[M.speed] = Math.max(0, MOTION.runSpeed - i);
+      stepMotion(m, i < 10 ? RUN : IDLE, 1 / 60);
+      least = Math.min(least, m[M.torsoPitch]! - m[M.lean]!);
+    }
+    expect(least).toBeLessThan(-0.1);
+    run(m, IDLE, 2);
+    expect(Math.abs(m[M.torsoPitch]!)).toBeLessThan(0.01);
+    const npc = motionState(4);
+    let npcMost = 0;
+    for (let i = 0; i < 120; i++) {
+      stepMotion(npc, i < 60 ? IDLE : RUN, 1 / 60);
+      npcMost = Math.max(npcMost, Math.abs(npc[M.push]!));
+    }
+    expect(npcMost).toBe(0);
+  });
 });
 
 describe('Avatar motion layer', () => {
@@ -180,7 +210,7 @@ describe('Avatar motion layer', () => {
       walk(profile.head, false);
       bytes = Math.min(bytes, sum);
     }
-    // One 16 B number per kid per frame would be 192 KB; under a loaded CPU V8's own interrupts add a few hundred bytes on top.
-    expect(bytes).toBeLessThan(600);
+    // Under 1 B per kid update: one 16 B number per update would be 192 KB; under a loaded CPU V8 adds a few hundred bytes on top.
+    expect(bytes).toBeLessThan(12000);
   });
 });

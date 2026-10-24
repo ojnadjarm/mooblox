@@ -1,6 +1,7 @@
 /**
  * Procedural motion layered over the clips, as pure data and one kernel (no three.js, no calls in the hot path): per-kid pace
- * so a crowd never moves in lockstep, stride rate matched to ground speed, idle glances and breathing, run lean, banking.
+ * so a crowd never moves in lockstep, stride rate matched to ground speed, idle glances and breathing, run lean, banking, and a
+ * springy push: leaning into a start, rocking back on a stop.
  */
 
 export const MOTION = {
@@ -29,6 +30,11 @@ export const MOTION = {
   lean: 0.2,
   bank: 0.045,
   maxBank: 0.16,
+  /** Push: lean per m/s² of speeding up (back when braking), its cap (rad), and its spring's stiffness (1/s²) and damping (1/s). */
+  push: 0.004,
+  maxPush: 0.2,
+  pushStiffness: 150,
+  pushDamping: 11,
   /** How much of the lean the head takes back, so the eyes stay level. */
   headCounter: 0.6,
   /** Rate (1/s) the layer weights follow the state. */
@@ -63,7 +69,11 @@ export const M = {
   phase: 14,
   period: 15,
   baseRate: 16,
-  looks: 17,
+  /** Last ground speed, then the push spring (value, velocity). */
+  lastSpeed: 17,
+  push: 18,
+  pushVelocity: 19,
+  looks: 20,
 } as const;
 
 /** A 0..1 hash of an integer pair (stable across runs). */
@@ -78,6 +88,7 @@ export function hash01(a: number, b: number): number {
 export function motionState(seed: number): Float64Array {
   const m = new Float64Array(M.looks + MOTION.looks * 2);
   m[M.speed] = NaN;
+  m[M.lastSpeed] = NaN;
   m[M.idle] = 1;
   m[M.rate] = 1;
   m[M.phase] = hash01(seed, 1);
@@ -107,6 +118,13 @@ export function stepMotion(m: Float64Array, code: MotionCode, dt: number): void 
   const lean = (m[M.lean] = m[M.lean]! + (MOTION.lean * share - m[M.lean]!) * k);
   const roll = Math.max(-MOTION.maxBank, Math.min(MOTION.maxBank, -m[M.turn]! * MOTION.bank)) * share;
   const bank = (m[M.bank] = m[M.bank]! + (roll - m[M.bank]!) * k);
+  const last = m[M.lastSpeed]!;
+  m[M.lastSpeed] = raw;
+  const accel = raw !== raw || last !== last || dt <= 0 ? 0 : (raw - last) / dt;
+  const h = dt < 0.05 ? dt : 0.05;
+  const pushTarget = Math.max(-MOTION.maxPush, Math.min(MOTION.maxPush, accel * MOTION.push));
+  const pv = (m[M.pushVelocity] = m[M.pushVelocity]! + (MOTION.pushStiffness * (pushTarget - m[M.push]!) - MOTION.pushDamping * m[M.pushVelocity]!) * h);
+  const push = (m[M.push] = m[M.push]! + pv * h);
   const x = t / m[M.period]! + m[M.phase]!;
   const n = Math.floor(x);
   const f0 = Math.min(1, (x - n) / MOTION.glanceTurn);
@@ -115,10 +133,10 @@ export function stepMotion(m: Float64Array, code: MotionCode, dt: number): void 
   const from = M.looks + ((n + MOTION.looks - 1) % MOTION.looks) * 2;
   const yaw = m[from]! + (m[to]! - m[from]!) * f;
   const pitch = m[from + 1]! + (m[to + 1]! - m[from + 1]!) * f;
-  m[M.torsoPitch] = lean;
+  m[M.torsoPitch] = lean + push;
   m[M.torsoRoll] = bank;
   m[M.torsoStretch] = MOTION.breathDepth * Math.sin((2 * Math.PI * t) / MOTION.breathPeriod + m[M.phase]! * 6.283) * (0.3 + 0.7 * idle);
-  m[M.headPitch] = pitch * idle - lean * MOTION.headCounter;
+  m[M.headPitch] = pitch * idle - (lean + push) * MOTION.headCounter;
   m[M.headYaw] = yaw * idle;
   m[M.headRoll] = -bank * 0.5;
 }
