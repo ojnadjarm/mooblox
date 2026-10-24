@@ -66,21 +66,22 @@ export const EYE_COLOUR: Readonly<Record<string, number>> = {
   pink: 0xf25c9b,
 };
 
+/** Clothes in the art bible's palette: its accents and purpose colours, cream for white, lavender for grey, ink for black. */
 export const CLOTH: Readonly<Record<string, number>> = {
-  red: 0xe53935,
-  orange: 0xfb8c00,
-  yellow: 0xfdd835,
-  green: 0x43a047,
-  teal: 0x00acc1,
-  blue: 0x1e88e5,
-  navy: 0x283a7a,
-  purple: 0x8e24aa,
-  pink: 0xec407a,
-  white: 0xf4f4f0,
-  grey: 0x8d939c,
-  black: 0x2b2b30,
+  red: 0xe5484d,
+  orange: 0xff9a3c,
+  yellow: 0xf6c445,
+  green: 0x5db761,
+  teal: 0x2fa39a,
+  blue: 0x2f7fe0,
+  navy: 0x2e3f7f,
+  purple: 0x8e5ad8,
+  pink: 0xf07aa8,
+  white: 0xf6ead3,
+  grey: 0x8e86a3,
+  black: 0x2b2f3a,
   denim: 0x4a6fa5,
-  brown: 0x7b5233,
+  brown: 0x8a5636,
 };
 
 /** Display colour of a colour id in `field`, or null for a style field. */

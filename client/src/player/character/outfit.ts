@@ -1,4 +1,5 @@
 import { BODY, box, mirrored, shade, type Part } from './parts';
+import { CLOTH } from './catalog';
 
 const HAND_TOP = 0.96;
 const SLEEVE_SHORT = 1.5;
@@ -14,7 +15,7 @@ export function upperBody(top: string, topColour: number, skin: number): Part[] 
       : [box('torso', t.min[0], t.max[0], t.min[1], t.max[1], t.min[2], t.max[2], topColour)];
   if (top === 'hoodie') {
     torso.push(box('torso', -0.24, 0.24, 1.08, 1.34, 0.3, 0.33, shade(topColour, 0.8)));
-    torso.push(...mirrored((s) => [box('torso', s * 0.1 - 0.015, s * 0.1 + 0.015, 1.6, 1.86, 0.3, 0.32, 0xf4f4f0)]));
+    torso.push(...mirrored((s) => [box('torso', s * 0.1 - 0.015, s * 0.1 + 0.015, 1.6, 1.86, 0.3, 0.32, CLOTH['white']!)]));
   }
   const sleeveFrom = top === 'tank' ? t.max[1] : top === 'longsleeve' || top === 'hoodie' ? HAND_TOP : SLEEVE_SHORT;
   const arms = mirrored((s) => {
@@ -32,7 +33,7 @@ export function upperBody(top: string, topColour: number, skin: number): Part[] 
 /** Legs, shoes and the skirt. */
 export function lowerBody(bottom: string, bottomColour: number, shoes: string, shoeColour: number, skin: number): Part[] {
   const shoeTop = SHOE_TOP[shoes] ?? 0.16;
-  const sole = shoeColour === 0xf4f4f0 ? 0x5a5a60 : 0xf4f4f0;
+  const sole = shoeColour === CLOTH['white'] ? CLOTH['grey']! : CLOTH['white']!;
   const legs = mirrored((s) => {
     const l = s > 0 ? BODY.legLeft : BODY.legRight;
     const bone = s > 0 ? 'leg-left' : 'leg-right';

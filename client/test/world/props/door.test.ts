@@ -1,4 +1,4 @@
-import { Texture } from 'three';
+import { Texture, type Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import fixture from '../../fixtures/get_world_demo.json';
 import { toWorld } from '../../../src/domain/mapper';
@@ -60,5 +60,28 @@ describe('PropsLayer', () => {
     expect(finished.length).toBeGreaterThan(0);
     expect(finished).toEqual(wasOpen.filter((p) => p.state.done === true));
     expect(props.update(done)).toEqual([]);
+  });
+});
+
+describe('door leaf', () => {
+  it('swings open at the activity the player stands at, stays shut when locked, closes again', () => {
+    const props = new PropsLayer(new PropRegistry(new DoorFactory()), ctx).build(world, layout);
+    const open = props.all.find((p) => !p.state.locked)!;
+    const leaf = (p: typeof open) => p.root.getObjectByName('prop-leaf')!.parent!;
+    const body = open.root.getObjectByName('prop-body') as Mesh;
+    expect(leaf(open).visible).toBe(false);
+    for (let i = 0; i < 60; i++) props.swing(open.activityId, 1 / 60);
+    expect(leaf(open).rotation.y).toBeGreaterThan(1.2);
+    expect(leaf(open).visible).toBe(true);
+    expect(body.geometry.drawRange.count).toBeLessThan(body.geometry.index!.count);
+    const locked = props.all.find((p) => p.state.locked);
+    if (locked) {
+      for (let i = 0; i < 60; i++) props.swing(locked.activityId, 1 / 60);
+      expect(leaf(locked).rotation.y).toBe(0);
+    }
+    for (let i = 0; i < 90; i++) props.swing(null, 1 / 60);
+    expect(leaf(open).rotation.y).toBe(0);
+    expect(leaf(open).visible).toBe(false);
+    expect(body.geometry.drawRange.count).toBe(Infinity);
   });
 });

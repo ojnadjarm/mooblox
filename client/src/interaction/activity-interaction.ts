@@ -38,6 +38,11 @@ export class ActivityInteraction {
     return this.current ? this.find(this.current.activityId) : null;
   }
 
+  /** Id of the activity whose plot the player stands at (no lookup, cheap every frame). */
+  get nearId(): number | null {
+    return this.current?.activityId ?? null;
+  }
+
   /** Follows the player; call once per frame. */
   update(x: number, z: number): void {
     const next = nearestPlot(this.plots(), x, z, this.current);

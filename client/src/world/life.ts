@@ -321,7 +321,7 @@ function petals(view: WorldView, teardown: (() => void)[]): Mover {
 }
 
 const SKINS = ['a', 'c', 'b', 'd', 'e', 'f', 'g', 'h', 'i'];
-const SHIRTS = [0xe23d2b, 0x1e88e5, 0xf2a33a, 0x8a5bd6, 0x2fa38a, 0xf06292, 0xffd43b, 0x4dabf7, 0x69db7c];
+const SHIRTS = [0xe5484d, 0x2f7fe0, 0xff9a3c, 0x8e5ad8, 0x2fa39a, 0xf07aa8, 0xf6c445, 0x5ed8d2, 0x5db761];
 
 /** NPC kids: the first ones play or sit at the hangouts nearest the spawn, the rest walk the paths. */
 async function kids(view: WorldView, avatars: AvatarFactory, count: number, shadows: boolean): Promise<Mover[]> {

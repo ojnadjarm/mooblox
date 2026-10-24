@@ -18,10 +18,19 @@ class Buffers {
   vertex(p: Vec3, n: Vec3, c: Color, u: number, v: number, bone: number): void {
     this.position.push(p[0], p[1], p[2]);
     this.normal.push(n[0], n[1], n[2]);
-    this.color.push(c.r, c.g, c.b);
+    const k = bakedShade(p[1], n[1]);
+    this.color.push(c.r * (1 - k) + SHADE.r * k, c.g * (1 - k) + SHADE.g * k, c.b * (1 - k) + SHADE.b * k);
     this.uv.push(u, v);
     this.skinIndex.push(bone, 0, 0, 0);
   }
+}
+
+/** Baked shade like the world's (art bible shadow tint, at 60 %): towards the feet and on faces that look down. */
+const SHADE = new Color(0x4b5a8c).multiplyScalar(0.6);
+
+function bakedShade(y: number, ny: number): number {
+  const t = Math.min(1, Math.max(0, y / 0.8));
+  return 0.24 * (1 - t * t * (3 - 2 * t)) + (ny < -0.5 ? 0.12 : 0);
 }
 
 const SOLID = tileUv('solid');

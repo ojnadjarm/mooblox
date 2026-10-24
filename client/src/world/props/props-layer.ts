@@ -52,6 +52,13 @@ export class PropsLayer {
     }
   }
 
+  /** Eases door leaves: the one at activity `near` opens, the rest close. */
+  swing(near: number | null, dt: number): void {
+    for (const prop of this.props.values()) {
+      prop.swing?.(prop.activityId === near, dt);
+    }
+  }
+
   /** Re-reads availability and completion of every prop from a fresh world; returns the props that just became done. */
   update(world: WorldData): Prop[] {
     const activities = activityMap(world);

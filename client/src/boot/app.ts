@@ -397,7 +397,10 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
     interaction.refreshPrompt();
     clock.schedule(world.nextChange);
   });
-  view.onFrame(() => interaction.update(player.body.position.x, player.body.position.z));
+  view.onFrame((dt) => {
+    interaction.update(player.body.position.x, player.body.position.z);
+    view.props.swing(interaction.nearId, dt);
+  });
   new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => goToPlot(view, player, id));
   return interaction;
 }

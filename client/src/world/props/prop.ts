@@ -19,6 +19,8 @@ export interface Prop {
   readonly state: PropState;
   /** Re-reads availability and completion from the activity. */
   update(a: Activity): void;
+  /** Eases a door leaf open while the player stands at it (props with a door only). */
+  swing?(open: boolean, dt: number): void;
   dispose(): void;
 }
 

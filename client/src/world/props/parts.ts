@@ -31,9 +31,23 @@ export class Parts {
     return this;
   }
 
-  mesh(name: string, material: Material): Mesh {
+  /** Primitives collected so far. */
+  get size(): number {
+    return this.list.length;
+  }
+
+  /** Moves another set's primitives in after this one's, shifted by (x, z). */
+  append(other: Parts, x: number, z: number): this {
+    for (const g of other.list.splice(0)) this.list.push(g.translate(x, 0, z));
+    return this;
+  }
+
+  /** Merges everything into one mesh; `userData.head` is the draw count without the last `tail` primitives. */
+  mesh(name: string, material: Material, tail = 0): Mesh {
     const mixed = this.list.some((g) => !g.index);
-    const merged = mergeGeometries(mixed ? this.list.map((g) => (g.index ? g.toNonIndexed() : g)) : this.list, false);
+    const parts = mixed ? this.list.map((g) => (g.index ? g.toNonIndexed() : g)) : this.list;
+    const head = parts.slice(0, parts.length - tail).reduce((n, g) => n + (g.index ? g.index.count : g.getAttribute('position').count), 0);
+    const merged = mergeGeometries(parts, false);
     for (const g of this.list) {
       g.dispose();
     }
@@ -44,6 +58,7 @@ export class Parts {
     mesh.name = name;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    mesh.userData['head'] = head;
     return mesh;
   }
 }

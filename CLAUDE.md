@@ -265,7 +265,11 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `Player` eases velocity, squashes the avatar on landing, `onFeet` -> `player/dust.ts` (instanced puffs; off on low).
     `FollowCamera`: pitch 0.38 (drag tilts), wheel zoom, look-ahead, sight-line probes against `view.collider` (10 Hz,
     nearest 4.5 m). Prompt pops in; `PropsLayer.update` returns newly done props -> gold sparkles. `world/npc-schedule.ts`
-    (walkers pause at path ends, players hop). Gate 78 pass / 6 fail. Door open animation not done.
+    (walkers pause at path ends, players hop). Gate 78 pass / 6 fail.
+  - Round 4: door props swing their leaf open at the player's activity (`PropShape.leaf` builder, `Parts.append` +
+    `mesh(name, mat, tail)` -> `userData.head`: the body draws without the merged leaf only while it swings; `Prop.swing`,
+    `PropsLayer.swing(nearId)`, `ActivityInteraction.nearId`). Creator kids: `CLOTH` in the bible palette, baked shade-tint AO
+    in `character/mesh.ts`; NPC shirts in the same palette. Gate 76 pass / 8 fail under machine load.
 - Gamification phase G4 (T1352-T1355), 2026-10-24, no version bump (play.php + lang only):
   - Wiring: `boot/rewards.ts` `startRewards` (main.ts and the dev page `rewards.html` -> `boot/dev-rewards.ts`, query `?off`,
     `?xp=`, `?weeks=`, `?hat=`, `?pet=`, `?scene=hats`). Off = no HUD, no wardrobe tab, no hats or pets loaded.

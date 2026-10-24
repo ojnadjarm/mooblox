@@ -15,7 +15,16 @@ export interface PropShape {
   readonly sign: { readonly x: number; readonly y: number; readonly z: number; readonly w: number; readonly h: number };
   readonly flag: { readonly x: number; readonly z: number; readonly height: number } | null;
   readonly lock: { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * A door leaf built from its hinge (local +x runs along the closed leaf). It stays merged in the body while shut; while
+   * the player is near it swings as its own mesh and the body draws without it (one extra draw, for that door only).
+   */
+  readonly leaf?: { readonly build: () => Parts; readonly x: number; readonly z: number };
 }
+
+/** Open door angle (rad, away from the viewer) and how fast the leaf eases there (per second). */
+const LEAF_OPEN = 1.3;
+const LEAF_RATE = 7;
 
 const FLAG_W = 0.9;
 const FLAG_H = 0.6;
@@ -30,6 +39,7 @@ export class ActivityProp implements Prop {
   private readonly materials: Material[] = [];
   private readonly hasFlag: boolean;
   private current: PropState = { locked: false, done: null };
+  readonly swing?: (open: boolean, dt: number) => void;
 
   constructor(
     readonly key: string,
@@ -49,7 +59,29 @@ export class ActivityProp implements Prop {
       shape.body.cylinder(0.07, flag.height, Palette.white, flag.x, flag.height / 2, flag.z, 8);
       shape.body.box(0.22, 0.22, 0.22, Palette.gold, flag.x, flag.height + 0.08, flag.z);
     }
-    this.root.add(shape.body.mesh('prop-body', ctx.kit.plastic));
+    const leaf = shape.leaf ? shape.leaf.build() : null;
+    const closed = shape.leaf ? shape.leaf.build() : null;
+    const tail = closed ? closed.size : 0;
+    if (shape.leaf && closed) shape.body.append(closed, shape.leaf.x, shape.leaf.z);
+    const body = shape.body.mesh('prop-body', ctx.kit.plastic, tail);
+    this.root.add(body);
+    if (shape.leaf && leaf) {
+      const hinge = new Group();
+      hinge.position.set(shape.leaf.x, 0, shape.leaf.z);
+      const mesh = leaf.mesh('prop-leaf', ctx.kit.plastic);
+      hinge.add(mesh);
+      hinge.visible = false;
+      this.root.add(hinge);
+      const head = body.userData['head'] as number;
+      this.swing = (open, dt) => {
+        const target = open && !this.current.locked ? LEAF_OPEN : 0;
+        if (target === 0 && hinge.rotation.y === 0) return;
+        hinge.rotation.y += (target - hinge.rotation.y) * (1 - Math.exp(-LEAF_RATE * dt));
+        if (target === 0 && hinge.rotation.y < 0.005) hinge.rotation.y = 0;
+        hinge.visible = hinge.rotation.y > 0;
+        body.geometry.setDrawRange(0, hinge.visible ? head : Infinity);
+      };
+    }
 
     const signMaterial = ctx.kit.textured(ctx.signs.paint(a));
     this.materials.push(signMaterial);
