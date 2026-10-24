@@ -25,6 +25,7 @@ import { CanvasSignPainter } from '../world/props/sign-painter';
 import { Panel } from '../ui/panel';
 import { PerfOverlay } from '../ui/perf-overlay';
 import { ActivityPrompt } from '../ui/prompt';
+import { BookController } from '../ui/book-controller';
 import { TouchControls } from '../ui/touch-controls';
 import { Stage } from '../world/stage';
 
@@ -156,7 +157,18 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
     view.gate.invalidate();
   });
   view.onFrame(() => interaction.update(player.body.position.x, player.body.position.z));
+  new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => goToPlot(view, player, id));
   return interaction;
+}
+
+const STAND_OFF = 1.6;
+
+/** Puts the player in front of an activity's prop, facing it. */
+export function goToPlot(view: WorldView, player: Player, activityId: number): void {
+  const plot = view.layout.zones.flatMap((z) => z.plots).find((p) => p.activityId === activityId);
+  if (plot) {
+    player.teleport(plot.x + Math.sin(plot.facing) * STAND_OFF, plot.z + Math.cos(plot.facing) * STAND_OFF, plot.facing + Math.PI);
+  }
 }
 
 /** Overview camera that keeps the whole island in view, pulling back on portrait screens. */

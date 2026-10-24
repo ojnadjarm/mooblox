@@ -54,6 +54,17 @@ export class Player {
     this.camera.follow(root.position, dt);
   }
 
+  /** Moves the player to (x, z), facing `facing`, with the camera snapped behind. */
+  teleport(x: number, z: number, facing: number): void {
+    this.body.position.set(x, this.spawn.y, z);
+    this.body.velocity.set(0, 0, 0);
+    this.prev.copy(this.body.position);
+    this.facing = facing;
+    this.camera.yaw = facing + Math.PI;
+    this.avatar.root.position.copy(this.body.position);
+    this.camera.follow(this.body.position, 0, true);
+  }
+
   respawn(): void {
     this.body.position.copy(this.spawn);
     this.body.velocity.set(0, 0, 0);

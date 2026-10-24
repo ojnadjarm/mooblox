@@ -25,6 +25,13 @@ async function boot(): Promise<void> {
   for (const m of dto.sections.flatMap((s) => s.modules).filter((x) => x.id === manual)) {
     Object.assign(m, { completion: CompletionTracking.Manual, isautomatic: false });
   }
+  const modules = dto.sections.flatMap((s) => s.modules);
+  for (const m of modules.filter((x) => x.id === Number(params.get('locked')))) {
+    Object.assign(m, { available: false, availableinfo: 'Not available unless: The activity <strong>Moodle logo video</strong> is marked complete' });
+  }
+  for (const m of modules.filter((x) => x.id === Number(params.get('due')))) {
+    m.dates = [{ label: 'Opened:', timestamp: 1792828800 }, { label: 'Closes:', timestamp: 1793433600 }];
+  }
   const gateway = new FakeGateway(dto);
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));
