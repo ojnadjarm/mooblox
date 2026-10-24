@@ -10,9 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "three": "0.186.1"
+    "three": "0.186.1",
+    "three-mesh-bvh": "^0.9.16"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1",
     "@types/three": "0.186.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
