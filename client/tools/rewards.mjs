@@ -77,6 +77,70 @@ const modes = {
     check((await off.evaluate(() => document.querySelectorAll('.mooblox-hud-rewards').length)) === 0, 'rewards off: no HUD built');
     await off.close();
   },
+  async hats() {
+    for (const row of ['', '&row=0', '&row=1']) {
+      const page = await open(1366, 768, `scene=hats${row}`);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(out, `hats${row.replace('&row=', '-row')}-1366.png`) });
+      await page.close();
+    }
+  },
+  async wardrobe() {
+    // Top of the player's bind-space mesh: the head ends at 2.7, hair crowns below 2.95, the cap reaches 3.04.
+    const tris = (page) => page.evaluate(() => {
+      let top = 0;
+      window.mooblox.player.avatar.root.traverse((o) => {
+        if (!o.isSkinnedMesh) return;
+        const p = o.geometry.getAttribute('position');
+        for (let i = 0; i < p.count; i++) top = Math.max(top, p.getY(i));
+      });
+      return Math.round(top * 100) / 100;
+    });
+    for (const [w, h] of WIDTHS) {
+      const page = await open(w, h);
+      await page.click('.mooblox-hud-avatar');
+      await page.click('.mooblox-creator-tab[data-tab="wardrobe"]');
+      await page.waitForSelector('.mooblox-ward-item');
+      const scroll = await page.evaluate(() => document.documentElement.scrollWidth);
+      const tabs = await page.evaluate(() => [...document.querySelectorAll('.mooblox-creator-tab')].map((b) => b.scrollWidth <= b.clientWidth + 1 || `${b.textContent} ${b.scrollWidth}>${b.clientWidth}`));
+      if (!tabs.every((t) => t === true)) console.log(tabs);
+      check(scroll === w && tabs.every((t) => t === true), `${w}: wardrobe fits (scrollW ${scroll}, ${tabs.length} tabs, labels fit)`);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(out, `wardrobe-${w}.png`) });
+      await page.close();
+    }
+    const page = await open(1366, 768);
+    const before = await tris(page);
+    await page.click('.mooblox-hud-avatar');
+    await page.click('.mooblox-creator-tab[data-tab="wardrobe"]');
+    const locked = page.locator('.mooblox-ward-item[data-item="hat-glasses"]');
+    check((await locked.isDisabled()) && (await locked.innerText()).includes('Finish Lava lab to unlock'), `locked item disabled with its sentence ("${(await locked.innerText()).replace(/\s+/g, ' ')}")`);
+    await page.click('.mooblox-ward-item[data-item="hat-cap"]');
+    check((await page.getAttribute('.mooblox-ward-item[data-item="hat-cap"]', 'aria-pressed')) === 'true', 'tap an unlocked hat marks it worn');
+    await page.click('.mooblox-ward-item[data-item="outfit-candy"]');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(out, 'wardrobe-preview-1366.png') });
+    await page.click('.mooblox-creator-save');
+    await page.waitForTimeout(800);
+    const after = await tris(page);
+    const saved = await page.evaluate(async () => (await window.mooblox.gateway.getRewards(window.mooblox.world.courseId)).look);
+    check(before < 2.95 && after > 3, `player wears the hat (mesh top ${before} -> ${after} m)`);
+    check(saved.hat === 'hat-cap' && saved.outfit === 'outfit-candy', `look saved to Moodle (${JSON.stringify(saved)})`);
+    await page.evaluate(() => {
+      const p = window.mooblox.player;
+      p.camera.yaw = p.camera.yaw + Math.PI * 0.85;
+    });
+    await page.waitForTimeout(700);
+    await page.screenshot({ path: join(out, 'hat-world-1366.png') });
+    await page.close();
+    const saved2 = await open(1366, 768, 'hat=hat-cap');
+    check((await tris(saved2)) > 3, 'a saved hat from get_rewards is worn at load');
+    await saved2.close();
+    const off = await open(1366, 768, 'off');
+    await off.click('.mooblox-hud-avatar');
+    check((await off.locator('.mooblox-creator-tab[data-tab="wardrobe"]').count()) === 0, 'rewards off: no Wardrobe tab');
+    await off.close();
+  },
   async levelup() {
     for (const [w, h] of [[1366, 768], [400, 860]]) {
       const page = await open(w, h);

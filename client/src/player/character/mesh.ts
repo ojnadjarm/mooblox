@@ -33,8 +33,12 @@ export function buildGeometry(parts: readonly Part[]): BufferGeometry {
   const b = new Buffers();
   const colour = new Color();
   for (const part of parts) {
-    colour.setHex(part.colour);
     const bone = BONES.indexOf(part.bone);
+    if (part.kind === 'mesh') {
+      addMesh(b, part.positions, part.colours, colour, bone);
+      continue;
+    }
+    colour.setHex(part.colour);
     if (part.kind === 'box') addBox(b, part.min, part.max, colour, bone);
     else if (part.kind === 'spike') addSpike(b, part.min, part.max, part.apex, colour, bone);
     else addQuad(b, part.centre, part.width, part.height, tileUv(part.tile), part.mirror ?? false, colour, bone);
@@ -111,4 +115,21 @@ function addQuad(b: Buffers, centre: Vec3, w: number, h: number, uv: readonly nu
   b.vertex([x + w / 2, y + h / 2, z], [0, 0, 1], c, ur, v1, bone);
   b.vertex([x - w / 2, y + h / 2, z], [0, 0, 1], c, ul, v1, bone);
   b.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+/** Flat-shaded triangles: one face normal per triangle, colours already linear. */
+function addMesh(b: Buffers, p: Float32Array, rgb: Float32Array, c: Color, bone: number): void {
+  const e1 = new Vector3();
+  const e2 = new Vector3();
+  for (let t = 0; t < p.length; t += 9) {
+    e1.set(p[t + 3]! - p[t]!, p[t + 4]! - p[t + 1]!, p[t + 5]! - p[t + 2]!);
+    e2.set(p[t + 6]! - p[t]!, p[t + 7]! - p[t + 1]!, p[t + 8]! - p[t + 2]!);
+    const n = e1.cross(e2).normalize();
+    const base = b.count;
+    for (let v = 0; v < 9; v += 3) {
+      c.setRGB(rgb[t + v]!, rgb[t + v + 1]!, rgb[t + v + 2]!);
+      b.vertex([p[t + v]!, p[t + v + 1]!, p[t + v + 2]!], [n.x, n.y, n.z], c, SOLID_U, SOLID_V, bone);
+    }
+    b.index.push(base, base + 1, base + 2);
+  }
 }

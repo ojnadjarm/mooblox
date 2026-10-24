@@ -38,7 +38,18 @@ export interface QuadPart {
   readonly mirror?: boolean;
 }
 
-export type Part = BoxPart | SpikePart | QuadPart;
+/** A designed model (a hat from `cosmetics/hats.glb`): flat-shaded triangles with linear vertex colours, in bind space. */
+export interface MeshPart {
+  readonly kind: 'mesh';
+  readonly bone: BoneName;
+  /** xyz per vertex, three vertices per triangle. */
+  readonly positions: Float32Array;
+  /** Linear rgb per vertex. */
+  readonly colours: Float32Array;
+  readonly tag?: undefined;
+}
+
+export type Part = BoxPart | SpikePart | QuadPart | MeshPart;
 
 /** Bind-space bounds of the body blocks (Kenney Blocky Characters 2.0 proportions). */
 export const BODY = {
@@ -67,5 +78,5 @@ export function shade(hex: number, k: number): number {
 
 /** Triangles a part adds to the merged mesh. */
 export function triangles(part: Part): number {
-  return part.kind === 'box' ? 12 : part.kind === 'spike' ? 6 : 2;
+  return part.kind === 'box' ? 12 : part.kind === 'spike' ? 6 : part.kind === 'mesh' ? part.positions.length / 9 : 2;
 }

@@ -46,7 +46,7 @@ describe('lang', () => {
   it('has a Moodle string for every item and every rewards UI text', async () => {
     const { readFileSync } = await import('node:fs');
     const lang = readFileSync(new URL('../../../moodle/local/mooblox/lang/en/local_mooblox.php', import.meta.url), 'utf8');
-    const keys = [...Object.keys(ITEM_NAMES), 'levelup_title', 'levelup_unlocked', 'levelup_tryon', 'levelup_skip', 'hud_level', 'hud_xp', 'hud_progress', 'hud_alldone', 'hud_week', 'hud_weeks'];
+    const keys = [...Object.keys(ITEM_NAMES), 'levelup_title', 'levelup_unlocked', 'levelup_tryon', 'levelup_skip', 'hud_level', 'hud_xp', 'hud_progress', 'hud_alldone', 'hud_week', 'hud_weeks', 'wardrobe_tab', 'wardrobe_hat', 'wardrobe_outfit', 'wardrobe_pet', 'wardrobe_none', 'wardrobe_byquest', 'wardrobe_bylevel'];
     expect(keys.filter((k) => !lang.includes(`$string['${k}']`))).toEqual([]);
   });
 });

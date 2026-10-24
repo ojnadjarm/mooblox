@@ -10,23 +10,23 @@ export interface CosmeticArt {
 }
 
 const boxes = (slot: Slot, id: string): CosmeticArt => ({ slot, art: `boxes:${id}`, licence: 'built:boxes' });
-const head = (node: string): CosmeticArt => ({ slot: 'hat', art: `cosmetics/head.glb#${node}`, licence: 'cosmetics/head.glb' });
+const hat = (id: string): CosmeticArt => ({ slot: 'hat', art: `cosmetics/hats.glb#${id}`, licence: 'cosmetics/hats.glb' });
 const outfit = (name: string): CosmeticArt => ({ slot: 'outfit', art: `palette:${name}`, licence: 'kenney-blocky.glb' });
 const pet = (node: string): CosmeticArt => ({ slot: 'pet', art: `cosmetics/pets.glb#${node}`, licence: 'cosmetics/pets.glb' });
 
 export const COSMETICS: Readonly<Record<string, CosmeticArt>> = {
-  'hat-cap': boxes('hat', 'cap'),
-  'hat-beanie': boxes('hat', 'beanie'),
-  'hat-explorer': boxes('hat', 'explorer'),
-  'hat-crown': boxes('hat', 'crown'),
-  'hat-wizard': boxes('hat', 'wizard'),
-  'hat-pirate': boxes('hat', 'pirate'),
-  'hat-chef': boxes('hat', 'chef'),
-  'hat-astronaut': boxes('hat', 'astronaut'),
-  'hat-tophat': boxes('hat', 'tophat'),
-  'hat-party': boxes('hat', 'party'),
-  'hat-glasses': head('aid-glasses'),
-  'hat-sunglasses': head('aid-sunglasses'),
+  'hat-cap': hat('hat-cap'),
+  'hat-beanie': hat('hat-beanie'),
+  'hat-explorer': hat('hat-explorer'),
+  'hat-crown': hat('hat-crown'),
+  'hat-wizard': hat('hat-wizard'),
+  'hat-pirate': hat('hat-pirate'),
+  'hat-chef': hat('hat-chef'),
+  'hat-astronaut': hat('hat-astronaut'),
+  'hat-tophat': hat('hat-tophat'),
+  'hat-party': hat('hat-party'),
+  'hat-glasses': hat('hat-glasses'),
+  'hat-sunglasses': hat('hat-sunglasses'),
   'outfit-lava': outfit('lava'),
   'outfit-ocean': outfit('ocean'),
   'outfit-forest': outfit('forest'),

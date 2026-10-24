@@ -2,6 +2,7 @@ import { AjaxGateway } from '../moodle/ajax-gateway';
 import { keepSessionAlive } from '../moodle/session-keeper';
 import { CourseStore } from '../state/course-store';
 import { createOpenerRegistry } from '../interaction/catalog';
+import { Outfitter } from '../player/attachments';
 import { AvatarKit } from '../player/avatar-kit';
 import { decodeLook, encodeLook } from '../player/look';
 import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
@@ -38,13 +39,14 @@ async function boot(): Promise<void> {
   const avatars = await AvatarKit.load(assets);
   await startLife(view, models, view.quality.tier === 'low' ? null : avatars);
   const look = decodeLook(config.avatar, avatars.bodies.map((b) => b.id));
-  const player = await startPlayer(view, avatars, look);
+  const dressed = new Outfitter(avatars);
+  const player = await startPlayer(view, dressed, look);
   const course = { store, gateway };
   const interaction = startActivities(view, player, createOpenerRegistry(gateway), course);
   const strings = config.strings;
   const keep = (l: typeof look) => gateway.savePreference(AVATAR_PREFERENCE, encodeLook(l));
-  const picker = startAvatarPicker(view, player, avatars, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
-  const rewards = await startRewards(view, interaction, { gateway, courseId: config.courseid, strings });
+  const picker = startAvatarPicker(view, player, dressed, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
+  const rewards = await startRewards(view, interaction, { gateway, courseId: config.courseid, strings, assets, player, outfitter: dressed, picker });
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
   Object.assign(window, { mooblox: { ...view, view, player, interaction, store, guide, picker, rewards } });
 }

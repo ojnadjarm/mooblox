@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 const raw = process.argv[2];
 if (!raw) {
-  console.error('usage: node tools/intake-cosmetics.mjs <raw dir with kenney-cube-pets/, kenney-mini-characters/>');
+  console.error('usage: node tools/intake-cosmetics.mjs <raw dir with kenney-cube-pets/>');
   process.exit(2);
 }
 const root = 'public/assets';
@@ -19,13 +19,6 @@ const PACKS = [
     source: 'https://kenney.nl/assets/cube-pets',
     dir: 'kenney-cube-pets/Models/GLB format',
     files: ['animal-cat', 'animal-dog', 'animal-bunny', 'animal-fox', 'animal-panda', 'animal-penguin'],
-  },
-  {
-    out: 'cosmetics/head.glb',
-    pack: 'Kenney Mini Characters',
-    source: 'https://kenney.nl/assets/mini-characters',
-    dir: 'kenney-mini-characters/Models/GLB format',
-    files: ['aid-glasses', 'aid-sunglasses'],
   },
 ];
 

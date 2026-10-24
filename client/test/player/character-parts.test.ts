@@ -16,7 +16,13 @@ const bounds = (p: Part): Aabb =>
     ? { min: [p.centre[0] - p.width / 2, p.centre[1] - p.height / 2, p.centre[2] - 0.001], max: [p.centre[0] + p.width / 2, p.centre[1] + p.height / 2, p.centre[2] + 0.001] }
     : p.kind === 'spike'
       ? { min: [Math.min(p.min[0], p.apex[0]), p.min[1], Math.min(p.min[2], p.apex[2])], max: [Math.max(p.max[0], p.apex[0]), p.apex[1], Math.max(p.max[2], p.apex[2])] }
-      : { min: p.min, max: p.max };
+      : p.kind === 'mesh'
+        ? meshBounds(p.positions)
+        : { min: p.min, max: p.max };
+const meshBounds = (v: Float32Array): Aabb => {
+  const axis = (k: number) => v.filter((_, i) => i % 3 === k);
+  return { min: [0, 1, 2].map((k) => Math.min(...axis(k))) as unknown as Aabb['min'], max: [0, 1, 2].map((k) => Math.max(...axis(k))) as unknown as Aabb['max'] };
+};
 const HEAD = BODY.head as Aabb;
 const FACE: Aabb = { min: [-0.4, 1.95, 0.39], max: [0.4, 2.415, 0.5] };
 

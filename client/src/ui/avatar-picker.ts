@@ -4,7 +4,7 @@ import { randomLook, withField, type CharacterLook } from '../player/character/l
 import { toCharacter } from '../player/look';
 import { LookHistory } from './creator/history';
 import { CreatorPreview } from './creator/preview';
-import { TABS, type TabId } from './creator/tabs';
+import { TABS } from './creator/tabs';
 import { injectStyle, UI_FONT } from './style';
 
 const CSS = `
@@ -33,8 +33,8 @@ const CSS = `
 .mooblox-creator-tools { position: absolute; z-index: 1; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; gap: 10px; }
 .mooblox-creator-panel { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; background: #fff; border-radius: 24px;
   padding: 12px; box-shadow: 0 10px 30px rgba(0, 30, 70, .18); }
-.mooblox-creator-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.mooblox-creator-tab { min-height: 56px; border-radius: 16px; border: 0; background: #eef4fb; color: #2b2f3a; font: 900 clamp(15px, 1.4vw, 20px) ${UI_FONT};
+.mooblox-creator-tabs { display: flex; gap: 8px; }
+.mooblox-creator-tab { flex: 1 1 0; min-width: max-content; min-height: 56px; border-radius: 16px; border: 0; background: #eef4fb; color: #2b2f3a; font: 900 clamp(15px, 1.4vw, 20px) ${UI_FONT};
   cursor: pointer; touch-action: manipulation; }
 .mooblox-creator-tab[aria-selected="true"] { background: #1e88e5; color: #fff; }
 .mooblox-creator-options { overflow-y: auto; overscroll-behavior: contain; padding: 4px; display: grid; gap: 14px; align-content: start; }
@@ -51,7 +51,7 @@ const CSS = `
   .mooblox-creator-btn { padding: 0 14px; }
 }
 @media (max-width: 420px) {
-  .mooblox-creator-tab { min-height: 48px; }
+  .mooblox-creator-tab { min-height: 48px; padding: 0 2px; font-size: 14px; }
 }
 `;
 
@@ -100,11 +100,23 @@ export const DEFAULT_AVATAR_PICKER_STRINGS: AvatarPickerStrings = {
   creator_field_shoesc: 'Shoes colour',
 };
 
+/** A tab another module adds to the creator (the wardrobe): it edits a draft the preview shows, kept on Save. */
+export interface CreatorTab {
+  readonly id: string;
+  readonly label: string;
+  /** Fills the options panel; `changed` re-renders the preview. */
+  render(into: HTMLElement, changed: () => void): void;
+  /** Keeps the draft on Save; true when it changed what the player wears. */
+  commit(): boolean;
+  /** Drops the draft (on open and Cancel). */
+  revert(): void;
+}
+
 /** What the creator asks of its owner. */
 export interface AvatarPickerActions {
   opened(): void;
   closed(): void;
-  /** The look on Save, to wear now. */
+  /** The look on Save, to wear now (also when only an added tab's draft changed). */
   picked(look: AvatarLook): void;
   /** Called on Save when the look differs from the one last kept. */
   kept(look: AvatarLook): void;
@@ -116,10 +128,12 @@ export class AvatarPicker {
   readonly element: HTMLElement;
   readonly preview: CreatorPreview;
   private readonly history: LookHistory;
-  private readonly tabButtons = new Map<TabId, HTMLButtonElement>();
+  private readonly tabButtons = new Map<string, HTMLButtonElement>();
   private readonly options: HTMLElement;
   private readonly undoButton: HTMLButtonElement;
-  private tab: TabId = 'hair';
+  private tab: string = 'hair';
+  private readonly extra: CreatorTab[] = [];
+  private readonly tabsElement: HTMLElement;
   private keptLook: CharacterLook;
 
   constructor(
@@ -160,14 +174,8 @@ export class AvatarPicker {
     );
     const stage = this.element.querySelector<HTMLElement>('.mooblox-creator-stage')!;
     this.preview = new CreatorPreview(stage, factory);
-    const tabs = this.element.querySelector('.mooblox-creator-tabs')!;
-    for (const t of TABS) {
-      const b = this.button_('mooblox-creator-tab', strings[`creator_${t.id}`], () => this.selectTab(t.id));
-      b.setAttribute('role', 'tab');
-      b.dataset['tab'] = t.id;
-      tabs.appendChild(b);
-      this.tabButtons.set(t.id, b);
-    }
+    this.tabsElement = this.element.querySelector<HTMLElement>('.mooblox-creator-tabs')!;
+    for (const t of TABS) this.tabButton(t.id, strings[`creator_${t.id}`]);
     this.options = this.element.querySelector('.mooblox-creator-options')!;
     this.element.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -176,6 +184,19 @@ export class AvatarPicker {
       }
     });
     host.append(this.button, this.element);
+  }
+
+  /** Adds a tab after the built-in ones. */
+  addTab(tab: CreatorTab): void {
+    this.extra.push(tab);
+    this.tabButton(tab.id, tab.label);
+  }
+
+  /** Opens the creator on tab `id`. */
+  openTab(id: string): void {
+    this.tab = id;
+    if (this.isOpen) this.selectTab(id);
+    else this.open();
   }
 
   /** The look being edited (the saved one while closed). */
@@ -190,6 +211,7 @@ export class AvatarPicker {
   open(): void {
     if (this.isOpen) return;
     this.history.reset(this.keptLook);
+    for (const t of this.extra) t.revert();
     this.element.hidden = false;
     this.button.setAttribute('aria-expanded', 'true');
     this.actions.opened();
@@ -207,10 +229,14 @@ export class AvatarPicker {
     this.preview.stop();
     this.button.setAttribute('aria-expanded', 'false');
     this.button.focus();
+    const dressed = save && this.extra.map((t) => t.commit()).some(Boolean);
+    if (!save) for (const t of this.extra) t.revert();
     if (save && JSON.stringify(look) !== JSON.stringify(this.keptLook)) {
       this.keptLook = look;
       this.actions.picked(look);
       this.actions.kept(look);
+    } else if (dressed) {
+      this.actions.picked(look);
     }
     this.history.reset(this.keptLook);
     this.actions.closed();
@@ -231,11 +257,25 @@ export class AvatarPicker {
     this.mark();
   }
 
-  private selectTab(id: TabId): void {
+  private tabButton(id: string, label: string): void {
+    const b = this.button_('mooblox-creator-tab', label, () => this.selectTab(id));
+    b.setAttribute('role', 'tab');
+    b.dataset['tab'] = id;
+    this.tabsElement.appendChild(b);
+    this.tabButtons.set(id, b);
+  }
+
+  private selectTab(id: string): void {
     this.tab = id;
     for (const [t, b] of this.tabButtons) b.setAttribute('aria-selected', String(t === id));
     this.options.replaceChildren();
-    for (const field of TABS.find((t) => t.id === id)!.fields) {
+    const extra = this.extra.find((t) => t.id === id);
+    if (extra) {
+      extra.render(this.options, () => void this.preview.show(this.current));
+      this.undoButton.disabled = !this.history.canUndo;
+      return;
+    }
+    for (const field of (TABS.find((t) => t.id === id) ?? TABS[0]!).fields) {
       const group = document.createElement('div');
       const label = document.createElement('div');
       label.className = 'mooblox-creator-label';

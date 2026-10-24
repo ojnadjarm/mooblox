@@ -73,6 +73,13 @@ $placeholders = [
     'levelup_title' => '{level}',
     'levelup_tryon' => null,
     'levelup_unlocked' => '{item}',
+    'wardrobe_bylevel' => null,
+    'wardrobe_byquest' => '{quest}',
+    'wardrobe_hat' => null,
+    'wardrobe_none' => null,
+    'wardrobe_outfit' => null,
+    'wardrobe_pet' => null,
+    'wardrobe_tab' => null,
 ];
 foreach (\local_mooblox\rewards\catalog::ids() as $id) {
     $placeholders['item_' . str_replace('-', '_', $id)] = null;

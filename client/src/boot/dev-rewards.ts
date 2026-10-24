@@ -7,13 +7,16 @@ import { isDone } from '../domain/types';
 import { createOpenerRegistry } from '../interaction/catalog';
 import { FakeGateway } from '../moodle/fake-gateway';
 import { AvatarKit, type AvatarLook } from '../player/avatar-kit';
+import { Outfitter } from '../player/attachments';
+import { HatLibrary } from '../player/hats';
+import { COSMETICS } from '../rewards/catalog';
 import { encodeLook } from '../player/look';
 import { Palette } from '../world/palette';
 import { CourseStore } from '../state/course-store';
 import { DEFAULT_AVATAR_PICKER_STRINGS } from '../ui/avatar-picker';
 import { modelIds } from '../world/dressing';
 import { ModelLibrary } from '../world/model-library';
-import { bootTier, startActivities, startAvatarPicker, startPlayer, startWorld } from './app';
+import { bootTier, startActivities, startAvatarPicker, startPlayer, startWorld, type WorldView } from './app';
 import { startRewards } from './rewards';
 
 const ASSETS = '/assets/';
@@ -54,21 +57,59 @@ async function boot(): Promise<void> {
   const dto = JSON.parse(JSON.stringify(fixture).replaceAll(FIXTURE_HOST, location.origin)) as WorldDto;
   const rewards = structuredClone(rewardsFixture) as RewardsDto;
   rewards.enabled = !params.has('off');
+  if (params.has('hat')) {
+    rewards.look.hat = params.get('hat')!;
+    rewards.unlocks.push(rewards.look.hat);
+  }
   const gateway = new DevRewardsGateway(dto, rewards, Number(params.get('xp') ?? rewards.xp));
   const store = new CourseStore();
   store.set(await gateway.getWorld(fixture.courseid));
   const models = await ModelLibrary.load(ASSETS, modelIds(), bootTier() === 'xhigh');
   const view = startWorld(root, store.world!, models);
   const avatars = await AvatarKit.load(ASSETS);
+  if (params.get('scene') === 'hats') {
+    await hatLineup(view, avatars);
+    Object.assign(window, { mooblox: { ...view, view, probe: { ready: true } } });
+    return;
+  }
   const look: AvatarLook = { skin: 'b', tint: Palette.red };
-  const player = await startPlayer(view, avatars, look);
+  const dressed = new Outfitter(avatars);
+  const player = await startPlayer(view, dressed, look);
   const interaction = startActivities(view, player, createOpenerRegistry(gateway), { store, gateway });
   const keep = (l: AvatarLook) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
-  const picker = startAvatarPicker(view, player, avatars, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
+  const picker = startAvatarPicker(view, player, dressed, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
   const weeks = params.has('weeks') ? Number(params.get('weeks')) : null;
-  const rewardsUi = await startRewards(view, interaction, { gateway, courseId: fixture.courseid, strings: {}, weeks: () => weeks });
+  const rewardsUi = await startRewards(view, interaction, { gateway, courseId: fixture.courseid, strings: {}, assets: ASSETS, player, outfitter: dressed, picker, weeks: () => weeks });
   const probe: Record<string, unknown> = { ready: true };
   Object.assign(window, { mooblox: { ...view, view, probe, player, interaction, store, gateway, picker, rewards: rewardsUi } });
+}
+
+/** Every hat on a kid, two rows of six on the plaza, framed close (design review). */
+async function hatLineup(view: WorldView, kit: AvatarKit): Promise<void> {
+  const hats = await HatLibrary.load(ASSETS);
+  const dressed = new Outfitter(kit);
+  dressed.hats = hats;
+  const ids = Object.keys(COSMETICS).filter((id) => COSMETICS[id]!.slot === 'hat');
+  const looks = ['a', 'b', 'e', 'f', 'k', 'n'];
+  const only = new URLSearchParams(location.search).get('row');
+  for (const [i, id] of ids.entries()) {
+    if (only !== null && Math.floor(i / 6) !== Number(only)) continue;
+    dressed.worn = { hat: id, outfit: null, pet: null };
+    const avatar = await dressed.create({ skin: looks[i % looks.length]!, tint: null });
+    const row = Math.floor(i / 6);
+    avatar.root.position.set(((i % 6) - 2.5) * 1.5, 0.02, only !== null ? -1 : -1 - row * 2.2);
+    avatar.root.rotation.y = 0.35;
+    view.stage.add(avatar.root);
+  }
+  view.stopOverview();
+  if (only !== null) {
+    view.stage.camera.position.set(0, 3.3, 4.6);
+    view.stage.camera.lookAt(0, 2.1, -1);
+  } else {
+    view.stage.camera.position.set(0, 3.4, 7.2);
+    view.stage.camera.lookAt(0, 1.4, -2);
+  }
+  view.stage.focusShadow(0, -2, 14);
 }
 
 boot().catch((e: unknown) => console.error('mooblox: rewards dev boot failed', e));
