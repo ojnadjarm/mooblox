@@ -20,7 +20,7 @@ use local_mooblox\rewards\batch_sync;
 use local_mooblox\rewards\course_switch;
 
 /**
- * Re-syncs every user with stored rewards in one course (custom data: courseid), as after a course reset.
+ * Re-syncs every user with stored rewards or activity completions in one course (custom data: courseid).
  *
  * @package    local_mooblox
  * @copyright  2026 Oscar Nadjar <oscar.nadjar@gmail.com>
@@ -34,7 +34,13 @@ class sync_course extends \core\task\adhoc_task {
         if (!$DB->record_exists('course', ['id' => $courseid]) || !course_switch::is_on($courseid)) {
             return;
         }
-        $userids = $DB->get_fieldset('local_mooblox_xp', 'userid', ['courseid' => $courseid]);
+        $sql = "SELECT userid FROM {local_mooblox_xp} WHERE courseid = :c1
+                 UNION
+                SELECT cmc.userid
+                  FROM {course_modules_completion} cmc
+                  JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                 WHERE cm.course = :c2";
+        $userids = $DB->get_fieldset_sql($sql, ['c1' => $courseid, 'c2' => $courseid]);
         batch_sync::run(array_map(fn($userid) => [$courseid, $userid], $userids));
     }
 }
