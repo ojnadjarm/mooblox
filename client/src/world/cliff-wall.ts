@@ -115,13 +115,8 @@ export interface CliffToe {
 
 const lerp = (range: readonly [number, number], t: number) => range[0] + (range[1] - range[0]) * t;
 
-/**
- * The columns round a rim of `radius` from `base` up to `top`: widths fill the circle (less any `gap`) exactly, seeded by `random`;
- * columns reaching into one of the `cuts` are left out (further stairs).
- */
-export function cliffColumns(
-  radius: number, base: number, top: number, random: () => number, size: CliffSize = CLIFF, gap: CliffGap | null = null, cuts: readonly CliffGap[] = [],
-): CliffColumn[] {
+/** The columns round a rim of `radius` from `base` up to `top`: widths fill the circle (less any `gap`) exactly, seeded by `random`. */
+export function cliffColumns(radius: number, base: number, top: number, random: () => number, size: CliffSize = CLIFF, gap: CliffGap | null = null): CliffColumn[] {
   const around = (2 * Math.PI - (gap ? 2 * gap.half : 0)) * radius;
   const widths: number[] = [];
   for (let sum = 0; sum < around; ) {
@@ -140,16 +135,14 @@ export function cliffColumns(
     const face = () => ({ shade: random() * 2 - 1, bulge: lerp(size.bulge, random()), ridge: (random() - 0.5) * 0.8 });
     const slabs: CliffSlab[] = [{ y0: y1 - upperH, y1, out, upper: true, ...face() }];
     const lowTop = y1 - upperH;
-    const strata = random() < size.split ? [lowTop, lowTop - (lowTop - base) * (0.4 + random() * 0.25), base] : [lowTop, base];
-    for (let k = 1; k < strata.length; k++) {
+    const cuts = random() < size.split ? [lowTop, lowTop - (lowTop - base) * (0.4 + random() * 0.25), base] : [lowTop, base];
+    for (let k = 1; k < cuts.length; k++) {
       out += lerp(size.step, random());
-      slabs.push({ y0: strata[k]!, y1: strata[k - 1]!, out, upper: false, ...face() });
+      slabs.push({ y0: cuts[k]!, y1: cuts[k - 1]!, out, upper: false, ...face() });
     }
     const moss = random() < size.moss ? { w: Math.min(w * scale * 0.8, lerp(size.mossWidth, random())), len: lerp(size.mossLength, random()) } : null;
     const toe = random() < size.toe ? { r: lerp(size.toeRadius, random()), bush: random() < size.bush } : null;
-    const half = (a1 - a) / 2;
-    const mid = a + half;
-    if (!cuts.some((c) => Math.abs(Math.atan2(Math.sin(mid - c.at), Math.cos(mid - c.at))) < c.half + half)) columns.push({ a0: a, a1, slabs, moss, toe });
+    columns.push({ a0: a, a1, slabs, moss, toe });
     a = a1;
   }
   return columns;
@@ -162,11 +155,10 @@ export function cliffColumns(
  */
 export function cliffWall(
   radius: number, base: number, top: number, waterY: number, p: LookPalette, random: () => number, size: CliffSize = CLIFF, gap: CliffGap | null = null,
-  cuts: readonly CliffGap[] = [],
 ): { wall: BufferGeometry; toes: CliffToe[] } {
   const parts: BufferGeometry[] = [];
   const toes: CliffToe[] = [];
-  for (const col of cliffColumns(radius, base, top, random, size, gap, cuts)) {
+  for (const col of cliffColumns(radius, base, top, random, size, gap)) {
     const seam = size.seam / 2 / radius;
     const a0 = col.a0 + seam;
     const a1 = col.a1 - seam;
