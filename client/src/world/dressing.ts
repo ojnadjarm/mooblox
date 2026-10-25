@@ -1,6 +1,7 @@
 import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import type { Landmark } from './landmarks/landmarks';
 import { FOUNTAIN_LIP, FOUNTAIN_STEP, tieredFountain } from './landmarks/fountain';
+import { gardenRoom, HEDGE_THICK, roomReach, ROOMS, type RoomSize } from './landmarks/garden-room';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { box } from './landmarks/shapes';
 import { cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
@@ -41,6 +42,9 @@ const HEDGE_STEP = 1.5;
 const HEDGE_RUN = 6;
 const HEDGE_CYCLE = 9;
 const HUB_AREA = 22 * 22;
+const ROOM_SAMPLES = ROOMS.map(roomFootprint);
+/** Garden room sites tried per room, most open first (each try tests the whole footprint). */
+const ROOM_TRIES = 80;
 /** Spawn plaza frame: planter ring just outside the paving, openings (half width), runs and walk-through gaps along the rim (m). */
 const FRAME: FrameRing = { r0: PLAZA + 0.1, r1: PLAZA + 1.25, h: 0.48 };
 const FRAME_OPEN = 2.5;
@@ -302,6 +306,8 @@ class Designer {
   private readonly random: () => number;
   /** Wayside stops draw from their own stream so the rest of the world keeps its seeded layout. */
   private readonly wayRandom: () => number;
+  /** Garden rooms draw from their own stream too. */
+  private readonly roomRandom: () => number;
   private district!: District;
 
   constructor(
@@ -312,6 +318,7 @@ class Designer {
   ) {
     this.random = seededRandom(seed ^ 0x2545f491);
     this.wayRandom = seededRandom(seed ^ 0x5eed57a1);
+    this.roomRandom = seededRandom(seed ^ 0x6a4d3e11);
     this.themes = pickThemes(layout.zones.map((z) => z.plots.map((pl) => purposeOf?.(pl.activityId) ?? ''))).map((t) => DISTRICT_THEMES[t]);
     for (const z of layout.zones) this.spans.push(span(z.anchor, z));
     for (const l of layout.links) this.spans.push(span(layout.hubs[l.from]!, layout.hubs[l.to]!));
@@ -354,6 +361,8 @@ class Designer {
       this.islandCliff(z);
       this.bridge(z.anchor, z);
       this.zone(z, i);
+      const sites = this.roomSites(z);
+      for (let n = 0; n < Math.round(2 + (z.radius * z.radius) / HUB_AREA); n++) this.gardenRoom(n, sites);
       this.themed(z, this.theme.corners, Math.max(1, Math.round((z.radius * z.radius) / 120)));
       const stops = this.waysides(z, this.paths.filter((s) => Math.hypot(s.bx - z.x, s.bz - z.z) <= z.radius), []);
       this.fillIsland(z, 0, stops);
@@ -795,6 +804,83 @@ class Designer {
       this.life.push({ kind: 'boat', id: 'pirate/boat-row-small', x: c.x + dx * t + dz * off, y: WATER_Y - 0.15, z: c.z + dz * t - dx * off, yaw, height: 1.1 });
       return;
     }
+  }
+
+  /** Garden room `n` of a district (district concept) on its widest free lawn, open towards its nearest walk; none when no lawn is wide enough. */
+  private gardenRoom(n: number, sites: RoomSites): void {
+    let best = null;
+    let k = 0;
+    for (; k < ROOMS.length && !best; k++) best = sites.find(ROOM_SAMPLES[k]!);
+    if (!best) return;
+    const size = ROOMS[k - 1]!;
+    const { x, z: zz, face } = best;
+    const c = Math.cos(face);
+    const sn = Math.sin(face);
+    const at = (dx: number, dz: number): [number, number] => [x + dx * c + dz * sn, zz - dx * sn + dz * c];
+    const reading = (this.theme.id === 'library' || this.theme.id === 'arts') === (n % 2 === 0);
+    const room = gardenRoom(reading ? 'reading' : 'parterre', size, this.p, this.theme.accent, this.roomRandom);
+    for (const g of [room.hedges, room.inside]) this.district.terrain.push({ geometry: g.rotateY(face).translate(x, 0, zz), solid: true, detail: false });
+    for (const w of room.walls) {
+      const [wx, wz] = at(w.x, w.z);
+      this.obstacles.push({ x: wx, z: wz, r: w.r });
+    }
+    const [tx, tz] = at(room.tree.x, room.tree.z);
+    this.model(this.roomRandom() < 0.5 ? 'nature/tree_oak' : 'nature/tree_detailed', tx, 0, tz, this.roomRandom() * 6, 4.4, { sway: true, solid: true, ground: true, tint: LEAF_TINT });
+    this.obstacles.push({ x: tx, z: tz, r: 0.5 });
+    if (room.bench) {
+      const [bx, bz] = at(room.bench.x, room.bench.z);
+      this.model('town/stall-bench', bx, 0, bz, face + room.bench.yaw, 0.55, { solid: true, ground: true });
+      this.obstacles.push({ x: bx, z: bz, r: 0.5 });
+      this.hangouts.push({ kind: 'sit', x: bx, z: bz, face: face + Math.PI / 2, seat: 0.55 });
+    }
+    for (const s of room.seats) {
+      const [sx, sz] = at(s.x, s.z);
+      this.hangouts.push({ kind: 'sit', x: sx, z: sz, face: face + s.face });
+    }
+    this.reserve(x, zz, roomReach(size));
+  }
+
+  /**
+   * Free spots on a district for its garden rooms, most open lawn round them first (ties nearest a walk); `find` gives the first where a
+   * room's `samples` all fit on what is free now, its front towards the nearest walk or else the island centre.
+   */
+  private roomSites(z: Zone): RoomSites {
+    const walks = this.paths.filter((s) => Math.hypot(s.bx - z.x, s.bz - z.z) <= z.radius);
+    const bridges = [...this.landings, ...this.walks].filter((s) => segmentDistance(z.x, z.z, s) < z.radius + 4);
+    // free(x, z, 0.3, 0.2) on this island alone, with only its own bridges: the search makes thousands of calls.
+    const clear = (x: number, zz: number, r = 0) =>
+      Math.hypot(x - z.x, zz - z.z) < z.radius - 1.65 - r && !this.onPlot(x, zz, 1.35 + r) && !this.pathIndex.within(x, zz, 1.45 + r) &&
+      !this.near(x, zz, 0.15 + r) && bridges.every((s) => segmentDistance(x, zz, s) >= DECK_HALF + 1.55 + r);
+    // Every room covers a disc this wide round its centre, so a site must be clear that far whatever way it faces.
+    const inner = Math.min(...ROOMS.map((r) => Math.min(r.w, r.d) / 2 + HEDGE_THICK / 2));
+    const sites: { x: number; z: number; room: number; walk: number; to: { x: number; z: number } }[] = [];
+    for (let dx = -z.radius; dx <= z.radius; dx++) {
+      for (let dz = -z.radius; dz <= z.radius; dz++) {
+        const x = z.x + dx;
+        const zz = z.z + dz;
+        if (Math.hypot(dx, dz) > z.radius - 1.65 - inner || !clear(x, zz, inner)) continue;
+        let [lo, hi] = [inner, 6.5];
+        while (hi - lo > 0.5) {
+          const mid = Math.round(lo + hi) / 2;
+          if (this.near(x, zz, mid)) hi = mid;
+          else lo = mid;
+        }
+        const to = nearestOn(walks, x, zz) ?? { x: z.x, z: z.z, d: 0 };
+        sites.push({ x, z: zz, room: lo, walk: to.d, to });
+      }
+    }
+    sites.sort((a, b) => b.room - a.room || a.walk - b.walk);
+    return {
+      find: (samples) => {
+        for (const { x, z: zz, to } of sites.slice(0, ROOM_TRIES)) {
+          const face = [Math.atan2(to.x - x, to.z - zz), Math.atan2(z.x - x, z.z - zz)].find((f) =>
+            samples.every(([px, pz]) => clear(x + px * Math.cos(f) + pz * Math.sin(f), zz - px * Math.sin(f) + pz * Math.cos(f))),
+          );
+          if (face !== undefined) return { x, z: zz, face };
+        }
+        return null;
+      },
+    };
   }
 
   /** Runs of clipped hedge just inside the shore, open where the bridge lands. */
@@ -1356,6 +1442,38 @@ function playground(kind: number, main: number, second: number, wood: number): {
       [new BoxGeometry(0.06, 0.32, 0.36), second, 1.2, 0.78, 0],
     ],
   };
+}
+
+/** Ranked garden room sites of one district (`Designer.roomSites`). */
+interface RoomSites {
+  find(samples: readonly (readonly [number, number])[]): { x: number; z: number; face: number } | null;
+}
+
+/** The point on `walks` nearest (x, z) and its distance, or null with no walks. */
+function nearestOn(walks: readonly Segment[], x: number, z: number): { x: number; z: number; d: number } | null {
+  let best: { x: number; z: number; d: number } | null = null;
+  for (const s of walks) {
+    const lx = s.bx - s.ax;
+    const lz = s.bz - s.az;
+    const t = Math.max(0, Math.min(1, ((x - s.ax) * lx + (z - s.az) * lz) / (lx * lx + lz * lz || 1)));
+    const px = s.ax + lx * t;
+    const pz = s.az + lz * t;
+    const d = Math.hypot(px - x, pz - z);
+    if (!best || d < best.d) best = { x: px, z: pz, d };
+  }
+  return best;
+}
+
+/** Sample points (room-local) over a garden room's ground, hedges included, at most 0.75 m apart, outermost first. */
+function roomFootprint(size: RoomSize): readonly (readonly [number, number])[] {
+  const hx = size.w / 2 + HEDGE_THICK / 2;
+  const hz = size.d / 2 + HEDGE_THICK / 2;
+  const nx = Math.ceil((2 * hx) / 0.75);
+  const nz = Math.ceil((2 * hz) / 0.75);
+  const out: [number, number][] = [];
+  for (let i = 0; i <= nx; i++) for (let k = 0; k <= nz; k++) out.push([-hx + (2 * hx * i) / nx, -hz + (2 * hz * k) / nz]);
+  // Rims first: a site that does not fit mostly fails at its edge.
+  return out.sort((a, b) => Math.hypot(b[0] / hx, b[1] / hz) - Math.hypot(a[0] / hx, a[1] / hz));
 }
 
 function span(from: Circle, to: Circle): Segment {
