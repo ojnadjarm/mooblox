@@ -69,6 +69,30 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
 /** Kit models whose bark and clipped leaves the colour heuristic cannot tell apart from planks and lawn: tagged at bake. */
 export const TAGGED_MODELS = /tree|palm|hedge/;
 
+/** The model axis its deck planks run along (bridge boards cross it on x, dock planks run its length on z); null = no grain tag. */
+export function grainAxis(id: string): 'x' | 'z' | null {
+  return /bridge/.test(id) ? 'x' : /platform-dock/.test(id) ? 'z' : null;
+}
+
+/** Added to a surface id: the atlas runs along the grain axis carried in the vertex normal's tilt (`grainTops`). */
+export const GRAIN = 32;
+
+/** Tilt of a flat top's normal toward its grain axis: small enough to leave the shading alone, it turns with the placement's yaw. */
+export const GRAIN_TILT = 0.02;
+
+/** Marks the flat upward faces of a tagged geometry: normal tilted toward the grain axis, surface id + `GRAIN`. */
+export function grainTops(geometry: BufferGeometry, axis: 'x' | 'z'): BufferGeometry {
+  const nrm = geometry.getAttribute('normal');
+  const srf = geometry.getAttribute('surface');
+  const up = Math.sqrt(1 - GRAIN_TILT * GRAIN_TILT);
+  for (let i = 0; i < nrm.count; i++) {
+    if (nrm.getY(i) < 0.999) continue;
+    nrm.setXYZ(i, axis === 'x' ? GRAIN_TILT : 0, up, axis === 'z' ? GRAIN_TILT : 0);
+    srf.setX(i, srf.getX(i) + GRAIN);
+  }
+  return geometry;
+}
+
 /** Writes a `surface` attribute (one float per vertex) from the geometry's vertex colours. */
 export function tagSurface(geometry: BufferGeometry, id: string): BufferGeometry {
   const col = geometry.getAttribute('color');

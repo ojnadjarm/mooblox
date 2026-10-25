@@ -1,6 +1,6 @@
-import { BufferAttribute, BufferGeometry, Color } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { Surface, surfaceOf, tagSurface, TAGGED_MODELS } from '../../src/world/surfaces';
+import { GRAIN, grainAxis, grainTops, Surface, surfaceOf, tagSurface, TAGGED_MODELS } from '../../src/world/surfaces';
 
 const lin = (hex: number): [number, number, number] => {
   const c = new Color(hex);
@@ -33,6 +33,23 @@ describe('surfaces', () => {
   it('tags trees, palms and hedges at bake, not planks or bushes', () => {
     for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm']) expect(TAGGED_MODELS.test(id)).toBe(true);
     for (const id of ['town/stall-bench', 'nature/plant_bush', 'nature/log', 'suburb/building-type-a']) expect(TAGGED_MODELS.test(id)).toBe(false);
+  });
+
+  it('marks flat tops of bridge decks and docks with a grain that turns with the yaw', () => {
+    expect(grainAxis('nature/bridge_center_wood')).toBe('x');
+    expect(grainAxis('pirate/structure-platform-dock')).toBe('z');
+    for (const id of ['town/stall-bench', 'nature/tree_oak']) expect(grainAxis(id)).toBeNull();
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(6), 3));
+    g.setAttribute('normal', new BufferAttribute(new Float32Array([0, 1, 0, 1, 0, 0]), 3));
+    g.setAttribute('color', new BufferAttribute(new Float32Array([...lin(0xa0703f), ...lin(0xa0703f)]), 3));
+    grainTops(tagSurface(g, 'nature/bridge_center_wood'), 'x');
+    expect(Array.from(g.getAttribute('surface').array)).toEqual([Surface.wood + GRAIN, Surface.wood]);
+    g.applyMatrix4(new Matrix4().makeRotationY(0.6));
+    const n = g.getAttribute('normal');
+    expect(Math.atan2(-n.getZ(0), n.getX(0))).toBeCloseTo(0.6, 5);
+    expect(n.getY(0)).toBeGreaterThan(0.999);
+    expect(n.getX(1)).toBeCloseTo(Math.cos(0.6), 5);
   });
 
   it('writes one surface value per vertex', () => {

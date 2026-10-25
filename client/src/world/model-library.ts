@@ -1,7 +1,7 @@
 import { Box3, BufferAttribute, BufferGeometry, Color, Matrix4, Mesh, SRGBColorSpace, Vector2, type MeshStandardMaterial, type Texture } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { TAGGED_MODELS, tagSurface } from './surfaces';
+import { grainAxis, grainTops, TAGGED_MODELS, tagSurface } from './surfaces';
 
 /** One CC0 model baked to a single vertex-coloured, non-indexed geometry standing on y = 0. */
 export interface BakedModel {
@@ -28,6 +28,7 @@ export class ModelLibrary {
         node.removeFromParent();
         const baked = lib.bake(node);
         if (TAGGED_MODELS.test(id)) tagSurface(baked.geometry, id);
+        else if (grainAxis(id)) grainTops(tagSurface(baked.geometry, id), grainAxis(id)!);
         lib.models.set(id, baked);
       }),
     );

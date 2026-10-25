@@ -17,7 +17,7 @@ import {
   type Texture,
 } from 'three';
 import { surfaceAtlas } from './surface-atlas';
-import { ATLAS_LAYERS, LAWN_TONE, Surface } from './surfaces';
+import { ATLAS_LAYERS, GRAIN, LAWN_TONE, Surface } from './surfaces';
 
 /** Rendering tier the kit builds its materials for; `rich` adds world-space detail textures (xhigh). */
 export type MaterialTier = 'standard' | 'low' | 'rich';
@@ -204,7 +204,7 @@ function withDetail(m: MeshStandardMaterial, detail: { a: { value: Texture }; b:
       .replace('#include <common>', `#include <common>\n${fromAttribute ? 'attribute float surface;' : ''}\nflat varying float vSurface;\nvarying vec3 vDetailPos;\nvarying vec3 vDetailNormal;`)
       .replace(
         '#include <worldpos_vertex>',
-        `#include <worldpos_vertex>\nvDetailPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvDetailNormal = normalize(mat3(modelMatrix) * objectNormal);\nvSurface = ${fromAttribute ? 'surface' : '-1.0'};`,
+        `#include <worldpos_vertex>\nvDetailPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvDetailNormal = normalize(mat3(modelMatrix) * objectNormal);\nvSurface = ${fromAttribute ? `mod(surface, ${GRAIN}.0)` : '-1.0'};`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -261,7 +261,8 @@ const glslFloats = (k: 'metres' | 'strength'): string =>
 
 /**
  * The texture language on every tier: the vertex picks its atlas layer (the `surface` attribute where a builder tagged
- * it, else from its colour and slope; brick facing up is paving), maps it by the dominant axis of the object-space normal and fades it with distance;
+ * it, else from its colour and slope; brick facing up is paving), maps it by the dominant axis of the object-space normal (`GRAIN` tops along
+ * their tilted normal) and fades it with distance;
  * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it), lawns a second for broad tone swathes. No extra draws.
  */
 function withAtlas(m: Material, atlas: { value: DataArrayTexture | null }, key: string): void {
@@ -303,11 +304,15 @@ float atlasLayer(vec3 lin, float ny) {
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-vAtlasLayer = surface > 0.5 ? surface : atlasLayer(color.rgb, normalize(objectNormal).y);
+bool atlasGrain = surface > ${GRAIN - 0.5};
+float atlasS = atlasGrain ? surface - ${GRAIN}.0 : surface;
+vAtlasLayer = atlasS > 0.5 ? atlasS : atlasLayer(color.rgb, normalize(objectNormal).y);
 if (abs(vAtlasLayer - ${Surface.brick}.0) < 0.5 && normalize(objectNormal).y > 0.7) vAtlasLayer = ${Surface.floor}.0;
 int atlasI = int(vAtlasLayer + 0.5);
 vec3 atlasN = abs(objectNormal);
-vAtlasUv = (atlasN.y >= max(atlasN.x, atlasN.z) ? position.xz : (atlasN.x >= atlasN.z ? vec2(position.z, -position.y) : vec2(position.x, -position.y))) * ATLAS_SCALE[atlasI];
+vec2 atlasG = atlasGrain ? normalize(objectNormal.xz) : vec2(1.0, 0.0);
+vec2 atlasTop = vec2(dot(position.xz, atlasG), dot(position.xz, vec2(-atlasG.y, atlasG.x)));
+vAtlasUv = (atlasN.y >= max(atlasN.x, atlasN.z) ? atlasTop : (atlasN.x >= atlasN.z ? vec2(position.z, -position.y) : vec2(position.x, -position.y))) * ATLAS_SCALE[atlasI];
 vAtlasK = ATLAS_STRENGTH[atlasI];
 vec3 atlasW = (modelMatrix * vec4(position, 1.0)).xyz;
 vLawnUv = mat2(0.8, 0.6, -0.6, 0.8) * atlasW.xz * ${(1 / LAWN_TONE.metres).toFixed(5)};
