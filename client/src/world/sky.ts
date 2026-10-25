@@ -42,7 +42,7 @@ vec3 skyColour(vec3 dir) {
   vec3 horizon = mix(skyHorizon, skyGlow, pow(toSun, 5.0) * 0.8);
   vec3 c = mix(horizon, skyUpper, smoothstep(0.0, 0.2, e));
   c = mix(c, skyZenith, smoothstep(0.18, 0.8, e));
-  vec3 sea = mix(skySeaHorizon, skySea, smoothstep(0.004, 0.14, -e));
+  vec3 sea = mix(skySeaHorizon, skySea, 1.0 - exp(e * 22.0));
   c = e >= 0.0 ? c : mix(skyLine, sea, smoothstep(0.0, 0.006, -e));
   float s = max(dot(dir, skySun), 0.0);
   return c + skyGlow * (pow(s, 24.0) * 0.22 * step(-0.02, e));

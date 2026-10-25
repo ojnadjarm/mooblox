@@ -6,7 +6,7 @@ import type { Look } from './look';
 const MAX_ISLANDS = 48;
 const SHORE_PAD = 1.6;
 
-/** Stylised water: turquoise-to-cobalt shore gradient (three stops), animated foam band, ripple lines, sky fresnel and sun glint. */
+/** Stylised water: turquoise-to-cerulean shore gradient (three stops), foam band, ripples, sky fresnel, sun glint, paling with distance. */
 export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMaterial {
   const list = Array.from({ length: MAX_ISLANDS }, (_, i) => {
     const c = islands[i];
@@ -86,6 +86,8 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
+        float air = smoothstep(60.0, 700.0, length(cameraPosition - vWorld)) * 0.75;
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSky, 1.0)).rgb, air);
       }`,
   });
 }
