@@ -73,6 +73,7 @@ async function boot(): Promise<void> {
     view.follow({ x: shot.at.x, z: shot.at.z });
     view.stage.camera.position.set(shot.eye.x, shot.eye.y, shot.eye.z);
     view.stage.camera.lookAt(shot.at.x, shot.at.y, shot.at.z);
+    if (shot.shift) view.stage.camera.setViewOffset(1000, 1000, 0, shot.shift * 1000, 1000, 1000);
     view.stage.focusShadow(shot.at.x, shot.at.z, 40);
   } else if (scene !== 'overview') {
     const tour = params.get('walk') === 'tour';

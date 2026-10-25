@@ -95,6 +95,13 @@ describe('campus layout and dressing for any course shape', () => {
         const unreached = layout.zones.flatMap((z) => z.plots).filter((p) => !seen[cell(p.x, p.z)]);
         expect(unreached.map((p) => p.activityId)).toEqual([]);
       });
+
+      it('keeps every market stall out of the walk grid', () => {
+        const walk = new WalkGrid(layout, dressing);
+        const stalls = dressing.districts.flatMap((d) => d.placements).filter((p) => p.id === 'town/stall-red' || p.id === 'town/stall-green');
+        const open = stalls.filter((s) => [0, 0.6, 1.15].some((r) => [0, 1, 2, 3].some((k) => walk.grid[walk.cell(s.x + r * Math.cos(k * Math.PI / 2 + s.yaw), s.z + r * Math.sin(k * Math.PI / 2 + s.yaw))])));
+        expect(open.map((s) => `${s.x.toFixed(1)},${s.z.toFixed(1)}`)).toEqual([]);
+      });
     });
   }
 });

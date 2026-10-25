@@ -12,6 +12,8 @@ export interface RecipeItem {
   /** Yaw relative to the cluster's facing; omitted = random. */
   readonly yaw?: number;
   readonly solid?: boolean;
+  /** Ground radius (m) a solid blocks when wider than a trunk (default: its reach, at most 0.5). */
+  readonly block?: number;
   readonly sway?: boolean;
   readonly detail?: boolean;
   readonly minor?: boolean;
@@ -113,7 +115,7 @@ export function recipe(kind: RecipeKind, random: () => number): Recipe {
   if (kind === 'stallStop') {
     return {
       items: [
-        { id: random() < 0.5 ? 'town/stall-red' : 'town/stall-green', dx: 0, dz: -0.4, height: 2.6, yaw: 0, solid: true },
+        { id: random() < 0.5 ? 'town/stall-red' : 'town/stall-green', dx: 0, dz: -0.4, height: 2.6, yaw: 0, solid: true, block: 1.05 },
         { id: 'pirate/barrel', dx: -1.9, dz: 0.2, yaw: random() * 6, height: 0.8, solid: true, detail: true },
         { id: 'pirate/crate', dx: 1.9, dz: 0.3, height: 0.65, yaw: random() * 0.6, solid: true, detail: true },
         { id: random() < 0.5 ? 'town/banner-red' : 'town/banner-green', dx: -1.8, dz: -1.4, height: 2.2, yaw: 0, detail: true },

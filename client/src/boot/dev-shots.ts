@@ -6,6 +6,8 @@ import { CAMPUS } from '../world/look';
 export interface Shot {
   readonly eye: { readonly x: number; readonly y: number; readonly z: number };
   readonly at: { readonly x: number; readonly y: number; readonly z: number };
+  /** Lens shift: the frame slides down by this share of its height (verticals stay upright, the horizon rises). */
+  readonly shift?: number;
 }
 
 /** The concept cameras of the art bible (`hub.jpg`, `district.jpg`, `shore.jpg`) rebuilt on any course, plus a sunlit hub cliff. */
@@ -41,10 +43,10 @@ export function conceptShot(name: ShotName, layout: WorldLayout, dressing: Dress
     const tower = dressing.focus ?? { x: hub.x, z: hub.z - 1 };
     const [ux, uz] = unit(hub.x - tower.x, hub.z - tower.z);
     const r = hub.radius;
-    return {
-      eye: { x: hub.x + ux * r * 0.95 - uz * r * 0.3, y: r * 0.62, z: hub.z + uz * r * 0.95 + ux * r * 0.3 },
-      at: { x: hub.x - ux * r * 0.3, y: 3, z: hub.z - uz * r * 0.3 },
-    };
+    // Nearly level with a shifted lens, as the concept: upright tower, sky over the top third, the plaza below.
+    const eye = { x: hub.x + ux * r * 1.3, y: r * 0.6, z: hub.z + uz * r * 1.3 };
+    const at = { x: hub.x - ux * r * 0.3, z: hub.z - uz * r * 0.3 };
+    return { eye, at: { ...at, y: eye.y - Math.tan(0.05) * Math.hypot(at.x - eye.x, at.z - eye.z) }, shift: 0.17 };
   }
   const picks = name === 'district' ? DISTRICT_PICK : SHORE_PICK;
   const marks = dressing.landmarks.filter((m) => m.theme !== 'hub');

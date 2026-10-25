@@ -980,7 +980,7 @@ class Designer {
       const ix = x + it.dx * cs + it.dz * sn;
       const iz = z - it.dx * sn + it.dz * cs;
       if (it.solid && y < 1) {
-        const r = Math.min(0.5, this.reach(it.id, it.height));
+        const r = it.block ?? Math.min(0.5, this.reach(it.id, it.height));
         if (this.occ.hits(ix, iz, r)) continue;
         this.occ.add(ix, iz, r);
         this.obstacles.push({ x: ix, z: iz, r });
