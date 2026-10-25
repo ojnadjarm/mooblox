@@ -1,6 +1,6 @@
 import type { Stage } from '../world/stage';
 import type { GpuTimer } from './gpu-timer';
-import { DynamicResolution, QUALITY, lowerTier, pixelRatio, startScale, type QualityTier } from './quality';
+import { DynamicResolution, QUALITY, lowerTier, pixelRatio, scaleFloor, startScale, type QualityTier } from './quality';
 
 /** Where a tier step-down is remembered for the next visit. */
 export type TierMemory = (tier: QualityTier) => void;
@@ -17,6 +17,7 @@ export class QualityManager {
   /** Newest frame GPU time (ms), null without a GPU timer or before its first result. */
   gpuMs: number | null = null;
   private readonly gpuDone: number[] = [];
+  private warmed = false;
 
   constructor(
     private readonly stage: Stage,
@@ -29,12 +30,12 @@ export class QualityManager {
     private readonly work: () => number = frameWork,
     /** Times each frame's render pass (`begin` .. `frame`); null = frame times only. */
     private readonly timer: GpuTimer | null = null,
-    /** Canvas pixels the visit's first frames may draw (see `pixelBudget`): a bigger canvas starts scaled down, grows when GPU timings allow. */
+    /** Canvas pixels the visit's first frames may draw (see `pixelBudget`): a bigger canvas starts scaled down (its floor too), grows when GPU timings allow. */
     budget = Infinity,
   ) {
-    this.dynamic = this.governor(current);
-    const host = stage.canvasHost;
-    if (!software) this.dynamic.scale = startScale(current, host.clientWidth * host.clientHeight, window.devicePixelRatio, budget);
+    const px = stage.canvasHost.clientWidth * stage.canvasHost.clientHeight;
+    this.dynamic = this.governor(current, software ? QUALITY[current].minScale : scaleFloor(current, px, window.devicePixelRatio, budget));
+    if (!software) this.dynamic.scale = startScale(current, px, window.devicePixelRatio, budget);
     this.apply();
   }
 
@@ -71,6 +72,7 @@ export class QualityManager {
     }
     if (frameMs <= 0) return;
     const moved = this.dynamic.sample(frameMs, this.work());
+    if (!this.warmed && this.dynamic.floorStrain) this.warmLower();
     const lower = this.dynamic.starved && (this.remember || this.dynamic.gpuFloor) ? lowerTier(this.current) : null;
     if (lower) {
       this.remember?.(lower);
@@ -80,9 +82,16 @@ export class QualityManager {
     }
   }
 
-  private governor(tier: QualityTier): DynamicResolution {
-    const d = new DynamicResolution(QUALITY[tier].minScale);
-    if (this.software) d.scale = QUALITY[tier].minScale;
+  /** A post tier at its floor compiles the next tier's straight-to-canvas programs ahead of a step (linked in the step's frame, a 50-300 ms hitch). */
+  private warmLower(): void {
+    this.warmed = true;
+    const lower = lowerTier(this.current);
+    if (lower && QUALITY[this.current].post && !QUALITY[lower].post) this.stage.warmScreen();
+  }
+
+  private governor(tier: QualityTier, floor = QUALITY[tier].minScale): DynamicResolution {
+    const d = new DynamicResolution(floor);
+    if (this.software) d.scale = floor;
     return d;
   }
 

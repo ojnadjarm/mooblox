@@ -111,6 +111,15 @@ export class Stage {
     this.post?.setSize(w, h, pixelRatio);
   }
 
+  /** Compiles the scene's programs for drawing straight to the canvas (tone mapping and colour space move into them), so a later `dropPost` links none in its frame. */
+  warmScreen(): void {
+    if (!this.post) return;
+    const target = this.renderer.getRenderTarget();
+    this.renderer.setRenderTarget(null);
+    void this.renderer.compileAsync(this.scene, this.camera);
+    this.renderer.setRenderTarget(target);
+  }
+
   /** Renders straight to the canvas from now on (a tier step-down); the grade's vignette moves to a CSS overlay. */
   dropPost(): void {
     if (!this.post) return;

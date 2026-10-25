@@ -11,8 +11,12 @@ function fakeStage() {
     resize: (r: number) => void ratios.push(r),
     sun: { castShadow: false, shadow: { map: null, mapSize: { x: 0, set(x: number) { this.x = x; } } } },
     dropPost: () => {},
+    warms: 0,
+    warmScreen() {
+      this.warms++;
+    },
   };
-  return { stage: stage as unknown as Stage, ratios };
+  return { stage: stage as unknown as Stage & { warms: number }, ratios };
 }
 
 (globalThis as { window?: unknown }).window ??= { devicePixelRatio: 1 };
@@ -28,9 +32,9 @@ describe('QualityManager', () => {
     const { stage, ratios } = fakeStage();
     expect(new QualityManager(stage, 'high', null, false, () => 2, null, 2560 * 1440).dynamic.scale).toBe(1);
     expect(new QualityManager(stage, 'high', null, false, () => 2, null, 1.6e6).dynamic.scale).toBe(0.65);
-    expect(new QualityManager(stage, 'high', null, false, () => 2, null, 1e6).dynamic.scale).toBe(QUALITY.high.minScale);
+    expect(new QualityManager(stage, 'high', null, false, () => 2, null, 1e6).dynamic.scale).toBe(0.5);
     const small = new QualityManager(stage, 'high', null, false, () => 2, null, 1e6);
-    expect(ratios.at(-1)).toBe(QUALITY.high.minScale);
+    expect(ratios.at(-1)).toBe(0.5);
     small.setTier('medium');
     expect(small.dynamic.scale).toBe(1);
   });
@@ -59,11 +63,15 @@ describe('QualityManager', () => {
     const { stage, ratios } = fakeStage();
     const timer = { begin: () => {}, end: () => {}, take: (out: number[]) => void out.push(40) } as unknown as GpuTimer;
     const q = new QualityManager(stage, 'high', null, false, () => 2, timer);
-    for (let i = 0; i < 60 * 30 && q.tier === 'high'; i++) q.frame(16.7);
+    for (let i = 0; i < 60 * 30 && q.tier === 'high'; i++) {
+      q.frame(16.7);
+      if (stage.warms === 0) expect(q.tier).toBe('high');
+    }
     expect(q.tier).toBe('medium');
+    expect(stage.warms).toBe(1);
     expect(q.dynamic.scale).toBe(QUALITY.high.minScale);
     const small = new QualityManager(stage, 'high', null, false, () => 2, null, 1e6);
-    expect(ratios.at(-1)).toBe(QUALITY.high.minScale);
+    expect(ratios.at(-1)).toBe(0.5);
     small.setTier('medium');
     expect(small.dynamic.scale).toBe(1);
   });

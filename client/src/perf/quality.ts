@@ -94,11 +94,23 @@ export function pixelBudget(tier: QualityTier, gpu: string, stored: number | nul
   return QUALITY[tier].post && !strongGpu(gpu) ? WEAK_POST_PIXELS : Infinity;
 }
 
-/** Starting render scale: the largest 0.05 step whose canvas (`cssPixels` at the tier's pixel ratio) fits `budget`, at least the floor. */
-export function startScale(tier: QualityTier, cssPixels: number, deviceDpr: number, budget: number): number {
+/** Lowest scale a canvas over its pixel budget even at the tier's floor may reach (2560 x 1440 high: 0.5, 0.92 Mpx). */
+const BUDGET_FLOOR = 0.5;
+
+/** The largest 0.05 step whose canvas (`cssPixels` at the tier's pixel ratio) fits `budget` (1 when the full canvas fits). */
+function fitScale(tier: QualityTier, cssPixels: number, deviceDpr: number, budget: number): number {
   const full = cssPixels * Math.min(deviceDpr || 1, QUALITY[tier].maxDpr) ** 2;
-  if (full <= budget) return 1;
-  return Math.max(QUALITY[tier].minScale, snap(Math.sqrt(budget / full), Math.floor));
+  return full <= budget ? 1 : snap(Math.sqrt(budget / full), Math.floor);
+}
+
+/** Scale floor: the tier's minScale, lower (down to 0.5) when the canvas at minScale is still over `budget`. */
+export function scaleFloor(tier: QualityTier, cssPixels: number, deviceDpr: number, budget: number): number {
+  return Math.min(QUALITY[tier].minScale, Math.max(BUDGET_FLOOR, fitScale(tier, cssPixels, deviceDpr, budget)));
+}
+
+/** Starting render scale: the largest 0.05 step whose canvas fits `budget`, at least the floor (`scaleFloor`). */
+export function startScale(tier: QualityTier, cssPixels: number, deviceDpr: number, budget: number): number {
+  return Math.max(scaleFloor(tier, cssPixels, deviceDpr, budget), fitScale(tier, cssPixels, deviceDpr, budget));
 }
 
 const TARGET_MS = 1000 / 60;
@@ -179,6 +191,11 @@ export class DynamicResolution {
   private readonly floorOver: number[] = [];
 
   constructor(private readonly minScale = 0.6) {}
+
+  /** Whether a window in the last 10 had the GPU over budget at the scale floor (a tier step may follow). */
+  get floorStrain(): boolean {
+    return this.floorOver.length > 0;
+  }
 
   /** Feeds one frame's GPU time (ms), whenever a timer result arrives. */
   gpu(ms: number): void {
