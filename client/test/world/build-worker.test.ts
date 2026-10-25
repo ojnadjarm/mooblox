@@ -55,8 +55,8 @@ describe('build worker', () => {
     const w = FakeWorker.last!;
     expect(w.posted.filter((p) => p.kind === 'models').length).toBe(1);
     w.reply([1, 0]);
-    expect((await a).meshes[0]!.position.length).toBe(36 * 3);
-    expect((await b).meshes[0]!.position.length).toBe(2 * 36 * 3);
+    expect((await a).meshes[0]!.index.length).toBe(36);
+    expect((await b).meshes[0]!.index.length).toBe(2 * 36);
     expect((await b).tree!.position.length).toBe(2 * 36 * 3);
   });
 
@@ -82,10 +82,10 @@ describe('build worker', () => {
   it('leaves out the solids, their tree and the detail for a far-view capture', () => {
     const parts = [placement(0), { ...placement(2), detail: true }];
     const full = runPrep(prepDistrict({ ...input(0), placements: parts }, lib));
-    expect(full.meshes[1]!.position.length).toBe(36 * 3);
+    expect(full.meshes[1]!.index.length).toBe(36);
     const r = runPrep(prepDistrict({ ...input(0), placements: parts, solids: false, detail: false }, lib));
     expect(r.tree).toBeNull();
-    expect(r.meshes[0]!.position.length).toBe(36 * 3);
+    expect(r.meshes[0]!.index.length).toBe(36);
     expect(r.meshes[1]).toBeNull();
   });
 

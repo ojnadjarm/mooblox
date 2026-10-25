@@ -4,6 +4,7 @@ import type { BakedModel } from './model-library';
 import { bakeAo } from './landmarks/shapes';
 import { tagSurface } from './surfaces';
 import { MeshMerge, SolidsMerge, solidsTree, transferables, type MeshArrays, type PartArrays, type SolidsTree } from './district-merge';
+import { weldChunks, type WeldedMesh } from './chunk-weld';
 
 /** Where placed models come from: the page's `ModelLibrary`, or its copy in the build worker. */
 export interface ModelSource {
@@ -25,9 +26,9 @@ export interface PrepInput {
   readonly detail: boolean;
 }
 
-/** A district's merged meshes (big shapes, detail, minor), each chunk's bounding sphere and the collision tree. */
+/** A district's merged meshes (big shapes, detail, minor; welded per chunk), each chunk's bounding sphere and the collision tree. */
 export interface Prepped {
-  readonly meshes: readonly (MeshArrays | null)[];
+  readonly meshes: readonly (WeldedMesh | null)[];
   /** Per mesh: x, y, z, radius of each CHUNK_VERTICES chunk. */
   readonly spheres: readonly Float32Array[];
   readonly tree: SolidsTree | null;
@@ -66,7 +67,10 @@ export function* prepDistrict(input: PrepInput, lib: ModelSource): Generator<voi
   if (position) yield;
   const merged = meshes.map((m) => m.finish());
   yield;
-  return { meshes: merged, spheres: merged.map(chunkSpheres), tree: position ? solidsTree(position) : null };
+  const spheres = merged.map(chunkSpheres);
+  const welded: (WeldedMesh | null)[] = [];
+  for (const m of merged) welded.push(m ? yield* weldChunks(m, CHUNK_VERTICES) : null);
+  return { meshes: welded, spheres, tree: position ? solidsTree(position) : null };
 }
 
 /** The bounding sphere (centre of the box, farthest vertex) of each CHUNK_VERTICES chunk of a merged mesh. */
@@ -108,7 +112,7 @@ export function preppedTransferables(p: Prepped): ArrayBuffer[] {
   for (const a of p.spheres) out.add(a.buffer as ArrayBuffer);
   for (const m of p.meshes) {
     if (!m) continue;
-    for (const a of [m.position, m.normal, m.color, m.sway, m.surface]) if (a) out.add(a.buffer as ArrayBuffer);
+    for (const a of [m.position, m.normal, m.color, m.sway, m.surface, m.index, m.chunks]) if (a) out.add(a.buffer as ArrayBuffer);
   }
   return [...out];
 }

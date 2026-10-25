@@ -4,8 +4,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { District, Dressing } from './dressing';
 import type { ModelLibrary } from './model-library';
 import { sharedPrep, type DistrictPrepper } from './build-worker';
-import type { MeshArrays } from './district-merge';
-import { CHUNK_VERTICES, prepDistrict, withSway, type PrepInput, type Prepped } from './district-prep';
+import type { WeldedMesh } from './chunk-weld';
+import { prepDistrict, withSway, type PrepInput, type Prepped } from './district-prep';
 
 /** Distance past which a district drops its detail (flowers, bushes, hedges, lamps, small props) per tier. */
 export const DETAIL_DISTANCE = { low: 20, medium: 70, high: 90, xhigh: 130 } as const;
@@ -157,7 +157,7 @@ export class DistrictBuild<C = unknown> {
       o.updateMatrix();
       o.matrixAutoUpdate = false;
     });
-    this.group.userData['tris'] = merged.map((m) => (m ? m.position.length / 9 : 0));
+    this.group.userData['tris'] = merged.map((m) => (m ? m.index.length / 3 : 0));
     if (tree && this.collide) {
       const t = tree;
       const solids = new BufferGeometry();
@@ -246,20 +246,23 @@ function dropArray(this: BufferAttribute): void {
   (this as { array: unknown }).array = null;
 }
 
-/** A merged mesh as geometries of at most CHUNK_VERTICES (views into the merged arrays, no copies). */
-function chunks(m: MeshArrays | null): BufferGeometry[] {
+/** A welded mesh as one indexed geometry per chunk (views into the merged arrays, no copies). */
+function chunks(m: WeldedMesh | null): BufferGeometry[] {
   if (!m) return [];
   const out: BufferGeometry[] = [];
-  const n = m.position.length / 3;
-  for (let a = 0; a < n; a += CHUNK_VERTICES) {
-    const b = Math.min(n, a + CHUNK_VERTICES);
+  for (let c = 0; c < m.chunks.length; c += 4) {
+    const a = m.chunks[c]!;
+    const b = a + m.chunks[c + 1]!;
+    const i = m.chunks[c + 2]!;
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(m.position.subarray(a * 3, b * 3), 3));
     g.setAttribute('normal', new BufferAttribute(m.normal.subarray(a * 3, b * 3), 3));
     g.setAttribute('color', new BufferAttribute(m.color.subarray(a * m.colorSize, b * m.colorSize), m.colorSize));
     g.setAttribute('sway', new BufferAttribute(m.sway.subarray(a, b), 1));
     if (m.surface) g.setAttribute('surface', new BufferAttribute(m.surface.subarray(a, b), 1));
-    // Once on the GPU the chunk's arrays are not read again (culling uses the prep's sphere): the heap lets them go.
+    g.setIndex(new BufferAttribute(m.index.subarray(i, i + m.chunks[c + 3]!), 1));
+    // Once on the GPU the chunk's vertex arrays are not read again (culling uses the prep's sphere): the heap lets them go.
+    // The index (2 bytes per drawn vertex) stays: it uploads at the first draw and tools read its size.
     for (const attr of Object.values(g.attributes)) (attr as BufferAttribute).onUpload(dropArray);
     out.push(g);
   }
