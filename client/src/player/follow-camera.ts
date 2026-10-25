@@ -11,6 +11,8 @@ const DRAG_SPEED = 0.008;
 const PITCH_MIN = 0.12;
 const PITCH_MAX = 0.85;
 const LOOK_AHEAD_RATE = 3;
+/** Share of the half-width the look-ahead may shift the player off centre across the view. */
+const FRAME = 0.5;
 /** Collision: samples along the sight line, the clearance kept from walls, how fast it eases back out, the closest it comes, the fan. */
 const PROBES = 10;
 const CLEARANCE = 0.3;
@@ -82,7 +84,15 @@ export class FollowCamera {
     const k = snap ? 1 : 1 - Math.exp(-LOOK_AHEAD_RATE * dt);
     this.aheadX += ((velocity ? velocity.x * Feel.lookAhead : 0) - this.aheadX) * k;
     this.aheadZ += ((velocity ? velocity.z * Feel.lookAhead : 0) - this.aheadZ) * k;
-    this.look.set(target.x + this.aheadX, target.y + LOOK_HEIGHT, target.z + this.aheadZ);
+    // Across the view the look-ahead stays inside the frame (narrow screens, a pulled-in camera).
+    const rx = Math.cos(this.yaw);
+    const rz = -Math.sin(this.yaw);
+    const across = this.aheadX * rx + this.aheadZ * rz;
+    const half = FRAME * Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect;
+    // Soft cap: nearly unchanged well inside it; recapped below once the reach is known.
+    const was = across / (half * this.reach);
+    const kept = across / Math.sqrt(Math.sqrt(1 + was * was * was * was)) - across;
+    this.look.set(target.x + this.aheadX + rx * kept, target.y + LOOK_HEIGHT, target.z + this.aheadZ + rz * kept);
     this.sinceProbe += dt;
     if (snap) {
       this.pending = 0;
@@ -97,12 +107,18 @@ export class FollowCamera {
     const clear = this.clear;
     this.reach = snap || clear < this.reach ? clear : damp(this.reach, clear, EASE_OUT, dt);
     const d = this.reach;
+    const now = across / (half * d);
+    const pulled = across / Math.sqrt(Math.sqrt(1 + now * now * now * now)) - across - kept;
+    this.look.set(this.look.x + rx * pulled, this.look.y, this.look.z + rz * pulled);
     // On the probed sight line, so a pulled-in camera rises towards the look point instead of dropping below what was probed.
     const y = this.look.y + ((this.pitch * this.distance - LOOK_HEIGHT) * d) / this.distance;
     this.goal.set(this.look.x + Math.sin(this.yaw) * d, y, this.look.z + Math.cos(this.yaw) * d);
     const cam = this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp(-FOLLOW * dt));
     // The eased camera lags its goal; it never trails further out than the clear reach.
-    const out = Math.hypot(cam.x - this.look.x, cam.z - this.look.z);
+    // Math.hypot allocates its argument list; the sum of squares does not.
+    const ox = cam.x - this.look.x;
+    const oz = cam.z - this.look.z;
+    const out = Math.sqrt(ox * ox + oz * oz);
     if (out > d) {
       const k = d / out;
       cam.set(this.look.x + (cam.x - this.look.x) * k, this.look.y + (cam.y - this.look.y) * k, this.look.z + (cam.z - this.look.z) * k);

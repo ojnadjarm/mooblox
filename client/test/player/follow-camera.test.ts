@@ -91,4 +91,23 @@ describe('FollowCamera', () => {
     for (let i = 0; i < 120; i++) f.follow(new Vector3(), 1 / 60, false, { x: 10, z: 0 });
     expect(cam.position.x).toBeGreaterThan(2);
   });
+
+  it('keeps a kid running across a narrow portrait view inside the frame, a wide view keeps its look-ahead', () => {
+    const across = (aspect: number): number => {
+      const cam = new PerspectiveCamera(55, aspect, 0.1, 900);
+      const f = new FollowCamera(cam, canvas);
+      const p = new Vector3();
+      f.follow(p, 0, true);
+      let most = 0;
+      for (let i = 0; i < 180; i++) {
+        p.x += 10 / 60;
+        f.follow(p, 1 / 60, false, { x: 10, z: 0 });
+        cam.updateMatrixWorld();
+        most = Math.max(most, Math.abs(p.clone().setY(1.3).project(cam).x));
+      }
+      return most;
+    };
+    expect(across(400 / 800)).toBeLessThan(0.75);
+    expect(across(1366 / 768)).toBeGreaterThan(0.25);
+  });
 });
