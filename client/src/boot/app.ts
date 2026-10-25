@@ -25,7 +25,7 @@ import { structureKey, shiftFor } from '../world/rebuild';
 import { IslandBuilder } from '../world/island-builder';
 import { IslandLayout } from '../world/island-layout';
 import type { Plot, WorldLayout } from '../world/layout';
-import { DECK_Y, designWorld, type Dressing } from '../world/dressing';
+import { DECK_Y, designWorld, WATER_Y, type Dressing } from '../world/dressing';
 import { CAMPUS } from '../world/look';
 import type { ModelLibrary } from '../world/model-library';
 import { buildGlow, cullDistricts, DETAIL_DISTANCE, DistrictBuild, MINOR_DISTANCE } from '../world/scenery';
@@ -37,7 +37,7 @@ import { Haze, installHaze, type HazeBand } from '../world/haze';
 import { islandGraph, IslandStreamer } from '../world/island-streamer';
 import { FADE_SLOTS, setFades, withFade } from '../world/island-fade';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { deckGeometry, farMode, groundGeometry, Impostors, Silhouettes, silhouetteGeometry, type FarMode, type FarView } from '../world/far-view';
+import { deckGeometry, farMode, groundGeometry, Impostors, Silhouettes, silhouetteGeometry, withIslandHaze, type FarMode, type FarView } from '../world/far-view';
 import { CompositeCollider, type ColliderPart } from '../player/composite-collider';
 import { MaterialKit } from '../world/material-kit';
 import { createPropRegistry } from '../world/props/catalog';
@@ -144,6 +144,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   // Fakes (silhouettes, bridge decks) hide where a real island draws: plastic with the inverted island fade.
   const fake = kit.plastic.clone();
   withFade(fake, true);
+  withIslandHaze(fake);
   const look = CAMPUS;
   const stage = new Stage(root, kit, { antialias: settings.antialias, shadowMapSize: settings.shadowMapSize, post: settings.post, ao: settings.ao }, look);
   const registry = createPropRegistry();
@@ -241,7 +242,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     }
     if (farView) group.add(farView.mesh);
     const decks = deckGeometry(d.bridges, look.palette.wood, look.palette.woodDark, DECK_Y);
-    const discs = groundGeometry(graph.islands, look.palette.grass, look.palette.dirt);
+    const discs = groundGeometry(graph.islands, look.palette, WATER_Y);
     const ground = far === 'full' ? null : mergeGeometries([decks, discs].filter((g): g is NonNullable<typeof g> => g !== null), false);
     let farGround: Mesh | null = null;
     if (ground) {
@@ -599,15 +600,15 @@ export async function startPlayer(
   view.stage.add(avatar.root);
   const collider = new FencedCollider(view.collider, view.fence);
   const camera = new FollowCamera(view.stage.camera, view.stage.renderer.domElement, view.collider);
-  const spawn = new Vector3(view.layout.spawn.x, SPAWN_HEIGHT, view.layout.spawn.z);
+  const start = view.dressing.start;
+  const spawn = new Vector3(start.x, SPAWN_HEIGHT, start.z);
   view.stopOverview();
   const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
   const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
   view.follow(player.body.position);
-  const focus = view.dressing.focus;
-  // The first view frames the hub landmark down its avenue.
-  if (focus) player.teleport(spawn.x, spawn.z, Math.atan2(focus.x - spawn.x, focus.z - spawn.z));
+  // The first view frames the fountain and the hub landmark beyond it.
+  player.teleport(spawn.x, spawn.z, start.face);
   view.onRebuild((before, after) => {
     const p = player.body.position;
     const shift = shiftFor(before, after, p.x, p.z);
@@ -670,7 +671,8 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
 }
 
 const GUIDE_LOOK: AvatarLook = { skin: 'n', tint: Palette.yellow };
-const GUIDE_SPOT = { x: 1.8, z: -4.6 };
+/** The Guide's spot from the player's start: metres ahead and to the right (beside the fountain). */
+const GUIDE_SPOT = { ahead: 1.2, right: 2.1 };
 const PLAZA_TOP = 0.02;
 
 /** The Guide NPC by the spawn: greets, then names the next step whenever the course changes. */
@@ -683,8 +685,10 @@ export async function startGuide(
   strings: GuideStrings,
 ): Promise<Guide> {
   const avatar = await avatars.create(GUIDE_LOOK);
-  const s = view.layout.spawn;
-  avatar.root.position.set(s.x + GUIDE_SPOT.x, PLAZA_TOP, s.z + GUIDE_SPOT.z);
+  const s = view.dressing.start;
+  const fx = Math.sin(s.face);
+  const fz = Math.cos(s.face);
+  avatar.root.position.set(s.x + fx * GUIDE_SPOT.ahead - fz * GUIDE_SPOT.right, PLAZA_TOP, s.z + fz * GUIDE_SPOT.ahead + fx * GUIDE_SPOT.right);
   const shadow = view.quality.tier === 'high' || view.quality.tier === 'xhigh';
   avatar.root.traverse((o) => (o.castShadow = shadow));
   view.stage.add(avatar.root);

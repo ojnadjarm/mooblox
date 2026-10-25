@@ -89,6 +89,10 @@ saturated things in a view; everything else sits a step calmer.
 1. **The haze is the sky behind it.** Distance fades every object to the colour the sky dome draws along the same view ray
    (`skyColour`): above the horizon the warm cream, below it the far sea. Far islands melt into the view instead of a
    milky wall; never a flat fog colour.
+   Far islands (the far view's cards and ground) haze as whole islands, never as ghosts (round 15): a light aerial tint
+   (up to 14 % of the sky behind them, by camera distance 15-140 m) keeps them solid and coloured; an island melts in only
+   by its nearest edge, near the end of the haze ring. Their fake ground carries the real island's design: lawn, a light
+   rim, the two warm cliff bands stepping out, a sand skirt at the waterline.
 2. **The sea pales with distance** (round 14, the concepts' aerial perspective): cerulean near the islands, lightening to a
    pale sky-blue band at the horizon (dome below the horizon, water by camera distance 60-700 m), one bright line where it
    meets the sky; the cream lives only in the sky. Never a saturated pure-blue sea.
@@ -140,7 +144,11 @@ Landmarks are bespoke models (Blender or composed kit pieces with their own face
 - **Lamps in pairs** along avenues, at bridge heads and at plaza entries.
 - **The spawn plaza is framed, not open lawn** (hub concept): a ring of raised planters just outside the paving (terracotta
   kerb, cream cap rim, puffy clipped hedge blocks, flowers between), cut into runs with walk-through gaps, open at every
-  entry, cream square posts at each run end, a lamp pair at each entry, benches inside facing the spawn pad.
+  entry, cream square posts at each run end, a lamp pair at each entry, benches inside facing the plaza centre.
+- **The plaza centre is a tiered fountain** (hub concept, round 15; `world/landmarks/fountain.ts`): a cream stone step,
+  a round teal basin under a rolled cream lip holding rippled water, a fluted pedestal with a wide teal bowl and a small
+  top bowl, streams falling from each, a jet on top (2.9 m, about 2k tris). Solid, walled above any jump so no one
+  enters the basin; the player starts in front of it, facing it and the tower beyond.
 - **Island cliffs are designed, not a wall** (overview, district and shore concepts; `world/cliff-wall.ts`): columns 2-3.4 m
   wide of stacked stone in the cliff bands (upper `#ECC193` block under the grass lip, 1-2 lower `#D39A6E` strata each
   stepping out 0.15-0.4 m towards the water), a third of the column tops notched lower, grass tongues hanging from the

@@ -21,6 +21,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { District } from './dressing';
+import type { LookPalette } from './look';
 import type { Circle } from './layout';
 import type { ModelLibrary } from './model-library';
 import { withFade } from './island-fade';
@@ -97,7 +98,7 @@ export function silhouetteGeometry(district: District, lib: ModelLibrary, landma
   if (!parts.length) return null;
   const merged = mergeGeometries(parts, false);
   for (const g of parts) g.dispose();
-  return merged;
+  return atIsland(merged, district.island);
 }
 
 /** Plank decks with low rails for every bridge, one geometry: the way on stays visible while the island across is a fake. */
@@ -121,24 +122,92 @@ export function deckGeometry(bridges: readonly { ax: number; az: number; bx: num
   if (!parts.length) return null;
   const merged = mergeGeometries(parts, false);
   for (const g of parts) g.dispose();
+  const pos = merged.getAttribute('position');
+  const spot = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) spot.set([pos.getX(i), pos.getZ(i), 0], i * 3);
+  merged.setAttribute('island', new BufferAttribute(spot, 3));
   return merged;
 }
 
-/** A 16-sided lawn disc with a dirt rim per island, just under the real land: the islands round the live one. */
-export function groundGeometry(islands: readonly Circle[], grass: number, dirt: number): BufferGeometry | null {
+/** Sides of a fake island's ground. */
+const GROUND_SIDES = 20;
+
+/**
+ * Each island's ground in the far view, just under the real land: a lawn disc with a rolled light rim, the cliff in the
+ * palette's two warm bands stepping out to the water, and a sand skirt at the waterline (one geometry for every island).
+ */
+export function groundGeometry(islands: readonly Circle[], p: Pick<LookPalette, 'grass' | 'grassLight' | 'cliffHigh' | 'cliffLow' | 'sand'>, waterY: number): BufferGeometry | null {
   const parts: BufferGeometry[] = [];
+  const n = GROUND_SIDES;
   for (const c of islands) {
-    const top = new CylinderGeometry(c.radius, c.radius, 0.01, 16, 1, false).toNonIndexed();
+    const r = c.radius;
+    const top = new CylinderGeometry(r - 0.3, r - 0.3, 0.01, n, 1, false).toNonIndexed();
     place(top, c.x, -0.06, c.z, 0);
-    parts.push(painted(stripBottom(onlyUp(top)), new Color(grass)));
-    const side = new CylinderGeometry(c.radius, c.radius * 0.88, 3.2, 16, 1, true);
-    place(side, c.x, -1.66, c.z, 0);
-    parts.push(painted(stripBottom(side), new Color(dirt)));
+    parts.push(atIsland(painted(stripBottom(onlyUp(top)), new Color(p.grass)), c));
+    const bands: readonly (readonly [number, number, number, number, number])[] = [
+      [r - 0.3, r, -0.06, -0.5, p.grassLight],
+      [r, r + 0.15, -0.5, waterY * 0.45, p.cliffHigh],
+      [r + 0.15, r + 0.55, waterY * 0.45, waterY + 0.2, p.cliffLow],
+      [r + 0.55, r + 1.6, waterY + 0.2, waterY - 0.15, p.sand],
+    ];
+    for (const [r0, r1, y0, y1, colour] of bands) {
+      const side = new CylinderGeometry(r0, r1, y0 - y1, n, 1, true);
+      place(side, c.x, (y0 + y1) / 2, c.z, 0);
+      parts.push(atIsland(painted(stripBottom(side), new Color(colour)), c));
+    }
   }
   if (!parts.length) return null;
   const merged = mergeGeometries(parts, false);
   for (const g of parts) g.dispose();
   return merged;
+}
+
+/** The colour script's aerial tint on a far island, growing with camera distance over `AIR_RANGE` metres. */
+const AIR = 0.14;
+const AIR_RANGE = [15, 140] as const;
+
+/**
+ * Hazes a far-view material per island instead of per pixel (attribute `island` = centre x, z and radius; radius 0 = the
+ * vertex itself): a whole fake island melts in by its nearest edge, only near the ring's edge (`fogFar`), and otherwise
+ * takes a light aerial tint of the sky behind it by camera distance, so it reads as one solid island through the air
+ * instead of a ghost whose middle and far side are already gone.
+ */
+export function withIslandHaze(m: Material): void {
+  const before = m.onBeforeCompile.bind(m);
+  const key = m.customProgramCacheKey.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    before(shader, renderer);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <fog_pars_vertex>', '#include <fog_pars_vertex>\nattribute vec3 island;\nvarying float vIslandEdge;\nvarying float vIslandAir;')
+      .replace(
+        '#include <fog_vertex>',
+        `#include <fog_vertex>
+#ifdef USE_FOG
+\tvIslandEdge = length( island.xy - hazeCentre.xz ) - island.z;
+\tvIslandAir = ${AIR.toFixed(2)} * smoothstep( ${AIR_RANGE[0].toFixed(1)}, ${AIR_RANGE[1].toFixed(1)}, length( vHazeWorld - cameraPosition ) );
+\tvHazeSky = pow( skyColour( normalize( vHazeWorld - cameraPosition ) ), vec3( 2.2 ) );
+#endif`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <fog_pars_fragment>', '#include <fog_pars_fragment>\nvarying float vIslandEdge;\nvarying float vIslandAir;')
+      .replace(
+        '#include <fog_fragment>',
+        `#ifdef USE_FOG
+\tfloat islandT = clamp( ( vIslandEdge - fogNear ) / ( fogFar - fogNear ), 0.0, 1.0 );
+\tgl_FragColor.rgb = mix( gl_FragColor.rgb, linearToOutputTexel( vec4( vHazeSky, 1.0 ) ).rgb, mix( vIslandAir, 1.0, islandT * islandT * islandT ) );
+#endif`,
+      );
+  };
+  m.customProgramCacheKey = () => `${key()}-island-haze`;
+}
+
+/** Gives every vertex its island (centre x, z and radius) for `withIslandHaze`. */
+function atIsland(g: BufferGeometry, c: Circle): BufferGeometry {
+  const n = g.getAttribute('position').count;
+  const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) a.set([c.x, c.z, c.radius], i * 3);
+  g.setAttribute('island', new BufferAttribute(a, 3));
+  return g;
 }
 
 /** Keeps the upward faces of a geometry. */
@@ -281,6 +350,7 @@ export class Impostors implements FarView {
     };
     material.customProgramCacheKey = () => 'mooblox-impostor';
     withFade(material, true);
+    withIslandHaze(material);
     this.mesh = new Mesh(new BufferGeometry(), material);
     this.mesh.name = 'far-impostors';
     this.mesh.matrixAutoUpdate = false;
@@ -412,6 +482,7 @@ export class Impostors implements FarView {
   private rebuild(): void {
     const pos: number[] = [];
     const centre: number[] = [];
+    const island: number[] = [];
     const uv: number[] = [];
     const index: number[] = [];
     for (const i of this.ring) {
@@ -435,6 +506,7 @@ export class Impostors implements FarView {
       ] as const) {
         pos.push(x, y, 0);
         centre.push(c.x, 0, c.z);
+        island.push(c.x, c.z, c.radius);
         uv.push(u, v);
       }
       index.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -442,6 +514,7 @@ export class Impostors implements FarView {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(pos, 3));
     g.setAttribute('centre', new Float32BufferAttribute(centre, 3));
+    g.setAttribute('island', new Float32BufferAttribute(island, 3));
     g.setAttribute('uv', new Float32BufferAttribute(uv, 2));
     g.setIndex(index);
     this.mesh.geometry.dispose();

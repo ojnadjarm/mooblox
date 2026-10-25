@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import type { Landmark } from './landmarks/landmarks';
+import { FOUNTAIN_LIP, FOUNTAIN_STEP, tieredFountain } from './landmarks/fountain';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { box } from './landmarks/shapes';
 import { cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
@@ -155,6 +156,8 @@ export interface Dressing {
   readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly top: number }[];
   /** The hub landmark the spawn camera frames, or null. */
   readonly focus: { readonly x: number; readonly z: number } | null;
+  /** Where the player starts: in front of the plaza fountain, facing it and the landmark beyond (`face` = yaw). */
+  readonly start: { readonly x: number; readonly z: number; readonly face: number };
   /** Ground every placed model claimed (read-only), for later placement such as collectibles. */
   readonly occupancy: GroundQuery;
   /** Calm lawn kept free on the spawn hub for the trophy hall (built only while rewards are on), or null. */
@@ -176,6 +179,11 @@ const HALL_RADII = [3.6, 3.1, 2.6];
 /** Monument footprint radius and its distance from the plaza centre (between the spawn pad and the plaza rim). */
 const MONUMENT_R = 1.4;
 const MONUMENT_D = 4.9;
+/** The player's start, metres from the plaza centre, and the fountain wall's height: above a jump from its lip (0.76 + 1.67 m) plus the capsule's foot. */
+const START_D = 4.3;
+const FOUNTAIN_WALL = 3.4;
+/** Height the fountain stands at: its step rises clear of the plaza paving. */
+const FOUNTAIN_Y = 0.1;
 
 interface Footprint {
   readonly h: number;
@@ -279,6 +287,7 @@ class Designer {
   private theme: DistrictTheme = HUB_THEME;
   private readonly entries = new Set<Segment>();
   private focus: { x: number; z: number } | null = null;
+  private start: { x: number; z: number; face: number } | null = null;
   private hall: HallSite | null = null;
   private monument: HallSite | null = null;
   private frame: FrameArc[] = [];
@@ -346,6 +355,7 @@ class Designer {
     return {
       districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges,
       critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks,
+      start: this.start ?? { x: this.layout.spawn.x, z: this.layout.spawn.z, face: 0 },
       occupancy: this.occ,
       hall: this.hall,
       monument: this.monument,
@@ -433,6 +443,7 @@ class Designer {
     this.theme = HUB_THEME;
     this.landmark(HUB_THEME, lx, 1.6, lz, face);
     this.focus = { x: lx, z: lz };
+    this.fountain(hub);
     if (shelf) this.shelfTop(hub, shelf, 1.6, { x: lx, z: lz, r: 3.8 });
     const ux = Math.cos(back);
     const uz = Math.sin(back);
@@ -448,6 +459,22 @@ class Designer {
       this.building(id, h, x, z, Math.atan2(-x, -z), HUB_ROOFS[i % HUB_ROOFS.length]);
     });
     this.dock(hub, true);
+  }
+
+  /**
+   * The spawn plaza's tiered fountain (hub concept) at its centre: solid, ringed by a collision wall above any jump so nothing
+   * passes into the basin; the player starts in front of it on the side away from the landmark, facing both.
+   */
+  private fountain(hub: Circle): void {
+    const lm = tieredFountain(this.p, HUB_THEME.accent);
+    for (const g of lm.parts) this.district.terrain.push({ geometry: g.translate(hub.x, FOUNTAIN_Y, hub.z), solid: true, detail: false });
+    this.district.blockers.push(new CylinderGeometry(FOUNTAIN_LIP, FOUNTAIN_LIP, FOUNTAIN_WALL, 24, 1, true).translate(hub.x, FOUNTAIN_WALL / 2, hub.z));
+    this.reserve(hub.x, hub.z, FOUNTAIN_STEP + 0.2);
+    this.obstacles.push({ x: hub.x, z: hub.z, r: FOUNTAIN_LIP });
+    const a = this.focus ? Math.atan2(this.focus.z - hub.z, this.focus.x - hub.x) : 0;
+    const x = hub.x - Math.cos(a) * START_D;
+    const z = hub.z - Math.sin(a) * START_D;
+    this.start = { x, z, face: Math.atan2(hub.x - x, hub.z - z) };
   }
 
   /** The spawn plaza's frame (art bible: hub concept): raised hedge planters round the rim, open with a lamp pair at every entry. */

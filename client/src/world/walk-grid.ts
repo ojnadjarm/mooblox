@@ -4,7 +4,7 @@ import type { WorldLayout } from './layout';
 const PLAYER = 0.5;
 const CELL = 0.5;
 
-/** Cells the player's centre can stand on (island discs and bridge decks minus solid footprints) and those reached from the spawn. */
+/** Cells the player's centre can stand on (island discs and bridge decks minus solid footprints) and those reached from the start. */
 export class WalkGrid {
   readonly grid: Uint8Array;
   readonly w: number;
@@ -13,7 +13,7 @@ export class WalkGrid {
   private readonly minZ: number;
   private seen: Uint8Array | null = null;
 
-  constructor(layout: WorldLayout, dressing: Pick<Dressing, 'bridges' | 'obstacles'>, private readonly spawn = layout.spawn) {
+  constructor(layout: WorldLayout, dressing: Pick<Dressing, 'bridges' | 'obstacles'> & Partial<Pick<Dressing, 'start'>>, private readonly spawn = dressing.start ?? layout.spawn) {
     const islands = [...layout.hubs, ...layout.zones];
     this.minX = Math.min(...islands.map((c) => c.x - c.radius)) - 2;
     this.minZ = Math.min(...islands.map((c) => c.z - c.radius)) - 2;

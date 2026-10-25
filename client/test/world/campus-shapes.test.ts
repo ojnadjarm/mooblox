@@ -85,9 +85,9 @@ describe('campus layout and dressing for any course shape', () => {
         expect(dressing.districts.flatMap((d) => d.placements).filter((p) => (p.minor || p.rich) && p.solid)).toEqual([]);
       });
 
-      it('lets the player walk from the spawn to every plot', () => {
+      it('lets the player walk from the start to every plot', () => {
         const walk = new WalkGrid(layout, dressing);
-        expect(walk.grid[walk.cell(layout.spawn.x, layout.spawn.z)]).toBe(1);
+        expect(walk.grid[walk.cell(dressing.start.x, dressing.start.z)]).toBe(1);
         const seen = walk.reached();
         const cell = (x: number, z: number) => walk.cell(x, z);
         const unreached = layout.zones.flatMap((z) => z.plots).filter((p) => !seen[cell(p.x, p.z)]);

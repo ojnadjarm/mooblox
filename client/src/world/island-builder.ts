@@ -133,7 +133,7 @@ export class IslandBuilder {
     return parts;
   }
 
-  /** The spawn plaza: radial terracotta paving in a cream trim ring, a cream ring round a round, stepped blue spawn pad. */
+  /** The spawn plaza: radial terracotta paving in a cream trim ring (the designer puts the fountain in the middle). */
   private plaza(): void {
     this.surface = Surface.paving;
     this.add(this.land, new CylinderGeometry(PLAZA + 0.5, PLAZA + 0.6, 0.12, 48), this.p.trimShade, 0, 0.06, 0);
@@ -144,11 +144,7 @@ export class IslandBuilder {
       const g = new CylinderGeometry(PLAZA, PLAZA, 0.1, 3, 1, false, (i / wedges) * Math.PI * 2, (Math.PI * 2) / wedges);
       this.add(this.land, g, i % 2 ? this.p.path[0]! : this.p.path[2]!, 0, 0.08, 0);
     }
-    this.surface = Surface.paving;
-    this.add(this.land, new CylinderGeometry(3, 3, 0.16, 32), this.p.trim, 0, 0.08, 0);
-    this.add(this.land, new CylinderGeometry(2.1, 2.3, 0.32, 24), this.p.trimShade, 0, 0.16, 0);
     this.surface = Surface.plain;
-    this.top(new CircleGeometry(1.85, 24), Palette.blue, 0, 0.325, 0);
   }
 
   private island(c: Circle): void {
