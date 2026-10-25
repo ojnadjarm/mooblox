@@ -19,6 +19,8 @@ const WIDE = 1;
 const PROBES = 10;
 const CLEARANCE = 0.3;
 const EASE_OUT = 2.5;
+/** How fast it glides in when a wall cuts the sight line: a dolly of a few frames, not a cut. */
+const PULL_IN = 20;
 const NEAREST = 2.2;
 const SIDE = 1.2;
 /** Radius of the camera itself, pushed out of anything it touches every frame. */
@@ -131,15 +133,18 @@ export class FollowCamera {
     }
     // A blocked probe holds the wall where it found it: a look point moved since then moves the clear reach with it.
     const clear = this.clear < this.distance ? Math.max(NEAREST, this.clear + along - this.probedAlong) : this.clear;
-    this.reach = snap || clear < this.reach ? clear : damp(this.reach, clear, EASE_OUT, dt);
+    this.reach = snap ? clear : damp(this.reach, clear, clear < this.reach ? PULL_IN : EASE_OUT, dt);
     const d = this.reach;
     const now = across / (half * d);
     const pulled = across / Math.sqrt(Math.sqrt(1 + now * now * now * now)) - across - kept;
-    this.look.set(this.look.x + rx * pulled, this.look.y, this.look.z + rz * pulled);
+    // The lead along the view is recapped with this frame's reach, so a pull-in never leaves the camera beside or past the player.
+    const nearNow = Math.min(1, d / DISTANCE);
+    const retrim = ahead - ahead * nearNow - trim;
+    this.look.set(this.look.x + rx * pulled - rz * retrim, this.look.y, this.look.z + rz * pulled + rx * retrim);
     // On the probed sight line, so a pulled-in camera rises towards the look point instead of dropping below what was probed.
     const y = this.look.y + ((this.pitch * this.distance - LOOK_HEIGHT) * d) / this.distance;
     this.goal.set(this.look.x + Math.sin(this.yaw) * d, y, this.look.z + Math.cos(this.yaw) * d);
-    const cam = this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp((-FOLLOW * dt) / near));
+    const cam = this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp((-FOLLOW * dt) / nearNow));
     // The eased camera lags its goal; it never trails further out than the clear reach.
     // Math.hypot allocates its argument list; the sum of squares does not.
     const ox = cam.x - this.look.x;

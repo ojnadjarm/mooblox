@@ -26,7 +26,7 @@ describe('FollowCamera', () => {
     expect(cam.position.z).toBeGreaterThan(0.5);
   });
 
-  it('a lagging camera never trails behind a wall that cuts into the sight line', () => {
+  it('a wall that cuts into the sight line pulls the camera in front of it in a quick glide, not a cut', () => {
     const cam = new PerspectiveCamera();
     const wall = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(20, 20, 0.5).translate(0, 0, 6))]);
     const none = new Vector3();
@@ -35,9 +35,34 @@ describe('FollowCamera', () => {
     f.follow(new Vector3(), 0, true);
     shown = true;
     f.follow(new Vector3(), 0.1);
-    f.follow(new Vector3(), 1 / 60);
-    f.follow(new Vector3(), 1 / 60);
+    let step = 0;
+    for (let i = 0; i < 15; i++) {
+      const z = cam.position.z;
+      f.follow(new Vector3(), 1 / 60);
+      step = Math.max(step, z - cam.position.z);
+    }
     expect(cam.position.z).toBeLessThan(5.75);
+    expect(step).toBeLessThan(1.5);
+  });
+
+  it('running past a wall that pulls the camera in, it stays behind the kid: no frame beside, past or inside it', () => {
+    const wall = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(20, 20, 0.5).translate(0, 0, 3))]);
+    const none = new Vector3();
+    let shown = false;
+    const cam = new PerspectiveCamera(55, 1366 / 768, 0.1, 900);
+    const f = new FollowCamera(cam, canvas, { resolve: (a, b, r) => (shown ? wall.resolve(a, b, r) : none) });
+    const p = new Vector3();
+    f.follow(p, 0, true);
+    for (let i = 0; i < 60; i++) f.follow(p, 1 / 60, false, { x: 0, z: -10 });
+    shown = true;
+    for (let i = 0; i < 60; i++) {
+      f.follow(p, 1 / 60, false, { x: 0, z: -10 });
+      cam.updateMatrixWorld();
+      expect(cam.position.z - p.z).toBeGreaterThan(1.5);
+      const chest = p.clone().setY(1.3).project(cam);
+      expect(Math.abs(chest.x)).toBeLessThan(1);
+      expect(Math.abs(chest.y)).toBeLessThan(1);
+    }
   });
 
   it('spreads a blocked probe over frames: one sight line per frame, same answer as all at once', () => {
