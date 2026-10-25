@@ -17,7 +17,7 @@ import {
   type Texture,
 } from 'three';
 import { surfaceAtlas } from './surface-atlas';
-import { ATLAS_LAYERS } from './surfaces';
+import { ATLAS_LAYERS, Surface } from './surfaces';
 
 /** Rendering tier the kit builds its materials for; `rich` adds world-space detail textures (xhigh). */
 export type MaterialTier = 'standard' | 'low' | 'rich';
@@ -241,7 +241,7 @@ const glslFloats = (k: 'metres' | 'strength'): string =>
 
 /**
  * The texture language on every tier: the vertex picks its atlas layer (the `surface` attribute where a builder tagged
- * it, else from its colour and slope), maps it by the dominant axis of the object-space normal and fades it with distance;
+ * it, else from its colour and slope; brick facing up is paving), maps it by the dominant axis of the object-space normal and fades it with distance;
  * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it). No extra draws.
  */
 function withAtlas(m: Material, atlas: { value: DataArrayTexture | null }, key: string): void {
@@ -283,6 +283,7 @@ float atlasLayer(vec3 lin, float ny) {
         '#include <begin_vertex>',
         `#include <begin_vertex>
 vAtlasLayer = surface > 0.5 ? surface : atlasLayer(color.rgb, normalize(objectNormal).y);
+if (abs(vAtlasLayer - ${Surface.brick}.0) < 0.5 && normalize(objectNormal).y > 0.7) vAtlasLayer = ${Surface.floor}.0;
 int atlasI = int(vAtlasLayer + 0.5);
 vec3 atlasN = abs(objectNormal);
 vAtlasUv = (atlasN.y >= max(atlasN.x, atlasN.z) ? position.xz : (atlasN.x >= atlasN.z ? vec2(position.z, -position.y) : vec2(position.x, -position.y))) * ATLAS_SCALE[atlasI];

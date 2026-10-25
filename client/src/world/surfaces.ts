@@ -3,7 +3,7 @@ import { BufferAttribute, Color, type BufferGeometry } from 'three';
 /** Material class of a vertex: the layer of the painted surface atlas it shows (`world/surface-atlas.ts`). */
 export const Surface = {
   plain: 0, grass: 1, foliage: 2, wood: 3, rock: 4, roof: 5, plaster: 6, brick: 7, ground: 8, metal: 9,
-  sand: 10, paving: 11, meadow: 12, cliff: 13, bark: 14, hedge: 15,
+  sand: 10, paving: 11, meadow: 12, cliff: 13, bark: 14, hedge: 15, floor: 16,
 } as const;
 export type SurfaceId = (typeof Surface)[keyof typeof Surface];
 
@@ -17,7 +17,7 @@ export const ATLAS_LAYERS: readonly { readonly metres: number; readonly strength
   { metres: 1.4, strength: 0.8 },
   { metres: 2.6, strength: 0.45 },
   { metres: 1.6, strength: 0.75 },
-  { metres: 2.2, strength: 0.7 },
+  { metres: 2.2, strength: 0.85 },
   { metres: 3, strength: 0 },
   { metres: 3, strength: 0.55 },
   { metres: 2, strength: 0.7 },
@@ -25,6 +25,7 @@ export const ATLAS_LAYERS: readonly { readonly metres: number; readonly strength
   { metres: 2.6, strength: 0.7 },
   { metres: 1.2, strength: 0.85 },
   { metres: 1.3, strength: 0.75 },
+  { metres: 2.4, strength: 0.9 },
 ];
 
 const hsl = { h: 0, s: 0, l: 0 };

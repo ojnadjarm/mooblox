@@ -196,7 +196,7 @@ const wood: Painter = (g, s, rnd) => {
 };
 
 /** Running-bond bricks (or paving setts): each brick its own value, light top edge, dark bottom, cream mortar. */
-function bricks(g: Ctx, s: number, rnd: () => number, rows: number, perRow: number, mortar: number): void {
+function bricks(g: Ctx, s: number, rnd: () => number, rows: number, perRow: number, mortar: number, spread = 0.14): void {
   g.fillStyle = grey(mortar);
   g.fillRect(0, 0, s, s);
   const h = s / rows;
@@ -206,7 +206,7 @@ function bricks(g: Ctx, s: number, rnd: () => number, rows: number, perRow: numb
     for (let c = 0; c <= perRow; c++) {
       const x = c * w - (r % 2) * w * 0.5;
       const y = r * h;
-      const v = 0.44 + rnd() * 0.14;
+      const v = 0.51 + (rnd() - 0.5) * spread;
       wrapped(s, x + w / 2, y + h / 2, w, (px, py) => {
         const bx = px - w / 2 + gap / 2;
         const by = py - h / 2 + gap / 2;
@@ -229,6 +229,20 @@ function bricks(g: Ctx, s: number, rnd: () => number, rows: number, perRow: numb
 }
 
 const brick: Painter = (g, s, rnd) => bricks(g, s, rnd, 8, 4, 0.7);
+
+/** Brick paving underfoot: big setts of clearly varied tone in dark sunken joints, hairline cracks and moss in a few joints. */
+const floor: Painter = (g, s, rnd, accent) => {
+  bricks(g, s, rnd, 8, 4, 0.3, 0.3);
+  for (let i = 0; i < 5; i++) crack(g, s, rnd, 0.32);
+  const h = s / 8;
+  for (let i = 0; i < 7; i++) {
+    const y = Math.floor(rnd() * 8) * h;
+    const x0 = rnd() * s;
+    for (let k = 0; k < 6; k++) {
+      wrapped(s, (x0 + k * h * 0.12) % s, y, h * 0.2, (px, py) => blob(accent, px, py + (rnd() - 0.5) * h * 0.06, h * (0.07 + rnd() * 0.05), h * (0.04 + rnd() * 0.03), `rgba(${96 + Math.floor(rnd() * 40)},${140 + Math.floor(rnd() * 30)},60,0.7)`));
+    }
+  }
+};
 
 /** Flagstones: irregular slabs with soft edges, worn light rims and a few hairline cracks. */
 const paving: Painter = (g, s, rnd, accent) => {
@@ -372,9 +386,10 @@ const rock: Painter = (g, s, rnd) => {
   }
 };
 
-/** Dirt paths and ground: worn soft tracks and scattered pebbles, each lit on top. */
+/** Dirt paths and ground: worn soft tracks, dry cracks and scattered pebbles, each lit on top. */
 const ground: Painter = (g, s, rnd) => {
-  patches(g, s, rnd, 8, 0.2);
+  patches(g, s, rnd, 10, 0.32);
+  for (let i = 0; i < 6; i++) crack(g, s, rnd, 0.34);
   for (let i = 0; i < Math.round(s * 0.12); i++) {
     const x = rnd() * s;
     const y = rnd() * s;
@@ -561,4 +576,5 @@ const PAINTERS: Record<number, Painter> = {
   [Surface.cliff]: cliff,
   [Surface.bark]: bark,
   [Surface.hedge]: hedge,
+  [Surface.floor]: floor,
 };
