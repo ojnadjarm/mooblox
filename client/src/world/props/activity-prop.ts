@@ -1,9 +1,10 @@
-import { BoxGeometry, Group, Mesh, PlaneGeometry, TorusGeometry, type Material, type Texture } from 'three';
+import { BoxGeometry, Group, Mesh, PlaneGeometry, SphereGeometry, TorusGeometry, type Material, type Texture } from 'three';
 import { CompletionTracking, isDone, type Activity } from '../../domain/types';
 import type { Plot } from '../layout';
 import { paint } from '../material-kit';
 import { Palette } from '../palette';
 import { Parts } from './parts';
+import { PropColour } from './prop-shapes';
 import type { Prop, PropContext, PropState, SignPainter } from './prop';
 
 /** Top of the plot pad the props stand on. */
@@ -58,8 +59,8 @@ export class ActivityProp implements Prop {
     const flag = shape.flag ?? { x: 0, z: 0, height: 0 };
     this.hasFlag = shape.flag !== null;
     if (this.hasFlag) {
-      shape.body.cylinder(0.07, flag.height, Palette.white, flag.x, flag.height / 2, flag.z, 8);
-      shape.body.box(0.22, 0.22, 0.22, Palette.gold, flag.x, flag.height + 0.08, flag.z);
+      shape.body.cylinder(0.06, flag.height, PropColour.cream, flag.x, flag.height / 2, flag.z, 8);
+      shape.body.add(new SphereGeometry(0.13, 8, 6), PropColour.sun, flag.x, flag.height + 0.08, flag.z);
     }
     const leaf = shape.leaf ? shape.leaf.build() : null;
     const closed = shape.leaf ? shape.leaf.build() : null;

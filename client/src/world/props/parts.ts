@@ -24,10 +24,12 @@ export class Parts {
     return this.add(new CylinderGeometry(r, r, h, segments), color, x, y, z);
   }
 
-  add(g: BufferGeometry, color: number, x: number, y: number, z: number, yaw = 0, pitch = 0, roll = 0): this {
+  /** Places a primitive painted `color`; null keeps its own vertex colours (striped or banded pieces). */
+  add(g: BufferGeometry, color: number | null, x: number, y: number, z: number, yaw = 0, pitch = 0, roll = 0): this {
     const q = new Quaternion().setFromEuler(new Euler(pitch, yaw, roll, 'YXZ'));
     g.applyMatrix4(new Matrix4().compose(new Vector3(x, y, z), q, new Vector3(1, 1, 1)));
-    this.list.push(paint(g, color));
+    g.deleteAttribute('uv');
+    this.list.push(color === null ? g : paint(g, color));
     return this;
   }
 

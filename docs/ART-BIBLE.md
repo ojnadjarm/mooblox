@@ -124,6 +124,14 @@ The contrast between soft and crisp is the point. Baked into the shared models f
 | Crisp | planks, bridges, docks, fences, stone steps, crates, logs, carts, windows, doors, rocks, small dressing | left sharp |
 | Cut stone | island cliffs, terrace sides | columns of chunky blocks: two-facet faces meeting at a ridge, one chamfer on the top edge, seams between columns; grass tongues hang soft over them |
 
+Activity props (round 21, the goal of every walk; `world/props/`, ≤ 1.3k tris, one draw each, front half of the pad left
+clear for the player): a picture-house kiosk for videos (round stave barrel, ribbed teal dome, film camera with two reels,
+framed screen with a play button), a book kiosk for pages (plank counter, teal-and-cream striped awning with a scalloped
+valance, open book on the counter), a cut-stone arena arch for quizzes (seamed voussoirs, gold keystone, iron gate, swallowtail
+banners, gem), an arched stone doorway for everything else (round-topped leaf in the purpose colour, little pillow roof over
+its name board), a notice board under a pillow roof with a flower box for labels. Name boards are rounded panels framed in
+wood or a purpose colour; poles end in a gold ball. Awnings, domes and roofs soft; stone blocks, planks, bars crisp.
+
 Districts get a theme (from the section's dominant activity purpose, else in order) with a hand-made landmark:
 
 | Theme | Landmark | Accent | Medium pieces |

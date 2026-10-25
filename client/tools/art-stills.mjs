@@ -1,7 +1,9 @@
-// Art-round stills and walk clip: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--video]
+// Art-round stills and walk clip: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--game t1,t2] [--video]
 // Same cameras every round: overview 1366 (high), play 1366 (high), play 400 (low), plus the concept cameras hub, district and
 // shore 1366 (high, `?scene=shot&cam=`, kids on), and the sunlit hub cliff from the water; JPEGs `<prefix>-<shape>-<view>.jpg`.
 // --video records `walk.webm` (12 s, 1366x768 high, autopilot to the farthest demo plot) from the canvas stream.
+// --game t1,t2.. adds the player's own camera on that walk (spawn plaza, path, bridge, district plot): 1366 high and 400 low
+// stills `<prefix>-<shape>-game-<w>-t<s>.jpg` at those seconds after the page is ready.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,7 +14,7 @@ import { loadChromium } from './playwright.mjs';
 const args = process.argv.slice(2);
 const out = args[0];
 if (!out || out.startsWith('--')) {
-  console.error('usage: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--video]');
+  console.error('usage: node tools/art-stills.mjs <outdir> [--shapes demo,8x12] [--prefix after] [--views a,b] [--game t1,t2] [--video]');
   process.exit(2);
 }
 const opt = (name, fallback) => {
@@ -64,6 +66,24 @@ try {
       const file = join(out, `${prefix}-${shape}-${v.name}.jpg`);
       await page.screenshot({ path: file, type: 'jpeg', quality: 86 });
       console.log(`${file} ${v.tier} calls=${n.calls} tris=${n.tris} programs=${n.programs}`);
+      await page.close();
+    }
+  }
+  const times = opt('game', '').split(',').filter(Boolean).map(Number);
+  for (const shape of times.length ? shapes : []) {
+    for (const [w, h, tier] of [[1366, 768, 'high'], [400, 800, 'low']]) {
+      const page = await open(w, h, query(shape, tier, 'nokids&walk=far'));
+      const t0 = Date.now();
+      for (const t of times) {
+        await page.waitForTimeout(Math.max(0, t * 1000 - (Date.now() - t0)));
+        const n = await page.evaluate(() => {
+          const r = window.mooblox.stage.renderer;
+          return { calls: r.info.render.calls, tris: r.info.render.triangles, programs: r.info.programs.length };
+        });
+        const file = join(out, `${prefix}-${shape}-game-${w}-t${String(t).replace('.', '_')}.jpg`);
+        await page.screenshot({ path: file, type: 'jpeg', quality: 86 });
+        console.log(`${file} ${tier} calls=${n.calls} tris=${n.tris} programs=${n.programs}`);
+      }
       await page.close();
     }
   }

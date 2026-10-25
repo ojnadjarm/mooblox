@@ -73,7 +73,7 @@ describe('door leaf', () => {
     for (let i = 0; i < 60; i++) props.swing(open.activityId, 1 / 60);
     expect(leaf(open).rotation.y).toBeGreaterThan(1.2);
     expect(leaf(open).visible).toBe(true);
-    expect(body.geometry.drawRange.count).toBeLessThan(body.geometry.index!.count);
+    expect(body.geometry.drawRange.count).toBeLessThan(body.geometry.getAttribute('position').count);
     const locked = props.all.find((p) => p.state.locked);
     if (locked) {
       for (let i = 0; i < 60; i++) props.swing(locked.activityId, 1 / 60);
