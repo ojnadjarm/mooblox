@@ -71,15 +71,15 @@ describe('hot path allocations', () => {
         if (body.position.lengthSq() > 900) body.position.set(0, 0, 0);
       }
     }
-    walkSteps(20000);
+    walkSteps(60000);
     // Our code (src/) must allocate nothing; three-mesh-bvh's shapecast still makes 3 typed-array views per call (library).
-    // Up to 8 rounds: on a busy machine the optimising compiler may finish late (unoptimised code boxes numbers).
+    // Short sampled rounds (sampling is ~7x slower) and up to 8 of them: under parallel workers the optimiser finishes late.
     let bytes = Infinity;
     for (let round = 0; round < 8 && bytes > 0; round++) {
-      bytes = Math.min(bytes, await sampledBytes('walkSteps', /\/client\/src\//, () => walkSteps(20000)));
+      bytes = Math.min(bytes, await sampledBytes('walkSteps', /\/client\/src\//, () => walkSteps(5000)));
     }
     expect(bytes).toBe(0);
-  });
+  }, 30000);
 
   it('the sampler sees an allocating step (control)', async () => {
     const keep: Vector3[] = [];

@@ -53,19 +53,21 @@ describe('campus layout and dressing for any course shape', () => {
         const plots = layout.zones.flatMap((z) => z.plots);
         expect(plots).toHaveLength(w.sections.reduce((n, s) => n + s.activities.length, 0));
         for (const z of layout.zones) for (const p of z.plots) expect(Math.hypot(p.x - z.x, p.z - z.z) + p.radius).toBeLessThanOrEqual(z.radius);
-        plots.forEach((a, i) => plots.slice(i + 1).forEach((b) => expect(gap(a, b)).toBeGreaterThanOrEqual(0)));
+        const hits: string[] = [];
+        plots.forEach((a, i) => plots.slice(i + 1).forEach((b) => !(gap(a, b) >= 0) && hits.push(`plot ${a.x},${a.z} x plot ${b.x},${b.z}`)));
         for (const z of layout.zones) {
           const near = dressing.obstacles.map((o) => ({ x: o.x, z: o.z, radius: o.r })).filter((o) => gap(o, z) < 0);
-          for (const o of near) for (const p of z.plots) expect(gap(o, p)).toBeGreaterThan(0);
+          for (const o of near) for (const p of z.plots) if (!(gap(o, p) > 0)) hits.push(`solid ${o.x},${o.z} x plot ${p.x},${p.z}`);
         }
         for (const b of dressing.bridges) {
           for (const o of dressing.obstacles) {
             const len = Math.hypot(b.bx - b.ax, b.bz - b.az);
             const t = Math.max(0, Math.min(len, ((o.x - b.ax) * (b.bx - b.ax) + (o.z - b.az) * (b.bz - b.az)) / len));
             const d = Math.hypot(b.ax + ((b.bx - b.ax) * t) / len - o.x, b.az + ((b.bz - b.az) * t) / len - o.z);
-            expect(d).toBeGreaterThan(o.r + DECK_HALF);
+            if (!(d > o.r + DECK_HALF)) hits.push(`solid ${o.x},${o.z} x bridge ${b.ax},${b.az}`);
           }
         }
+        expect(hits).toEqual([]);
       });
 
       it('never places one solid model inside another (footprint overlap)', () => {

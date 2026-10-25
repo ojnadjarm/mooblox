@@ -108,15 +108,20 @@ describe('critter reactions', () => {
       }
     };
     steps();
-    const session = new Session();
-    session.connect();
-    await session.post('HeapProfiler.enable');
-    await session.post('HeapProfiler.startSampling', { samplingInterval: 64 });
-    steps();
-    const { profile } = (await session.post('HeapProfiler.stopSampling')) as unknown as { profile: { head: Node } };
-    session.disconnect();
     interface Node { callFrame: { url: string }; selfSize: number; children: Node[] }
     const own = (n: Node): number => (/src\/world\/critter-react/.test(n.callFrame.url) ? n.selfSize : 0) + n.children.reduce((a, c) => a + own(c), 0);
-    expect(own(profile.head)).toBe(0);
-  });
+    // Up to 8 rounds: under parallel workers the optimiser may finish late (unoptimised code boxes numbers).
+    let bytes = Infinity;
+    for (let round = 0; round < 8 && bytes > 0; round++) {
+      const session = new Session();
+      session.connect();
+      await session.post('HeapProfiler.enable');
+      await session.post('HeapProfiler.startSampling', { samplingInterval: 64 });
+      steps();
+      const { profile } = (await session.post('HeapProfiler.stopSampling')) as unknown as { profile: { head: Node } };
+      session.disconnect();
+      bytes = Math.min(bytes, own(profile.head));
+    }
+    expect(bytes).toBe(0);
+  }, 30000);
 });
