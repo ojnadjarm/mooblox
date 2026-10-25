@@ -13,6 +13,12 @@ const TURN = 12;
 /** Seconds off the ground without a jump before the fall pose (steps and slopes keep the walk), and the fall speed (m/s) that ends the jump pose. */
 const FALL_AFTER = 0.14;
 const FALL_SPEED = 1.5;
+/** Rate (1/s) the measured ground velocity follows the feet; a run that loses this share of its speed in one step bumped into something. */
+const MOVED_RATE = 25;
+const BUMP_LOSS = 0.65;
+/** Squash strength of a bump and the most a step may move before it counts as a respawn, not a run (m). */
+const BUMP_SQUASH = 0.35;
+const MAX_STEP = 0.5;
 
 /** Where the feet kicked up dust: a footstep (n = 1), a jump or a landing (more puffs, stronger). */
 export type FeetListener = (x: number, y: number, z: number, n: number, strength: number) => void;
@@ -29,6 +35,8 @@ export class Player {
   /** What stepBody gets: the eased velocity as a run-speed fraction, and the gate's jump. */
   private readonly step = { x: 0, z: 0, run: true, jump: false };
   private readonly velocity = { x: 0, z: 0 };
+  /** How fast the feet really move over the ground (m/s), smoothed: zero against a wall whatever the stick says. */
+  private readonly moved = { x: 0, z: 0 };
   private readonly gate = new JumpGate();
   private jumpHeld = false;
   private sinceLand = Infinity;
@@ -48,6 +56,7 @@ export class Player {
     const wasGround = b.onGround;
     const fall = -b.velocity.y;
     stepBody(b, st, Physics.step, this.collider);
+    this.measure(wasGround);
     if (st.jump) {
       this.sinceJump = 0;
       this.onFeet?.(b.position.x, b.position.y, b.position.z, 3, 0.4);
@@ -126,7 +135,7 @@ export class Player {
     this.sinceJump += dt;
     const s = this.sinceJump < this.sinceLand ? stretch(this.sinceJump) : squash(this.sinceLand, this.landStrength);
     root.scale.set(s.xz, s.y, s.xz);
-    const speed = Math.hypot(this.velocity.x, this.velocity.z);
+    const speed = Math.hypot(this.moved.x, this.moved.z);
     const vy = this.body.velocity.y;
     this.avatar.setMotion(speed, dt > 0 ? turned / dt : 0, this.body.onGround ? 0 : vy);
     const running = speed > Physics.walk + 0.5;
@@ -148,7 +157,28 @@ export class Player {
     focus.z = root.position.z;
     focus.cueAge += dt;
     this.avatar.update(dt);
-    this.camera.follow(root.position, dt, false, this.velocity);
+    this.camera.follow(root.position, dt, false, this.moved);
+  }
+
+  /** Follows the real ground velocity of the last step; a run stopped short on the ground kicks a puff off the face and a squash. */
+  private measure(wasGround: boolean): void {
+    const b = this.body;
+    const dx = b.position.x - this.prev.x;
+    const dz = b.position.z - this.prev.z;
+    const far = dx * dx + dz * dz > MAX_STEP * MAX_STEP;
+    const vx = far ? 0 : dx / Physics.step;
+    const vz = far ? 0 : dz / Physics.step;
+    const was = Math.hypot(this.moved.x, this.moved.z);
+    const k = 1 - Math.exp(-MOVED_RATE * Physics.step);
+    this.moved.x += (vx - this.moved.x) * k;
+    this.moved.z += (vz - this.moved.z) * k;
+    const now = Math.sqrt(vx * vx + vz * vz);
+    const wanted = Math.hypot(this.velocity.x, this.velocity.z);
+    if (wasGround && b.onGround && was > Physics.walk && wanted > Physics.walk && now < was * (1 - BUMP_LOSS)) {
+      this.landStrength = BUMP_SQUASH;
+      this.sinceLand = 0;
+      this.onFeet?.(b.position.x + Math.sin(this.facing) * Physics.radius, b.position.y + 0.4, b.position.z + Math.cos(this.facing) * Physics.radius, 2, 0.3);
+    }
   }
 
   /** Moves the player to (x, z), facing `facing`, with the camera snapped behind. */
@@ -156,6 +186,7 @@ export class Player {
     this.body.position.set(x, this.spawn.y, z);
     this.body.velocity.set(0, 0, 0);
     this.velocity.x = this.velocity.z = 0;
+    this.moved.x = this.moved.z = 0;
     this.prev.copy(this.body.position);
     this.facing = facing;
     this.camera.yaw = facing + Math.PI;
@@ -179,6 +210,7 @@ export class Player {
     this.body.position.copy(this.spawn);
     this.body.velocity.set(0, 0, 0);
     this.velocity.x = this.velocity.z = 0;
+    this.moved.x = this.moved.z = 0;
     this.prev.copy(this.spawn);
   }
 }
