@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import FOOTPRINTS from '../../src/world/model-footprints.json';
 import { seededRandom } from '../../src/world/random';
-import { recipe, type RecipeKind } from '../../src/world/recipes';
+import { recipe, WAYSIDE, type RecipeKind } from '../../src/world/recipes';
 
-const KINDS: readonly RecipeKind[] = ['treeClump', 'gardenBed', 'rockGroup', 'readingNook'];
+const KINDS: readonly RecipeKind[] = ['treeClump', 'gardenBed', 'rockGroup', 'readingNook', ...WAYSIDE];
 
 describe('set-dressing recipes', () => {
   for (const kind of KINDS) {

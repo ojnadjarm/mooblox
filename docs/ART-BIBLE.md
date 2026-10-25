@@ -142,6 +142,10 @@ Landmarks are bespoke models (Blender or composed kit pieces with their own face
   (2 umbrellas + towels + lifebuoy); garden bed (raised planter + flowers in 2 colours + low hedge).
 - **Flowers only in beds or along edges**, in 2-3 colours per bed, never sprinkled across lawns.
 - **Lamps in pairs** along avenues, at bridge heads and at plaza entries.
+- **Walks have wayside stops** (district and hub concepts, round 16; `world/path-stops.ts`): beside every walk, wherever no
+  stall, sign or fountain stands within 11 m, a stop faces the walk: a signpost with a flower box and bush, a bench by a notice
+  post, or a market stall with barrel, crate and banner. Each holds one sight walkers visit; each island gets one lawn nook
+  fewer per stop, so the dressing moves to the walks instead of growing.
 - **The spawn plaza is framed, not open lawn** (hub concept): a ring of raised planters just outside the paving (terracotta
   kerb, cream cap rim, puffy clipped hedge blocks, flowers between), cut into runs with walk-through gaps, open at every
   entry, cream square posts at each run end, a lamp pair at each entry, benches inside facing the plaza centre.

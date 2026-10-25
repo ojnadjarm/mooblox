@@ -13,7 +13,8 @@ import FOOTPRINTS from './model-footprints.json';
 import { Occupancy, type GroundQuery } from './occupancy';
 import { SegmentIndex } from './segment-index';
 import { seededRandom } from './random';
-import { recipe, type Recipe, type RecipeKind } from './recipes';
+import { recipe, WAYSIDE, type Recipe, type RecipeKind } from './recipes';
+import { pathPoints, SIGHT_IDS, wayStops } from './path-stops';
 
 export const WATER_Y = -3;
 /** Height of the bridge deck's walking surface. */
@@ -33,6 +34,8 @@ const LAWNS = [{ r: [2.2, 3], clear: 0.8 }, { r: [1.8, 2.2], clear: 0.5 }] as co
 /** Thickness of a raised lawn's grass lip over its cliff. */
 const TERRACE_LIP = 0.16;
 const LAMP_STEP = 9;
+/** Wayside stops keep at most this far (m) between sights along a walk, so strollers can link them (24 m reach). */
+const WAYSIDE_SPACING = 11;
 const HEDGE_STEP = 1.5;
 /** Hedge pieces per run and per run plus gap round a zone's rim. */
 const HEDGE_RUN = 6;
@@ -297,6 +300,8 @@ class Designer {
   /** Islands that got a broad shelf (they need fewer raised lawns). */
   private readonly shelves = new Set<Circle>();
   private readonly random: () => number;
+  /** Wayside stops draw from their own stream so the rest of the world keeps its seeded layout. */
+  private readonly wayRandom: () => number;
   private district!: District;
 
   constructor(
@@ -306,6 +311,7 @@ class Designer {
     purposeOf?: (activityId: number) => string | undefined,
   ) {
     this.random = seededRandom(seed ^ 0x2545f491);
+    this.wayRandom = seededRandom(seed ^ 0x5eed57a1);
     this.themes = pickThemes(layout.zones.map((z) => z.plots.map((pl) => purposeOf?.(pl.activityId) ?? ''))).map((t) => DISTRICT_THEMES[t]);
     for (const z of layout.zones) this.spans.push(span(z.anchor, z));
     for (const l of layout.links) this.spans.push(span(layout.hubs[l.from]!, layout.hubs[l.to]!));
@@ -332,7 +338,8 @@ class Designer {
         this.monument = this.monumentSite(hub);
         this.plazaBenches(hub);
       }
-      this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8);
+      const stops = this.waysides(hub, this.walks.filter((w) => w.ax === hub.x && w.az === hub.z), i === 0 ? [hub] : []);
+      this.fillIsland(hub, i === 0 ? PLAZA + 0.8 : SMALL_PLAZA + 0.8, stops);
       this.shore(hub);
     });
     for (const l of this.layout.links) {
@@ -348,7 +355,8 @@ class Designer {
       this.bridge(z.anchor, z);
       this.zone(z, i);
       this.themed(z, this.theme.corners, Math.max(1, Math.round((z.radius * z.radius) / 120)));
-      this.fillIsland(z, 0);
+      const stops = this.waysides(z, this.paths.filter((s) => Math.hypot(s.bx - z.x, s.bz - z.z) <= z.radius), []);
+      this.fillIsland(z, 0, stops);
       this.shore(z);
     });
     const sails = this.sea(districts);
@@ -824,15 +832,34 @@ class Designer {
     this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, x, h * 0.875, z, 0));
   }
 
-  /** Curated clusters over an island (art bible section 6): raised lawns, tree clumps, beds, rock groups, nooks; calm lawn between. */
-  private fillIsland(c: Circle, inner: number): void {
+  /** Wayside stops beside the island's walks wherever no stall, sign or fountain stands within WAYSIDE_SPACING, facing the walk; returns how many. */
+  private waysides(c: Circle, walks: readonly Segment[], sights: readonly { x: number; z: number }[]): number {
+    const own = this.district.placements.filter((p) => SIGHT_IDS.has(p.id));
+    const first = Math.floor(this.wayRandom() * WAYSIDE.length);
+    return wayStops(pathPoints(walks, 1.5), [...sights, ...own], WAYSIDE_SPACING, (p, n) => {
+      const rec = recipe(WAYSIDE[(first + n) % WAYSIDE.length]!, this.wayRandom);
+      for (const off of [0.6, 1.2, 1.9, 2.6]) {
+        for (const side of n % 2 ? [1, -1] : [-1, 1]) {
+          const x = p.x + p.nx * side * (rec.radius + off);
+          const z = p.z + p.nz * side * (rec.radius + off);
+          if (Math.hypot(x - c.x, z - c.z) > c.radius || !this.free(x, z, 2 * rec.radius - 1, 0.2)) continue;
+          this.stamp(rec, x, 0, z, Math.atan2(p.x - x, p.z - z), false);
+          return { x, z };
+        }
+      }
+      return null;
+    }).length;
+  }
+
+  /** Curated clusters over an island (art bible section 6): raised lawns, tree clumps, beds, rock groups, nooks (one fewer per wayside stop); calm lawn between. */
+  private fillIsland(c: Circle, inner: number, stops: number): void {
     const k = (c.radius * c.radius) / HUB_AREA;
     const landmark = this.landmarks.some((l) => Math.hypot(l.x - c.x, l.z - c.z) < c.radius) ? 1 : 0;
     this.lawnTerraces(c, inner, (k < 1.3 ? 2 : 3) - landmark - (this.shelves.has(c) ? 1 : 0));
     this.clusters(c, inner, 'treeClump', Math.max(2, Math.round(5 * k)));
     this.clusters(c, inner, 'gardenBed', Math.max(1, Math.round(3 * k)));
     this.clusters(c, inner, 'rockGroup', Math.max(1, Math.round(2.5 * k)));
-    this.clusters(c, inner, 'readingNook', Math.max(1, Math.round(1.5 * k)));
+    this.clusters(c, inner, 'readingNook', Math.max(0, Math.max(1, Math.round(1.5 * k)) - stops));
     this.fill(c, Math.max(inner, c.radius * 0.7), Math.round(5 * k), 3.2, 1.4, (x, z, s) => this.tree(x, z, s));
     this.pets(c);
   }

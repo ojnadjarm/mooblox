@@ -27,7 +27,10 @@ export interface Recipe {
   readonly patch?: { readonly r: number; readonly colour: number };
 }
 
-export type RecipeKind = 'treeClump' | 'gardenBed' | 'rockGroup' | 'readingNook';
+export type RecipeKind = 'treeClump' | 'gardenBed' | 'rockGroup' | 'readingNook' | WaysideKind;
+/** Wayside stops beside a walk (+z faces the walk), each round a sight walkers visit: a signpost, a bench by a notice post, a stall; every item has a yaw. */
+export type WaysideKind = 'signStop' | 'restStop' | 'stallStop';
+export const WAYSIDE: readonly WaysideKind[] = ['signStop', 'restStop', 'stallStop'];
 
 const LEAF = 0xc8eaa0;
 const ROCK = 0xf0e2f4;
@@ -80,6 +83,43 @@ export function recipe(kind: RecipeKind, random: () => number): Recipe {
         { id: 'nature/grass_leafsLarge', dx: 0.4, dz: -1, height: 0.5, sway: true, detail: true, minor: true, tint: LEAF },
       ],
       radius: 1.9,
+    };
+  }
+  if (kind === 'signStop') {
+    const [a, b] = pick(BEDS);
+    return {
+      items: [
+        { id: 'nature/sign', dx: 0, dz: 0.3, height: 1.3, yaw: random() * 0.5 - 0.25, solid: true },
+        { id: 'suburb/planter', dx: -1.1, dz: -0.2, height: 0.6, yaw: 0, detail: true },
+        { id: a, dx: 0.9, dz: 0.2, yaw: random() * 6, height: 0.55, sway: true, detail: true },
+        { id: b, dx: 0.7, dz: -0.8, yaw: random() * 6, height: 0.5, sway: true, detail: true, minor: true },
+        { id: pick(['nature/plant_bushDetailed', 'nature/plant_bushLarge']), dx: -0.2, dz: -1.2, yaw: random() * 6, height: 0.9, sway: true, detail: true, tint: LEAF },
+      ],
+      radius: 1.9,
+    };
+  }
+  if (kind === 'restStop') {
+    return {
+      items: [
+        { id: 'nature/sign', dx: 1.6, dz: 0.2, height: 1.3, yaw: 0, solid: true },
+        { id: 'town/stall-bench', dx: 0, dz: 0, height: 0.55, yaw: 0, solid: true },
+        { id: 'suburb/planter', dx: -1.7, dz: -0.1, height: 0.6, yaw: 0, detail: true },
+        { id: 'nature/plant_bushDetailed', dx: 0.4, dz: -1.3, yaw: random() * 6, height: 1, sway: true, detail: true, tint: LEAF },
+        { id: pick(BEDS)[0], dx: -0.9, dz: -1.3, yaw: random() * 6, height: 0.5, sway: true, detail: true, minor: true },
+      ],
+      radius: 2.3,
+    };
+  }
+  if (kind === 'stallStop') {
+    return {
+      items: [
+        { id: random() < 0.5 ? 'town/stall-red' : 'town/stall-green', dx: 0, dz: -0.4, height: 2.6, yaw: 0, solid: true },
+        { id: 'pirate/barrel', dx: -1.9, dz: 0.2, yaw: random() * 6, height: 0.8, solid: true, detail: true },
+        { id: 'pirate/crate', dx: 1.9, dz: 0.3, height: 0.65, yaw: random() * 0.6, solid: true, detail: true },
+        { id: random() < 0.5 ? 'town/banner-red' : 'town/banner-green', dx: -1.8, dz: -1.4, height: 2.2, yaw: 0, detail: true },
+        { id: pick(BEDS)[1], dx: 1.6, dz: -1.3, yaw: random() * 6, height: 0.5, sway: true, detail: true, minor: true },
+      ],
+      radius: 2.5,
     };
   }
   return {
