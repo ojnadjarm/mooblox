@@ -1,8 +1,9 @@
-// Phone frame-pacing probe: node tools/pacing-probe.mjs [out.json] [--roots dirA,dirB] [--rigs dpr2,dpr3,..] [--shapes demo,20x30] [--hold ms]
+// Phone frame-pacing probe: node tools/pacing-probe.mjs [out.json] [--roots dirA,dirB] [--rigs dpr2,dpr3,..] [--shapes demo,20x30] [--hold ms] [--max ms]
 // Per root (a client/ copy to A/B; default this one) x rig x shape: 400x800 touch page at DPR 2 or 3 on the real GPU under 4x CPU
 // (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one; high-1366: the perf gate's GPU-bound high rig, 1366x768 DPR 1, 1x; high-1920 / high-2560: the same at 1920x1080 / 2560x1440; auto-1920 / auto-2560: the same picked high, not asked, so it may step down a tier;
 // low-400: the perf gate's low rig, DPR 1 4x), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
-// often the canvas pixel ratio changed (each change is a resize hitch), the ratio range and the tier at the end.
+// often the canvas pixel ratio changed (each change is a resize hitch), the ratio range, the tier at the end and `first5` (worst, 1% low, > 33 ms
+// of the first 5 s: the start at a predicted scale). `max` caps the walk wait (90000).
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -34,6 +35,7 @@ const RIG = {
   'low-400': { dpr: 1, quality: 'low', throttle: 4 },
 };
 const hold = Number(opt('hold', '4000'));
+const max = Number(opt('max', '90000'));
 
 const chromium = await loadChromium();
 const browser = await chromium.launch({ headless: true, args: ['--mute-audio', '--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] });
@@ -52,10 +54,19 @@ function record() {
   requestAnimationFrame(tick);
 }
 
+/** Worst frame, 1% low fps and frames over 33 ms of a run of intervals. */
+function pacing(ms) {
+  const sorted = [...ms].sort((a, b) => b - a);
+  const worst1 = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 100)));
+  return { worstMs: +sorted[0].toFixed(1), low1Fps: +(1000 / (worst1.reduce((s, x) => s + x, 0) / worst1.length)).toFixed(1), over33: ms.filter((x) => x > 33.4).length };
+}
+
 function stats(frames) {
   const ms = frames.map((f) => f[0]);
   const sorted = [...ms].sort((a, b) => b - a);
   const worst1 = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 100)));
+  let sum = 0;
+  const first5 = pacing(ms.filter((x) => (sum += x) <= 5000));
   let changes = 0;
   let t = 0;
   const steps = [];
@@ -78,6 +89,7 @@ function stats(frames) {
     low1Fps: +(1000 / (worst1.reduce((s, x) => s + x, 0) / worst1.length)).toFixed(1),
     worstMs: +sorted[0].toFixed(1),
     over33: ms.filter((x) => x > 33.4).length,
+    first5,
     ratioChanges: changes,
     /** Each pixel ratio change: [s since start, new ratio, GPU p90 ms of the 60 frames before]. */
     steps,
@@ -111,7 +123,7 @@ try {
           await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 180000, polling: 50 });
           await cdp.send('Emulation.setCPUThrottlingRate', { rate: rig.throttle });
           await page.evaluate(record);
-          await page.waitForFunction(() => window.mooblox.probe.reached, null, { timeout: 90000, polling: 200 }).catch(() => null);
+          await page.waitForFunction(() => window.mooblox.probe.reached, null, { timeout: max, polling: 200 }).catch(() => null);
           await page.waitForTimeout(hold);
           const frames = await page.evaluate(() => window.__pp.frames);
           const { cpuBound, gpuMs } = await page.evaluate(() => ({ cpuBound: window.mooblox.quality.dynamic.cpuBound ?? null, gpuMs: window.mooblox.quality.gpuMs ?? null }));

@@ -1,6 +1,6 @@
 import type { Stage } from '../world/stage';
 import type { GpuTimer } from './gpu-timer';
-import { DynamicResolution, QUALITY, lowerTier, pixelRatio, type QualityTier } from './quality';
+import { DynamicResolution, QUALITY, lowerTier, pixelRatio, startScale, type QualityTier } from './quality';
 
 /** Where a tier step-down is remembered for the next visit. */
 export type TierMemory = (tier: QualityTier) => void;
@@ -29,8 +29,12 @@ export class QualityManager {
     private readonly work: () => number = frameWork,
     /** Times each frame's render pass (`begin` .. `frame`); null = frame times only. */
     private readonly timer: GpuTimer | null = null,
+    /** Canvas pixels the visit's first frames may draw (see `pixelBudget`): a bigger canvas starts scaled down, grows when GPU timings allow. */
+    budget = Infinity,
   ) {
     this.dynamic = this.governor(current);
+    const host = stage.canvasHost;
+    if (!software) this.dynamic.scale = startScale(current, host.clientWidth * host.clientHeight, window.devicePixelRatio, budget);
     this.apply();
   }
 

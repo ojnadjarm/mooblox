@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DynamicResolution, lowerTier, pickTier, pixelRatio } from '../../src/perf/quality';
+import { DynamicResolution, lowerTier, pickTier, pixelBudget, pixelRatio, startScale } from '../../src/perf/quality';
 
 describe('quality tiers', () => {
   const laptop = { query: null, memoryGb: 8, cores: 8, coarse: false, gpu: 'ANGLE (Intel, Vulkan 1.4 (Intel(R) Iris(R) Xe Graphics (ADL GT2)))' };
@@ -44,6 +44,38 @@ describe('quality tiers', () => {
     expect(pixelRatio('high', 3, 1)).toBe(2);
     expect(pixelRatio('high', 1, 1)).toBe(1);
     expect(pixelRatio('high', 2, 0.6)).toBeCloseTo(1.2);
+  });
+});
+
+describe('starting render scale', () => {
+  const iris = 'ANGLE (Intel, Vulkan 1.4 (Intel(R) Iris(R) Xe Graphics (ADL GT2)))';
+
+  it('budgets post tiers on GPUs not known strong, a last visit wins', () => {
+    expect(pixelBudget('high', iris, null)).toBe(1.1e6);
+    expect(pixelBudget('xhigh', '', null)).toBe(1.1e6);
+    expect(pixelBudget('medium', iris, null)).toBe(Infinity);
+    expect(pixelBudget('high', 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060)', null)).toBe(Infinity);
+    expect(pixelBudget('high', iris, 2e6)).toBe(2e6);
+  });
+
+  it('scales a canvas over the budget down to the 0.05 step that fits, never under the floor', () => {
+    expect(startScale('high', 1366 * 768, 1, 1.1e6)).toBe(1);
+    expect(startScale('high', 1920 * 1080, 1, 1.1e6)).toBe(0.7);
+    expect(startScale('high', 2560 * 1440, 1, 1.1e6)).toBe(0.6);
+    expect(startScale('low', 400 * 800, 3, 1.1e6)).toBe(1);
+    expect(startScale('high', 400 * 800, 3, 1.1e6)).toBe(0.9);
+  });
+
+  it('grows a scaled-down start once GPU timings show room', () => {
+    const d = new DynamicResolution(0.6);
+    d.scale = 0.7;
+    for (let w = 0; w < 31; w++) {
+      for (let f = 0; f < 60; f++) {
+        d.gpu(6);
+        d.sample(16.7);
+      }
+    }
+    expect(d.scale).toBe(0.9);
   });
 });
 

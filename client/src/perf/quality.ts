@@ -85,6 +85,22 @@ export function pixelRatio(tier: QualityTier, deviceDpr: number, scale: number):
   return Math.max(0.5, Math.min(deviceDpr || 1, QUALITY[tier].maxDpr) * scale);
 }
 
+/** Canvas pixels a post tier starts at on a GPU not known to be strong (high on an Iris Xe fits about 1366 x 768 at full scale). */
+const WEAK_POST_PIXELS = 1.1e6;
+
+/** Canvas pixels a tier may start at: a last visit's canvas at this tier, else ~1.1 Mpx for post tiers on a GPU not known strong. */
+export function pixelBudget(tier: QualityTier, gpu: string, stored: number | null): number {
+  if (stored !== null && stored > 0) return stored;
+  return QUALITY[tier].post && !strongGpu(gpu) ? WEAK_POST_PIXELS : Infinity;
+}
+
+/** Starting render scale: the largest 0.05 step whose canvas (`cssPixels` at the tier's pixel ratio) fits `budget`, at least the floor. */
+export function startScale(tier: QualityTier, cssPixels: number, deviceDpr: number, budget: number): number {
+  const full = cssPixels * Math.min(deviceDpr || 1, QUALITY[tier].maxDpr) ** 2;
+  if (full <= budget) return 1;
+  return Math.max(QUALITY[tier].minScale, snap(Math.sqrt(budget / full), Math.floor));
+}
+
 const TARGET_MS = 1000 / 60;
 const SLOW_MS = 1000 / 50;
 const FAST_MS = 1000 / 57;

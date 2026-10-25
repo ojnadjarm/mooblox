@@ -10,7 +10,7 @@ import { completionToggle } from '../ui/completion-toggle';
 import { FrameGate } from '../perf/frame-gate';
 import { gpuName } from '../perf/gpu';
 import { GpuTimer } from '../perf/gpu-timer';
-import { QUALITY, pickTier, type QualityTier } from '../perf/quality';
+import { QUALITY, pickTier, pixelBudget, type QualityTier } from '../perf/quality';
 import { QualityManager, frameWork } from '../perf/quality-manager';
 import type { AvatarFactory, AvatarLook } from '../player/avatar-kit';
 import { BvhCollider } from '../player/collider';
@@ -127,6 +127,27 @@ function rememberTier(tier: QualityTier): void {
     localStorage.setItem(TIER_KEY, tier);
   } catch {
     // Private mode or blocked storage: the step-down lasts this visit only.
+  }
+}
+
+const PIXELS_KEY = 'mooblox-pixels';
+
+/** Canvas pixels an earlier visit ended on at `tier` (stored as `tier:pixels`), or null. */
+function storedPixels(tier: QualityTier): number | null {
+  try {
+    const [t, px] = (localStorage.getItem(PIXELS_KEY) ?? '').split(':');
+    return t === tier && Number(px) > 0 ? Number(px) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers the canvas size this visit ends on, the next visit's starting budget (ignored when storage is blocked). */
+function rememberPixels(tier: QualityTier, pixels: number): void {
+  try {
+    localStorage.setItem(PIXELS_KEY, `${tier}:${pixels}`);
+  } catch {
+    // Private mode or blocked storage: the next visit starts from the GPU guess.
   }
 }
 
@@ -293,7 +314,8 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
 
   const software = SOFTWARE_GL.test(pickedGpu);
   const timer = software ? null : GpuTimer.create(stage.renderer.getContext() as WebGL2RenderingContext);
-  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier, software, frameWork, timer);
+  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier, software, frameWork, timer, pixelBudget(tier, pickedGpu, storedPixels(tier)));
+  if (!software) window.addEventListener('pagehide', () => rememberPixels(quality.tier, stage.renderer.domElement.width * stage.renderer.domElement.height));
   const overlay = params.get('perf') === '1' ? new PerfOverlay(root, stage.renderer, quality) : null;
   const steps = new Set<(dt: number) => void>();
   let clock = 0;

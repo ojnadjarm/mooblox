@@ -7,6 +7,7 @@ import type { Stage } from '../../src/world/stage';
 function fakeStage() {
   const ratios: number[] = [];
   const stage = {
+    canvasHost: { clientWidth: 2560, clientHeight: 1440 },
     resize: (r: number) => void ratios.push(r),
     sun: { castShadow: false, shadow: { map: null, mapSize: { x: 0, set(x: number) { this.x = x; } } } },
     dropPost: () => {},
@@ -21,6 +22,17 @@ describe('QualityManager', () => {
     const { stage } = fakeStage();
     expect(new QualityManager(stage, 'low', null, true).dynamic.scale).toBe(QUALITY.low.minScale);
     expect(new QualityManager(stage, 'high', null, false).dynamic.scale).toBe(1);
+  });
+
+  it('starts a canvas over its pixel budget scaled down, at least at the floor', () => {
+    const { stage, ratios } = fakeStage();
+    expect(new QualityManager(stage, 'high', null, false, () => 2, null, 2560 * 1440).dynamic.scale).toBe(1);
+    expect(new QualityManager(stage, 'high', null, false, () => 2, null, 1.6e6).dynamic.scale).toBe(0.65);
+    expect(new QualityManager(stage, 'high', null, false, () => 2, null, 1e6).dynamic.scale).toBe(QUALITY.high.minScale);
+    const small = new QualityManager(stage, 'high', null, false, () => 2, null, 1e6);
+    expect(ratios.at(-1)).toBe(QUALITY.high.minScale);
+    small.setTier('medium');
+    expect(small.dynamic.scale).toBe(1);
   });
 
   it('resizes only when the scale moves, not on every slow frame', () => {
@@ -50,7 +62,10 @@ describe('QualityManager', () => {
     for (let i = 0; i < 60 * 30 && q.tier === 'high'; i++) q.frame(16.7);
     expect(q.tier).toBe('medium');
     expect(q.dynamic.scale).toBe(QUALITY.high.minScale);
+    const small = new QualityManager(stage, 'high', null, false, () => 2, null, 1e6);
     expect(ratios.at(-1)).toBe(QUALITY.high.minScale);
+    small.setTier('medium');
+    expect(small.dynamic.scale).toBe(1);
   });
 
   it('feeds GPU timings to the governor and times frames outside play without sampling them', () => {
