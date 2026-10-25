@@ -3,7 +3,7 @@
 # Per object recipes (ART-BIBLE.md soft/crisp rules): wood tops split into planks with dark seams, crates and carts planked,
 # barrel staves seamed and the lid sunk in its rim, house doors in vertical boards, stall tables and sign boards in planks,
 # fence posts pointed, lamp posts with two collars, leaf clumps on broadleaf crowns and hedge tops, sunlit pine tiers,
-# moss pads and pebbles on rocks, blossom window boxes and shutter pairs at house windows, inner leaf fans on bushes, clumps on
+# rocks in grey stone facet tones with moss pads and pebbles, blossom window boxes and shutter pairs at house windows, inner leaf fans on bushes, clumps on
 # planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks, growth rings and bark plates on the stump,
 # logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree, sunlit
 # grass tips, fuller flat plants, moss at path stones, rope lashings and a coil on the dock, melon stems, sprouts, cream stripes on
@@ -25,6 +25,8 @@ SEAM = 0.55   # seam and sunk-wall colour factor
 WIDTH = 0.012  # seam width, fraction of the model's size
 DEPTH = 0.008  # seam depth, fraction of the model's size
 MOSS = (0.16, 0.38, 0.05, 1.0)  # linear moss green on rock tops
+ROCK = (0.656, 0.653, 0.645)    # light grey rock body: the scenery's lavender ROCK_TINT turns it into the bible's #C7BBC9
+ROCK_TONES = {'lit': (1.1, 1.1, 1.08), 'dim': (0.86, 0.86, 0.9), 'foot': (0.66, 0.65, 0.76)}  # facet and foot factors
 CREAM = (1.0, 0.9, 0.66)        # factor on the kit's white wall texels: warm cream plaster
 STONE = (0.68, 0.64, 0.6)        # factor on a white texel: light warm stone (quoins)
 PLINTH = (0.5, 0.46, 0.45)      # plinth stone, a step darker
@@ -474,22 +476,33 @@ def hidden(bm, top):
 
 
 def rock(bm, size, mats, slot, seed):
-    """Moss pads inset on the upward dirt faces (the old grass bits turn moss too), two crisp pebbles at the foot."""
+    """Grey stone body in facet tones (lit tops, dim alternate facets, a deep foot), moss pads inset on the upward faces
+    (the kit's cyan grass bits turn moss too), two crisp pebbles at the foot."""
     dirt = next((i for i, m in enumerate(mats) if 'dirt' in m.name.lower()), 0)
     grass = {i for i, m in enumerate(mats) if 'grass' in m.name.lower()}
+    base(mats[dirt])[:3] = ROCK
     tops = [f for f in bm.faces if f.normal.z > 0.75 and f.material_index == dirt and f.calc_area() > 0.01 * size * size]
-    if tops:
-        moss = mats[dirt].copy()
-        moss.name = 'moss'
-        next(n for n in moss.node_tree.nodes if n.type == 'BSDF_PRINCIPLED').inputs['Base Color'].default_value = MOSS
-        mats.append(moss)
-        for f in tops:
-            t = 0.22 * min(e.calc_length() for e in f.edges)
-            bmesh.ops.inset_individual(bm, faces=[f], thickness=t, depth=0.004 * size, use_even_offset=False)
-            f.material_index = len(mats) - 1
-        for f in bm.faces:
-            if f.material_index in grass:
-                f.material_index = len(mats) - 1
+    moss = coloured(mats, dirt, 'moss', MOSS[:3])
+    for f in tops:
+        t = 0.22 * min(e.calc_length() for e in f.edges)
+        bmesh.ops.inset_individual(bm, faces=[f], thickness=t, depth=0.004 * size, use_even_offset=False)
+        f.material_index = moss
+    for f in bm.faces:
+        if f.material_index in grass:
+            f.material_index = moss
+    tone = {k: coloured(mats, dirt, 'rock-' + k, [a * b for a, b in zip(ROCK, v)]) for k, v in ROCK_TONES.items()}
+    zs = [v.co.z for v in bm.verts]
+    foot = min(zs) + 0.22 * (max(zs) - min(zs))
+    for f in bm.faces:
+        if f.material_index != dirt:
+            continue
+        c = f.calc_center_median()
+        if f.normal.z > 0.45:
+            f.material_index = tone['lit']
+        elif c.z < foot:
+            f.material_index = tone['foot']
+        elif round(c.x * 37 + c.y * 53 + c.z * 71) % 3 == 0:
+            f.material_index = tone['dim']
     vs = [v.co for v in bm.verts]
     cx, cy = sum(v.x for v in vs) / len(vs), sum(v.y for v in vs) / len(vs)
     rr = max(Vector((v.x - cx, v.y - cy)).length for v in vs)
