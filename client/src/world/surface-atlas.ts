@@ -433,28 +433,73 @@ const ground: Painter = (g, s, rnd) => {
   }
 };
 
-/** Sand: soft wind ripples and a few shell flecks. */
-const sand: Painter = (g, s, rnd) => {
-  patches(g, s, rnd, 6, 0.12);
+/** Beach sand: soft dune shading, broken wind ripples (lit crest over a shadowed trough), pebbles, and shells (accent). */
+const sand: Painter = (g, s, rnd, accent) => {
+  patches(g, s, rnd, 10, 0.24);
   g.lineCap = 'round';
-  for (let r = 0; r < 9; r++) {
-    const y0 = (r / 9) * s + rnd() * s * 0.03;
-    const amp = s * 0.02;
-    for (const [dy, v] of [[0, 0.58], [s * 0.012, 0.43]] as const) {
-      g.strokeStyle = grey(v, 0.8);
-      g.lineWidth = Math.max(1.5, s / 170);
-      g.beginPath();
-      for (let x = -4; x <= s + 4; x += s / 32) {
-        const y = y0 + dy + Math.sin((x / s) * Math.PI * 4 + r) * amp;
-        x < 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  const rows = 11;
+  for (let r = 0; r < rows; r++) {
+    const y0 = ((r + (rnd() - 0.5) * 0.3) / rows) * s;
+    const amp = s * (0.01 + rnd() * 0.012);
+    const waves = 2 + Math.floor(rnd() * 3);
+    const ph = rnd() * Math.PI * 2;
+    for (let seg = 0; seg < 2; seg++) {
+      const x0 = rnd() * s;
+      const len = s * (0.25 + rnd() * 0.35);
+      for (const [dy, v, a, w] of [[s * 0.012, 0.34, 0.55, s / 90], [0, 0.7, 0.85, s / 210]] as const) {
+        g.strokeStyle = grey(v, a);
+        g.lineWidth = Math.max(1.5, w);
+        for (const ox of [-s, 0, s]) {
+          for (const oy of [-s, 0, s]) {
+            g.beginPath();
+            for (let x = x0; x <= x0 + len; x += s / 48) {
+              const y = y0 + dy + Math.sin((x / s) * Math.PI * 2 * waves + ph) * amp + oy;
+              x === x0 ? g.moveTo(x + ox, y) : g.lineTo(x + ox, y);
+            }
+            g.stroke();
+          }
+        }
       }
-      g.stroke();
     }
   }
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 22; i++) {
     const x = rnd() * s;
     const y = rnd() * s;
-    wrapped(s, x, y, 4, (px, py) => blob(g, px, py, s / 220, s / 260, grey(0.7)));
+    const r = s * (0.005 + rnd() * rnd() * 0.016);
+    wrapped(s, x, y, r * 2, (px, py) => {
+      blob(g, px, py + r * 0.4, r * 1.15, r * 0.7, grey(0.34, 0.8));
+      blob(g, px, py, r, r * 0.72, grey(0.56 + rnd() * 0.1));
+      blob(g, px - r * 0.3, py - r * 0.25, r * 0.4, r * 0.24, grey(0.76));
+    });
+  }
+  const shells = ['#fbe3d4', '#f4bfae', '#fff3df', '#eccb9e', '#f7d2dc'];
+  for (let i = 0; i < 6; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const r = s * (0.018 + rnd() * 0.01);
+    const turn = rnd() * Math.PI * 2;
+    const c = shells[Math.floor(rnd() * shells.length)]!;
+    wrapped(s, x, y, r * 2, (px, py) => {
+      accent.save();
+      accent.translate(px, py);
+      accent.rotate(turn);
+      accent.fillStyle = c;
+      accent.beginPath();
+      accent.moveTo(0, r * 0.5);
+      accent.arc(0, r * 0.5, r, Math.PI * 1.1, Math.PI * 1.9);
+      accent.closePath();
+      accent.fill();
+      accent.strokeStyle = 'rgba(190,140,120,0.9)';
+      accent.lineWidth = Math.max(1, r * 0.14);
+      for (let k = -2; k <= 2; k++) {
+        const a = -Math.PI / 2 + k * 0.28;
+        accent.beginPath();
+        accent.moveTo(0, r * 0.5);
+        accent.lineTo(Math.cos(a) * r * 0.9, r * 0.5 + Math.sin(a) * r * 0.9);
+        accent.stroke();
+      }
+      accent.restore();
+    });
   }
 };
 

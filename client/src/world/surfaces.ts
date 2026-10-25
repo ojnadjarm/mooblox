@@ -19,7 +19,7 @@ export const ATLAS_LAYERS: readonly { readonly metres: number; readonly strength
   { metres: 1.6, strength: 0.75 },
   { metres: 2.2, strength: 0.85 },
   { metres: 3, strength: 0 },
-  { metres: 3, strength: 0.55 },
+  { metres: 3, strength: 0.8 },
   { metres: 2, strength: 0.7 },
   { metres: 2.4, strength: 0.75 },
   { metres: 2.6, strength: 0.7 },
