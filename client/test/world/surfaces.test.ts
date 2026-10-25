@@ -11,6 +11,8 @@ describe('surfaces', () => {
   it('classes building colours as roof, plaster, wood and window metal', () => {
     expect(surfaceOf('suburb/building-type-a', ...lin(0x5fb36a))).toBe(Surface.roof);
     expect(surfaceOf('suburb/building-type-a', ...lin(0xf1ece0))).toBe(Surface.plaster);
+    expect(surfaceOf('suburb/building-type-a', ...lin(0xe6dcc6))).toBe(Surface.plaster);
+    expect(surfaceOf('suburb/building-type-a', ...lin(0xf6c445))).toBe(Surface.roof);
     expect(surfaceOf('suburb/building-type-a', ...lin(0x6b4a2e))).toBe(Surface.wood);
     expect(surfaceOf('suburb/building-type-a', ...lin(0x1a1c22))).toBe(Surface.metal);
   });

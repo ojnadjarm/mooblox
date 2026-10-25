@@ -7,7 +7,8 @@
 # planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks, growth rings and bark plates on the stump,
 # logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree, sunlit
 # grass tips, fuller flat plants, moss at path stones, rope lashings and a coil on the dock, melon stems, sprouts, cream stripes on
-# stall awnings, a finial on the lantern cap, studs on barrel hoops, strata lines on the cliff steps, a planked bridge deck. Seams and
+# stall awnings, a finial on the lantern cap, studs on barrel hoops, strata lines on the cliff steps, a planked bridge deck, house walls
+# in cream plaster with a stone plinth, stone quoins up the outer corners and timber frames and door. Seams and
 # sunk walls use a darker copy of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex
 # colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
@@ -24,6 +25,11 @@ SEAM = 0.55   # seam and sunk-wall colour factor
 WIDTH = 0.012  # seam width, fraction of the model's size
 DEPTH = 0.008  # seam depth, fraction of the model's size
 MOSS = (0.16, 0.38, 0.05, 1.0)  # linear moss green on rock tops
+CREAM = (1.0, 0.9, 0.66)        # factor on the kit's white wall texels: warm cream plaster
+STONE = (0.68, 0.64, 0.6)        # factor on a white texel: light warm stone (quoins)
+PLINTH = (0.5, 0.46, 0.45)      # plinth stone, a step darker
+TIMBER = (0.36, 0.17, 0.07)     # window frames and trims
+DOOR = (0.22, 0.1, 0.04)        # door boards
 
 
 def texel(img, mats):
@@ -54,22 +60,22 @@ def image(mat):
     return next((n.image for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE'), None)
 
 
-def shade_material(mat):
-    """A copy of the material whose base colour is the texture (or its colour) times SEAM (exported as baseColorFactor)."""
+def shade_material(mat, rgb=(SEAM, SEAM, SEAM), suffix='-seam'):
+    """A copy of the material whose base colour is the texture (or its colour) times rgb (exported as baseColorFactor)."""
     m = mat.copy()
-    m.name = mat.name + '-seam'
+    m.name = mat.name + suffix
     nodes, links = m.node_tree.nodes, m.node_tree.links
     bsdf = next(n for n in nodes if n.type == 'BSDF_PRINCIPLED')
     tex = next((n for n in nodes if n.type == 'TEX_IMAGE'), None)
     if tex is None:
         c = bsdf.inputs['Base Color'].default_value
-        bsdf.inputs['Base Color'].default_value = (c[0] * SEAM, c[1] * SEAM, c[2] * SEAM, c[3])
+        bsdf.inputs['Base Color'].default_value = (c[0] * rgb[0], c[1] * rgb[1], c[2] * rgb[2], c[3])
         return m
     mix = nodes.new('ShaderNodeMix')
     mix.data_type = 'RGBA'
     mix.blend_type = 'MULTIPLY'
     mix.inputs['Factor'].default_value = 1.0
-    mix.inputs[7].default_value = (SEAM, SEAM, SEAM, 1.0)
+    mix.inputs[7].default_value = (*rgb, 1.0)
     links.new(tex.outputs['Color'], mix.inputs[6])
     links.new(mix.outputs[2], bsdf.inputs['Base Color'])
     return m
@@ -204,8 +210,8 @@ def dome(bm, base, d, r, h, mi, uv, luv=None, smooth=True, sides=6, rot=0.0):
                 lo[kn] = (out.normalized() * 0.75 + d).normalized() if out.length > 1e-6 else d
 
 
-def block(bm, lo_, hi_, n, mi, uv, luv):
-    """A crisp box between corners lo_ and hi_ in the frame (across = n x z, out = n, up = z)."""
+def block(bm, lo_, hi_, n, mi, uv, luv, open_=()):
+    """A crisp box between corners lo_ and hi_ in the frame (across = n x z, out = n, up = z); faces facing a direction in open_ dropped."""
     across = Vector((n.y, -n.x, 0)).normalized()
     c = (lo_ + hi_) / 2
     d = hi_ - lo_
@@ -213,7 +219,10 @@ def block(bm, lo_, hi_, n, mi, uv, luv):
     m = Matrix.Translation(c) @ basis @ Matrix.Diagonal((abs(d.dot(across)), abs(d.dot(n)), abs(d.z), 1))
     res = bmesh.ops.create_cube(bm, size=1, matrix=m)
     flat = bm.faces.layers.int.get('flat')
-    for f in {f for v in res['verts'] for f in v.link_faces}:
+    faces = {f for v in res['verts'] for f in v.link_faces}
+    hidden = [f for f in faces if any(f.normal.dot(d) > 0.9 for d in open_)]
+    bmesh.ops.delete(bm, geom=hidden, context='FACES_ONLY')
+    for f in faces - set(hidden):
         f.material_index = mi
         f[flat] = 1
         for lo in f.loops:
@@ -372,6 +381,72 @@ def windows(bm, col, uv, top, size):
         shutters += shutter_pair(bm, tree, g, wh, size, uv, roof) if roof else 0
         count += 1
     print(f'  windows {count} shutters {shutters}')
+
+
+def masonry(bm, walls, navy, door, uv, top, size, mats, slot):
+    """Concept house walls: cream plaster, a stone plinth, timber frames and trims, a dark wood door, and stone
+    quoins (long and short in turn, swapped on the meeting wall) up every outer wall corner."""
+    def add(rgb, suffix):
+        mats.append(shade_material(mats[0], rgb, suffix))
+        return len(mats) - 1
+    white = texel_uv(240, 277)
+    cream, stone, plinth = add(CREAM, '-cream'), add(STONE, '-stone'), add(PLINTH, '-plinth')
+    timber, wood_, wood_seam = add(TIMBER, '-timber'), add(DOOR, '-door'), add([c * SEAM for c in DOOR], '-door-seam')
+    for f in walls:
+        f.material_index = cream
+
+    def recolour(faces, mi):
+        for f in faces:
+            f.material_index = mi
+            for lo in f.loops:
+                lo[uv].uv = white
+    seam0 = slot(0)
+    navy = [f for f in navy if f.is_valid]
+    recolour([f for f in door if f.is_valid and f.material_index == 0], wood_)
+    recolour([f for f in door if f.is_valid and f.material_index == seam0], wood_seam)
+    zs = lambda f: [v.co.z for v in f.verts]
+    base = [f for f in navy if max(zs(f)) <= 0.06 * size and f.normal.z > -0.5]
+    recolour(base, plinth)
+    recolour([f for f in navy if f not in base and f.normal.z > -0.5 or min(zs(f)) > 0.06 * size], timber)
+    proud, gap, up = 0.008 * size, 0.007 * size, Vector((0, 0, 1))
+    main = []
+    for wall in plane_groups([f for f in walls if f.is_valid], size):
+        n = wall[0].normal.copy()
+        across = Vector((n.y, -n.x, 0)).normalized()
+        ps = [v.co for f in wall for v in f.verts]
+        if abs(n.z) < 0.05 and max(p.dot(across) for p in ps) - min(p.dot(across) for p in ps) > 0.15 * size:
+            main.append((n, across, n.dot(wall[0].calc_center_median()), ps))
+    count = 0
+    for n, across, off, ps in main:
+        for s_ in (-1, 1):
+            end = (min if s_ < 0 else max)(p.dot(across) for p in ps)
+            near = [p.z for p in ps if abs(p.dot(across) - end) < 0.01 * size]
+            z0, z1 = min(near), max(near)
+            legs = [s_ * (s_ * o - end) for m, _, o, _ in main if (m - across * s_).length < 0.05]
+            legs = [x for x in legs if -0.005 * size < x < 0.1 * size]
+            if z1 - z0 < 0.12 * top or not legs:
+                continue
+            leg = max(0.0, min(legs))
+            k = max(3, round((z1 - z0) / (0.07 * size)))
+            h = (z1 - z0) / k
+            for i in range(k):
+                length = (0.085 if (i + (s_ > 0)) % 2 else 0.05) * size
+                a, b = end - s_ * length, end + s_ * (leg + proud)
+                lo_ = across * min(a, b) + n * (off - max(leg, proud)) + up * (z0 + i * h + gap / 2)
+                hi_ = across * max(a, b) + n * (off + proud) + up * (z0 + (i + 1) * h - gap / 2)
+                block(bm, lo_, hi_, n, stone, uv, white, open_=(-n, -up, -s_ * across))
+                count += 1
+    print(f'  masonry quoins {count} plinth {len(base)}')
+
+
+def hidden(bm, top):
+    """Drops faces nobody sees: the floor plate and the roof's underside inside the walls (a ray down from it meets the floor)."""
+    floor = [f for f in bm.faces if f.normal.z < -0.9 and max(v.co.z for v in f.verts) < 0.005 * top]
+    tree = BVHTree.FromPolygons([v.co for v in bm.verts], [[v.index for v in f.verts] for f in floor]) if floor else None
+    inside = [f for f in bm.faces if f.normal.z < -0.3 and f not in floor
+              and tree.ray_cast(f.calc_center_median() - Vector((0, 0, 1e-4)), Vector((0, 0, -1)))[0] is not None] if tree else []
+    bmesh.ops.delete(bm, geom=floor + inside, context='FACES')
+    return len(floor) + len(inside)
 
 
 def rock(bm, size, mats, slot, seed):
@@ -731,6 +806,8 @@ def detail(o, kind):
         for f in bm.faces:
             f.smooth = True
     elif kind == 'house':
+        walls = [f for f in bm.faces if abs(f.normal.z) < 0.1 and (lambda c: min(c) > 0.78 and 0 <= c[2] - c[0] < 0.08)(col(f, uv))]
+        navy = [f for f in bm.faces if (lambda h, s, v: 0.55 < h < 0.72 and 0.1 < s < 0.4 and v < 0.62)(*colorsys.rgb_to_hsv(*col(f, uv)))]
         low = [f for f in bm.faces if abs(f.normal.z) < 0.1 and dark(col(f, uv)) and f.calc_center_median().z < top * 0.45]
         for door in plane_groups(low, size):
             across = Vector((door[0].normal.y, -door[0].normal.x, 0)).normalized()
@@ -738,7 +815,11 @@ def detail(o, kind):
             if h > 0.12 * top and h > 1.2 * w:
                 print(f'  door {w:.2f} x {h:.2f}')
                 boards(bm, door, across, 3, size * 0.5, slot)
+        door = [f for f in bm.faces if abs(f.normal.z) < 0.1 and dark(col(f, uv)) and f.calc_center_median().z < top * 0.45]
         windows(bm, col, uv, top, size)
+        masonry(bm, walls, navy, door, uv, top, size, me.materials, slot)
+        bm.verts.index_update()
+        print(f'  hidden {hidden(bm, top)}')
     elif kind == 'sign':
         board = [f for f in bm.faces if abs(f.normal.y) > 0.97 and f.material_index == 1]
         for side in plane_groups(board, size):

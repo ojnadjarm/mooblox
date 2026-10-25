@@ -51,7 +51,7 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   if (/lantern|lamp/.test(name)) return dark || hsl.s < 0.1 ? Surface.metal : Surface.plain;
   if (/building|roof|wall|house|tower|chimney|windmill/.test(name)) {
     if (dark) return Surface.metal;
-    if (chroma < 0.16 && hsl.l > 0.35) return Surface.plaster;
+    if ((chroma < 0.16 && hsl.l > 0.35) || (hsl.l > 0.6 && hsl.s < 0.5)) return Surface.plaster;
     if (brown && hsl.l < 0.3) return Surface.wood;
     if (chroma >= 0.12) return Surface.roof;
     return Surface.rock;
