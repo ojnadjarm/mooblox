@@ -111,6 +111,11 @@ const GPU_CONFIRM = 2;
 const GPU_STEP_MAX = 0.15;
 /** GPU timings a window needs before they decide (results arrive a few frames late, and not on every frame). */
 const GPU_MIN = 10;
+/** Windows a GPU-timed scale holds after any resize, and how far back a raise looks for the heaviest GPU load (the view swings). */
+const GPU_HOLD = 30;
+/** Resizes within the last minute (60 windows) that block a GPU-timed raise. */
+const GPU_CAP = 2;
+const MINUTE = 60;
 
 /**
  * Dynamic render scale. A window (1 s, slowest 5% left out) slower than 50 fps lowers the scale in one step sized from how slow it
@@ -119,9 +124,10 @@ const GPU_MIN = 10;
  * that is slow within 3 windows goes back one step and doubles that wait (up to 48; a raise that holds resets it), so a scale on
  * the edge never oscillates. `starved` turns true when the
  * scale is at its floor and frames are still slow, or after 5 CPU-bound slow windows (the cue to drop a tier).
- * With GPU timings (`gpu`, the render pass), the window's GPU p90 decides instead: over 15 ms for 2 windows in a row the
- * scale drops towards 12 ms (at most 0.15 a window) even when the average frame looks fine (late frames hide in a ~17 ms average); a raise waits until the
- * next step is predicted under 11 ms; slow frames with the GPU under 15 ms are CPU-bound.
+ * With GPU timings (`gpu`, the render pass), the window's GPU p90 decides instead: over 15 ms for 2 windows in a row (counted afresh after
+ * each resize: the first timings after one are still of the old size) the scale drops towards 12 ms (at most 0.15 a window) even when the average frame looks fine (late frames hide in a ~17 ms average); a raise
+ * waits 30 windows after any resize and fewer than 2 resizes in the last minute, then goes in one step to the largest scale whose
+ * heaviest GPU load of those 30 windows (p90 / scale squared) is predicted under 11 ms; slow frames with the GPU under 15 ms are CPU-bound.
  */
 export class DynamicResolution {
   scale = 1;
@@ -139,6 +145,14 @@ export class DynamicResolution {
   private raiseAfter = RAISE_AFTER;
   /** Windows since the last raise (a drop within RAISE_AFTER of it means the raise failed). */
   private sinceRaise = Infinity;
+  /** Whether GPU timings ever decided a window: raises then follow them only. */
+  private timed = false;
+  /** Windows sampled so far. */
+  private windows = 0;
+  /** Window numbers of the resizes in the last minute. */
+  private readonly resizes: number[] = [];
+  /** GPU p90 / scale squared of the last GPU_HOLD timed windows. */
+  private readonly loads: number[] = [];
 
   constructor(private readonly minScale = 0.6) {}
 
@@ -173,6 +187,12 @@ export class DynamicResolution {
     const before = this.scale;
     this.starved = false;
     this.sinceRaise++;
+    this.windows++;
+    if (gpu !== null) {
+      this.timed = true;
+      this.loads.push(gpu / this.scale ** 2);
+      if (this.loads.length > GPU_HOLD) this.loads.shift();
+    }
     const gpuOver = gpu !== null && gpu > GPU_HIGH;
     this.gpuOver = gpuOver ? this.gpuOver + 1 : 0;
     const confirmed = gpuOver && this.gpuOver >= GPU_CONFIRM;
@@ -200,6 +220,9 @@ export class DynamicResolution {
         this.raiseAfter = Math.min(RAISE_MAX, this.raiseAfter * 2);
         this.sinceRaise = Infinity;
       }
+    } else if (this.timed) {
+      this.slowCpu = 0;
+      this.raiseTimed();
     } else {
       this.slowCpu = 0;
       if (this.sinceRaise === RAISE_AFTER + 1) this.raiseAfter = RAISE_AFTER;
@@ -213,7 +236,19 @@ export class DynamicResolution {
         this.good = 0;
       }
     }
-    return this.scale !== before;
+    if (this.scale === before) return false;
+    this.resizes.push(this.windows);
+    this.gpuOver = 0;
+    return true;
+  }
+
+  /** GPU-timed raise: after the hold, under the per-minute cap, straight to the largest scale the heaviest recent load fits. */
+  private raiseTimed(): void {
+    while (this.resizes.length > 0 && this.resizes[0]! <= this.windows - MINUTE) this.resizes.shift();
+    const last = this.resizes.at(-1) ?? -Infinity;
+    if (this.loads.length < GPU_HOLD || this.windows - last < GPU_HOLD || this.resizes.length >= GPU_CAP) return;
+    const target = Math.min(1, snap(Math.sqrt(GPU_RAISE / Math.max(...this.loads)), Math.floor));
+    if (target > this.scale + 1e-9) this.scale = target;
   }
 }
 

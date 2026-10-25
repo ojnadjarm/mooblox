@@ -1,6 +1,6 @@
 // Phone frame-pacing probe: node tools/pacing-probe.mjs [out.json] [--roots dirA,dirB] [--rigs dpr2,dpr3,..] [--shapes demo,20x30] [--hold ms]
 // Per root (a client/ copy to A/B; default this one) x rig x shape: 400x800 touch page at DPR 2 or 3 on the real GPU under 4x CPU
-// (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one; high-1366: the perf gate's GPU-bound high rig, 1366x768 DPR 1, 1x), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
+// (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one; high-1366: the perf gate's GPU-bound high rig, 1366x768 DPR 1, 1x; high-1920 / high-2560: the same at 1920x1080 / 2560x1440), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
 // often the canvas pixel ratio changed (each change is a resize hitch), the ratio range and the tier at the end.
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,6 +26,8 @@ const RIG = {
   'dpr3-high-cpu1': { dpr: 3, quality: 'high', throttle: 1 },
   'dpr2-cpu6': { dpr: 2, quality: 'medium', throttle: 6 },
   'high-1366': { dpr: 1, quality: 'high', throttle: 1, w: 1366, h: 768, touch: false },
+  'high-1920': { dpr: 1, quality: 'high', throttle: 1, w: 1920, h: 1080, touch: false },
+  'high-2560': { dpr: 1, quality: 'high', throttle: 1, w: 2560, h: 1440, touch: false },
 };
 const hold = Number(opt('hold', '4000'));
 

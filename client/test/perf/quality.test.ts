@@ -166,6 +166,35 @@ describe('DynamicResolution', () => {
       expect(d.scale).toBe(1);
     });
 
+    it('never saw-tooths on a view that swings between dense and light: at most 3 resizes in 105 s, dense seconds fit', () => {
+      const d = new DynamicResolution(0.6);
+      let changes = 0;
+      for (let s = 0; s < 105; s++) changes += timed(d, 16.7, 1, pixels(s % 20 < 3 ? 25 : 6));
+      expect(changes).toBeLessThanOrEqual(3);
+      expect(d.scale * d.scale * 25).toBeLessThanOrEqual(15);
+    });
+
+    it('holds a scale 30 windows after a drop, and blocks a raise after 2 resizes in the last minute', () => {
+      const d = new DynamicResolution(0.6);
+      /** `n` windows of one second each. */
+      const windows = (n: number, full: number) => {
+        let changes = 0;
+        for (let i = 0; i < n; i++) changes += timed(d, 16.7, 1, pixels(full));
+        return changes;
+      };
+      windows(2, 17);
+      const dropped = d.scale;
+      expect(dropped).toBeLessThan(1);
+      expect(windows(29, 4)).toBe(0);
+      expect(windows(1, 4)).toBe(1);
+      expect(d.scale).toBe(1);
+      windows(2, 17);
+      expect(d.scale).toBe(dropped);
+      expect(windows(57, 4)).toBe(0);
+      expect(windows(1, 4)).toBe(1);
+      expect(d.scale).toBe(1);
+    });
+
     it('falls back to frame times when timings are too few', () => {
       const d = new DynamicResolution(0.6);
       for (let i = 0; i < 40; i++) {
