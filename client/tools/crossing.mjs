@@ -1,7 +1,7 @@
-// Frame times of one autopilot walk over the bridges: node tools/crossing.mjs <out.json> [--shapes demo,8x12] [--rigs low,stress,medium,high] [--query k=v] [--walk far|<cmid>] [--profile dir]
+// Frame times of one autopilot walk over the bridges: node tools/crossing.mjs <out.json> [--shapes demo,8x12] [--rigs low,stress,medium,high] [--query k=v] [--walk far|tour|bridge|<cmid>] [--profile dir]
 // Per shape x rig (the perf gate's rigs: low = Iris Xe 400x800 4x CPU, stress = SwiftShader 6x, medium/high = Iris Xe 1366) the
-// player walks from the spawn to the farthest plot (demo, 1x2) or to the plot just across the spawn hub's straightest bridge (bigger
-// shapes: their farthest plot is a beeline off the hub into the water); every frame's time, island and time in pump/render/resize/player/collider/whole frame/off-screen renders are kept. A crossing window is 2 s either side of
+// player walks from the spawn to the farthest plot (demo, 1x2) or on a tour over 5-6 bridges (bigger shapes, `?walk=tour`: two
+// near districts and back, then the farthest within ~150 m; `bridge` = the plot just across the spawn hub's straightest bridge); every frame's time, island and time in pump/render/resize/player/collider/whole frame/off-screen renders are kept. A crossing window is 2 s either side of
 // each island change. Writes { rows: [{ shape, rig, frames: [[t, dt, island, pump, render, resize, player, solids, frame, offscreen, links, bufMb, tex, calls, geometries, textures, captures, pipes]], crossings: [t], worst, crossingWorst }] }.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,7 +24,7 @@ const rigs = opt('rigs', 'low,stress,medium,high').split(',');
 const more = opt('query', '');
 const profile = opt('profile', null);
 const WINDOW_MS = 2000;
-const MAX_WALK_MS = 40000;
+const MAX_WALK_MS = 70000;
 const RIG = {
   low: { tier: 'low', browser: 'gpu', w: 400, h: 800, throttle: 4, touch: true },
   stress: { tier: 'low', browser: 'soft', w: 400, h: 800, throttle: 6, touch: true },
@@ -80,7 +80,8 @@ try {
       const page = await browsers[rig.browser].newPage({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch });
       page.on('pageerror', (e) => console.error('pageerror:', e.message));
       const cdp = await page.context().newCDPSession(page);
-      const walk = opt('walk', null) ?? (shape === 'demo' || shape === '1x2' ? 'far' : await bridgePlot(browsers.gpu, shape, rig.tier));
+      const asked = opt('walk', null) ?? (shape === 'demo' || shape === '1x2' ? 'far' : 'tour');
+      const walk = asked === 'bridge' ? await bridgePlot(browsers.gpu, shape, rig.tier) : asked;
       await page.goto(`${url}?${query(shape, rig.tier, walk)}`);
       await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 180000, polling: 50 });
       if (rig.throttle > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: rig.throttle });
@@ -89,7 +90,7 @@ try {
         await cdp.send('Profiler.setSamplingInterval', { interval: 200 });
         await cdp.send('Profiler.start');
       }
-      const { out: frames, tasks } = await page.evaluate(
+      const { out: frames, tasks, reached } = await page.evaluate(
         (max) =>
           new Promise((resolve) => {
             const v = window.mooblox;
@@ -166,7 +167,7 @@ try {
               for (const k in spent) spent[k] = 0;
               gpu.links = gpu.bufMb = gpu.tex = gpu.captures = gpu.pipes = 0;
               last = t;
-              if (v.probe.reached || t - t0 > max) return resolve({ out, tasks });
+              if (v.probe.reached || t - t0 > max) return resolve({ out, tasks, reached: v.probe.reached === true });
               requestAnimationFrame(tick);
             };
             requestAnimationFrame(tick);
@@ -186,7 +187,7 @@ try {
       const inWindow = frames.filter((f) => near(f[0]));
       const crossingWorst = inWindow.length ? Math.max(...inWindow.map((f) => f[1])) : null;
       const over = (ms) => frames.filter((f) => f[1] > ms).length;
-      const row = { shape, rig: name, tier: rig.tier, frames, tasks, crossings, worst, crossingWorst, over20: over(20), over50: over(50), seconds: frames.length ? frames.at(-1)[0] / 1000 : 0 };
+      const row = { shape, rig: name, tier: rig.tier, walk, reached, frames, tasks, crossings, worst, crossingWorst, over20: over(20), over50: over(50), seconds: frames.length ? frames.at(-1)[0] / 1000 : 0 };
       rows.push(row);
       console.log(JSON.stringify({ ...row, frames: frames.length }));
     }

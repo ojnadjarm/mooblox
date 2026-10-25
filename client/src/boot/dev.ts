@@ -1,5 +1,6 @@
 import fixture from '../../test/fixtures/get_world_demo.json';
 import type { WorldDto } from '../domain/dto';
+import type { Circle, Plot } from '../world/layout';
 import { CompletionTracking } from '../domain/types';
 import { FakeGateway } from '../moodle/fake-gateway';
 import { CourseStore } from '../state/course-store';
@@ -11,6 +12,8 @@ import { parseShape, shapeWorld } from '../domain/course-shape';
 import { modelIds } from '../world/dressing';
 import { startLife } from '../world/life';
 import { ModelLibrary } from '../world/model-library';
+import { WalkGrid } from '../world/walk-grid';
+import { tourGoals, walkPath, type GroundPoint } from '../world/walk-tour';
 import { Palette } from '../world/palette';
 import { createPropRegistry } from '../world/props/catalog';
 import { CanvasSignPainter } from '../world/props/sign-painter';
@@ -72,7 +75,8 @@ async function boot(): Promise<void> {
     view.stage.camera.lookAt(shot.at.x, shot.at.y, shot.at.z);
     view.stage.focusShadow(shot.at.x, shot.at.z, 40);
   } else if (scene !== 'overview') {
-    const walk = params.get('walk') === 'far' ? farthestPlot(view) : Number(params.get('walk') ?? 0);
+    const tour = params.get('walk') === 'tour';
+    const walk = tour ? 0 : params.get('walk') === 'far' ? farthestPlot(view) : Number(params.get('walk') ?? 0);
     const pilot = new Autopilot();
     const look = params.has('avatar') ? decodeLook(params.get('avatar')!, avatars.bodies.map((b) => b.id)) : { skin: 'b', tint: Palette.red };
     const player = await startPlayer(view, avatars, look, [pilot]);
@@ -82,8 +86,16 @@ async function boot(): Promise<void> {
     const keep = (l: typeof look) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
     const picker = startAvatarPicker(view, player, avatars, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
     Object.assign(window, { mooblox: { ...view, probe, player, interaction, store, gateway, guide, picker } });
-    if (walk) {
-      pilot.drive(view, player, walk, probe);
+    if (tour) {
+      const grid = new WalkGrid(view.layout, view.dressing);
+      const stops = tourGoals(view.layout, grid, view.dressing.start);
+      const legs = walkPath(grid, view.dressing.start, stops).map((p) => ({ x: p.x, z: p.z, r: 1.5 }));
+      const end = stops.at(-1)!;
+      legs[legs.length - 1] = { x: end.x, z: end.z, r: end.radius - 1 };
+      probe['tour'] = stops.map((s) => s.activityId);
+      pilot.drive(view, player, legs, end, probe);
+    } else if (walk) {
+      pilot.drive(view, player, plotWalk(view, walk), plotOf(view, walk), probe);
     }
   }
   probe['ready'] = true;
@@ -96,7 +108,31 @@ function farthestPlot(view: WorldView): number {
   return plots.reduce((a, b) => (Math.hypot(b.x - s.x, b.z - s.z) > Math.hypot(a.x - s.x, a.z - s.z) ? b : a)).activityId;
 }
 
-/** Scripted input that walks the player over the bridge to an activity's plot. */
+/** The plot of an activity. */
+function plotOf(view: WorldView, cmid: number): Plot {
+  const plot = view.layout.zones.flatMap((z) => z.plots).find((p) => p.activityId === cmid);
+  if (!plot) {
+    throw new Error(`no plot for cm ${cmid}`);
+  }
+  return plot;
+}
+
+/** Waypoints over the bridge to an activity's plot: its district's rim, the district centre, the plot. */
+function plotWalk(view: WorldView, cmid: number): Waypoint[] {
+  const plot = plotOf(view, cmid);
+  const zone = view.layout.zones.find((z) => z.plots.includes(plot))!;
+  const a = zone.anchor;
+  const d = Math.hypot(zone.x - a.x, zone.z - a.z);
+  return [
+    { x: a.x + ((zone.x - a.x) / d) * (a.radius - 2), z: a.z + ((zone.z - a.z) / d) * (a.radius - 2), r: 1.5 },
+    { x: zone.x, z: zone.z, r: 1.5 },
+    { x: plot.x, z: plot.z, r: plot.radius - 1 },
+  ];
+}
+
+type Waypoint = GroundPoint & { readonly r: number };
+
+/** Scripted input that runs the player through waypoints to a plot. */
 class Autopilot implements InputSource {
   private state: InputState = NO_INPUT;
 
@@ -104,22 +140,13 @@ class Autopilot implements InputSource {
     return this.state;
   }
 
-  drive(view: WorldView, player: Player, cmid: number, probe: Record<string, unknown>): void {
-    const zone = view.layout.zones.find((z) => z.plots.some((p) => p.activityId === cmid));
-    const plot = zone?.plots.find((p) => p.activityId === cmid);
-    if (!zone || !plot) {
-      throw new Error(`no plot for cm ${cmid}`);
-    }
-    const a = zone.anchor;
-    const d = Math.hypot(zone.x - a.x, zone.z - a.z);
-    const waypoints = [
-      { x: a.x + ((zone.x - a.x) / d) * (a.radius - 2), z: a.z + ((zone.z - a.z) / d) * (a.radius - 2), r: 1.5 },
-      { x: zone.x, z: zone.z, r: 1.5 },
-      { x: plot.x, z: plot.z, r: plot.radius - 1 },
-    ];
+  drive(view: WorldView, player: Player, route: readonly Waypoint[], plot: Circle, probe: Record<string, unknown>): void {
+    const waypoints = [...route];
     probe['target'] = { x: plot.x, z: plot.z, radius: plot.radius };
     probe['reached'] = false;
     const start = performance.now();
+    // Unstick: no 0.5 m of progress in 0.75 s (a solid the walk grid does not know) sidesteps for 0.5 s, alternating sides.
+    const mark = { x: 0, z: 0, t: start, side: 1, until: 0 };
     view.onFrame(() => {
       const p = player.body.position;
       const w = waypoints[0];
@@ -128,9 +155,15 @@ class Autopilot implements InputSource {
         this.state = NO_INPUT;
         return;
       }
-      const dx = w.x - p.x;
-      const dz = w.z - p.z;
-      const d = Math.hypot(dx, dz);
+      const now = performance.now();
+      if (Math.hypot(p.x - mark.x, p.z - mark.z) > 0.5) Object.assign(mark, { x: p.x, z: p.z, t: now });
+      else if (now - mark.t > 750 && now > mark.until) Object.assign(mark, { t: now, side: -mark.side, until: now + 500 });
+      const side = now < mark.until ? mark.side : 0;
+      const ax = w.x - p.x;
+      const az = w.z - p.z;
+      const dx = side ? -az * side : ax;
+      const dz = side ? ax * side : az;
+      const d = Math.hypot(ax, az);
       if (d < w.r) {
         waypoints.shift();
         if (waypoints.length === 0) {

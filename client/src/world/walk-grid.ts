@@ -9,6 +9,8 @@ export class WalkGrid {
   readonly grid: Uint8Array;
   readonly w: number;
   readonly h: number;
+  /** Cell edge (m). */
+  readonly cellSize = CELL;
   private readonly minX: number;
   private readonly minZ: number;
   private seen: Uint8Array | null = null;
@@ -42,6 +44,11 @@ export class WalkGrid {
   /** Grid index of the cell nearest (x, z). */
   cell(x: number, z: number): number {
     return Math.round((z - this.minZ) / CELL) * this.w + Math.round((x - this.minX) / CELL);
+  }
+
+  /** Centre of a grid cell (x, z in metres). */
+  point(cell: number): { x: number; z: number } {
+    return { x: this.minX + (cell % this.w) * CELL, z: this.minZ + Math.floor(cell / this.w) * CELL };
   }
 
   /** Whether the player can walk from the spawn to (x, z). */
