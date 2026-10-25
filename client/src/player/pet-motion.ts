@@ -1,7 +1,7 @@
 /**
  * Pet secondary motion as pure data and one kernel (no three.js, nothing allocated): springy lean on starts and stops, bank into
  * turns, squash on landings, idle looks (up at the owner, ahead, a sniff), a wagging tail that streams back and swings out of turns,
- * and flapping wings. Layered over the pack's clips on the body, tail and wing nodes.
+ * flapping wings, and a rest when the owner stands still (sits up, then curls down to doze and breathe; any move wakes it). Layered over the pack's clips on the body, tail and wing nodes.
  */
 import { hash01 } from './motion';
 
@@ -42,6 +42,18 @@ export const PET_MOTION = {
   flapRun: 0.45,
   flapHz: 1.2,
   flapRunHz: 6,
+  /** Rest: idle seconds before it sits and before it dozes, settle and wake rates (1/s). */
+  sitAfter: 6,
+  dozeAfter: 18,
+  settle: 1.2,
+  wake: 8,
+  /** Sitting: body pitch (rad, - = nose up) and squash; dozing: pitch (nose down), squash, breathing stretch and rate (Hz). */
+  sitPitch: -0.2,
+  sitSquash: -0.06,
+  dozePitch: 0.16,
+  dozeSquash: -0.16,
+  breathe: 0.03,
+  breatheHz: 0.3,
   /** Rate (1/s) speed and turn rate are smoothed at before they drive the springs. */
   smooth: 12,
   /** Longest step the springs take (s); longer frames are clamped so a hitch never blows them up. */
@@ -81,7 +93,11 @@ export const P = {
   wingRight: 36,
   /** Per-pet sniff sides (-1..1), one per look. */
   sides: 39,
-  size: 48,
+  /** Seconds idle so far, then the sit and doze weights (0..1). */
+  still: 48,
+  sit: 49,
+  doze: 50,
+  size: 51,
 } as const;
 
 const SPRINGS = 4;
@@ -127,10 +143,19 @@ export function stepPetMotion(m: Float64Array): void {
   m[P.vy] = vy;
   const share = Math.min(1, speed / T.runSpeed);
   const idle = (m[P.idle] = m[P.idle]! + ((speed < 0.6 ? 1 : 0) - m[P.idle]!) * k);
+  const still = (m[P.still] = speed < 0.6 ? m[P.still]! + dt : 0);
+  const settle = 1 - Math.exp(-T.settle * dt);
+  const wake = 1 - Math.exp(-T.wake * dt);
+  const sitTo = still > T.sitAfter ? 1 : 0;
+  const dozeTo = still > T.dozeAfter ? 1 : 0;
+  const rest = (m[P.sit] = m[P.sit]! + (sitTo - m[P.sit]!) * (sitTo > m[P.sit]! ? settle : wake));
+  const doze = (m[P.doze] = m[P.doze]! + (dozeTo - m[P.doze]!) * (dozeTo > m[P.doze]! ? settle : wake));
+  const sit = rest * (1 - doze);
+  const awake = idle * (1 - doze);
 
-  m[P.targets] = Math.max(-T.maxPitch, Math.min(T.maxPitch, T.lean * share - accel * T.brake));
+  m[P.targets] = Math.max(-T.maxPitch, Math.min(T.maxPitch, T.lean * share - accel * T.brake)) + T.sitPitch * sit + T.dozePitch * doze;
   m[P.targets + 1] = Math.max(-T.maxBank, Math.min(T.maxBank, -turn * T.bank * share));
-  m[P.targets + 2] = Math.min(T.maxStretch, Math.abs(vy) * T.stretch);
+  m[P.targets + 2] = Math.min(T.maxStretch, Math.abs(vy) * T.stretch) + T.sitSquash * sit + T.dozeSquash * doze;
   m[P.targets + 3] = -turn * T.tailSwing;
   if (fell < -2 && vy > fell * 0.3) m[P.squash + 1] = m[P.squash + 1]! + fell * T.landKick;
   // Semi-implicit damped springs (value, velocity) towards their targets.
@@ -156,17 +181,17 @@ export function stepPetMotion(m: Float64Array): void {
   const pitchFrom = from === 0 ? T.ownerPitch : from === 2 ? T.sniffPitch : 0;
 
   const b = P.body;
-  m[b] = m[P.pitch]! + (pitchFrom + (pitchTo - pitchFrom) * f) * idle;
-  m[b + 1] = (yawFrom + (yawTo - yawFrom) * f) * idle;
+  m[b] = m[P.pitch]! + (pitchFrom + (pitchTo - pitchFrom) * f) * awake;
+  m[b + 1] = (yawFrom + (yawTo - yawFrom) * f) * awake;
   m[b + 2] = m[P.roll]!;
-  m[P.bodyStretch] = m[P.squash]!;
+  m[P.bodyStretch] = m[P.squash]! + T.breathe * doze * Math.sin(2 * Math.PI * T.breatheHz * t);
 
-  const wag = (T.wagIdle + (T.wagRun - T.wagIdle) * share) * Math.sin(2 * Math.PI * (T.wagHz + (T.wagRunHz - T.wagHz) * share) * t);
+  const wag = (T.wagIdle + (T.wagRun - T.wagIdle) * share) * (1 - 0.5 * sit - doze) * Math.sin(2 * Math.PI * (T.wagHz + (T.wagRunHz - T.wagHz) * share) * t);
   m[P.tailOut] = T.tailLift * share;
   m[P.tailOut + 1] = wag + m[P.tail]!;
   m[P.tailOut + 2] = 0;
 
-  const flap = (T.flapIdle + (T.flapRun - T.flapIdle) * share) * Math.max(0, Math.sin(2 * Math.PI * (T.flapHz + (T.flapRunHz - T.flapHz) * share) * t));
+  const flap = (T.flapIdle + (T.flapRun - T.flapIdle) * share) * (1 - doze) * Math.max(0, Math.sin(2 * Math.PI * (T.flapHz + (T.flapRunHz - T.flapHz) * share) * t));
   m[P.wingLeft + 2] = flap;
   m[P.wingRight + 2] = -flap;
 }

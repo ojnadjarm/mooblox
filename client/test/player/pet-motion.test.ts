@@ -73,10 +73,10 @@ describe('pet motion kernel (pure)', () => {
     const [wagLo, wagHi] = range(m, 1, P.tailOut + 1, () => ({ speed: 0, yaw: 0, y: 0 }));
     expect(wagHi - wagLo).toBeGreaterThan(PET_MOTION.wagIdle * 1.5);
     const [, flapIdle] = range(m, 1, P.wingLeft + 2, () => ({ speed: 0, yaw: 0, y: 0 }));
-    const [yawLo, yawHi] = range(m, 20, P.body + 1, () => ({ speed: 0, yaw: 0, y: 0, owner: 2 }));
+    const [yawLo, yawHi] = range(petMotionState(5), 16, P.body + 1, () => ({ speed: 0, yaw: 0, y: 0, owner: 2 }));
     expect(yawHi).toBeCloseTo(PET_MOTION.ownerYaw, 3);
     expect(yawLo).toBeLessThan(0.05);
-    const [pitchLo, pitchHi] = range(m, 20, P.body, () => ({ speed: 0, yaw: 0, y: 0 }));
+    const [pitchLo, pitchHi] = range(petMotionState(5), 6, P.body, () => ({ speed: 0, yaw: 0, y: 0 }));
     expect(pitchLo).toBeLessThan(PET_MOTION.ownerPitch * 0.9);
     expect(pitchHi).toBeGreaterThan(PET_MOTION.sniffPitch * 0.9);
     const [, flapRun] = range(m, 2, P.wingLeft + 2, () => ({ speed: 9, yaw: 0, y: 0 }));
@@ -84,6 +84,29 @@ describe('pet motion kernel (pure)', () => {
     expect(flapRun).toBeGreaterThan(flapIdle * 3);
     expect(m[P.wingRight + 2]).toBeCloseTo(-m[P.wingLeft + 2]!, 9);
     expect(Math.abs(m[P.body + 1]!)).toBeLessThan(0.01);
+  });
+
+  it('rests while the owner stands: sits up, then dozes (looks, wag and flap stop, it breathes), and wakes on the first move', () => {
+    const m = petMotionState(7);
+    const still = () => ({ speed: 0, yaw: 0, y: 0, owner: 1 });
+    drive(m, PET_MOTION.sitAfter - 0.5, still);
+    expect(m[P.sit]).toBe(0);
+    drive(m, 4, still);
+    expect(m[P.sit]).toBeGreaterThan(0.9);
+    expect(m[P.squash]).toBeLessThan(PET_MOTION.sitSquash * 0.8);
+    drive(m, PET_MOTION.dozeAfter - PET_MOTION.sitAfter, still);
+    expect(m[P.doze]).toBeGreaterThan(0.95);
+    const [yawLo, yawHi] = range(m, 4, P.body + 1, still);
+    expect(yawHi - yawLo).toBeLessThan(0.02);
+    const [wagLo, wagHi] = range(m, 4, P.tailOut + 1, still);
+    expect(wagHi - wagLo).toBeLessThan(0.05);
+    const [lo, hi] = range(m, 4, P.bodyStretch, still);
+    expect(hi - lo).toBeGreaterThan(PET_MOTION.breathe * 1.5);
+    expect(hi).toBeLessThan(0);
+    expect(Math.abs(m[P.wingLeft + 2]!)).toBeLessThan(0.01);
+    drive(m, 0.5, () => ({ speed: 3, yaw: 0, y: 0 }));
+    expect(m[P.doze]).toBeLessThan(0.05);
+    expect(m[P.sit]).toBeLessThan(0.05);
   });
 
   it('a 0.5 s hitch stays bounded', () => {
