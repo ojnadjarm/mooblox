@@ -6,12 +6,16 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
+  Frustum,
   InstancedMesh,
+  Matrix4,
   MeshLambertMaterial,
   Object3D,
   Points,
   PointsMaterial,
+  Sphere,
   Vector3,
+  type Camera,
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -137,6 +141,25 @@ function scatter(view: WorldView, teardown: (() => void)[]): Mover {
   };
 }
 
+const FRUSTUM = new Frustum();
+const VIEW = new Matrix4();
+const BALL = new Sphere();
+/** Metres added round a mover before the frustum test: the camera may still turn this frame. */
+const VIEW_MARGIN = 3;
+
+/** The camera's view volume now (call once per mover per frame, before `inView`). */
+function viewFrustum(camera: Camera): void {
+  camera.updateMatrixWorld();
+  FRUSTUM.setFromProjectionMatrix(VIEW.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+}
+
+/** True when a ball of radius `r` at (x, y, z) reaches into the last `viewFrustum`. */
+function inView(x: number, y: number, z: number, r: number): boolean {
+  BALL.center.set(x, y, z);
+  BALL.radius = r + VIEW_MARGIN;
+  return FRUSTUM.intersectsSphere(BALL);
+}
+
 function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly LifeSpot[], material: Material, teardown: (() => void)[]): Mover {
   const mesh = new InstancedMesh(geometry, material, spots.length);
   // Water receives no shadow: only flags (over land) cast one.
@@ -149,13 +172,16 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
     mesh.dispose();
     geometry.dispose();
   });
+  // A shadow caster stays drawn out of view: its shadow may fall into it.
+  const cull = !mesh.castShadow;
   const m = new Object3D();
   return (t) => {
     let n = 0;
+    if (cull) viewFrustum(view.stage.camera);
     for (let i = 0; i < spots.length; i++) {
       const s = spots[i]!;
-      // Only what the player can see past the haze is posed and drawn (instances packed at the front).
-      if (!view.sees(s.x, s.z)) continue;
+      // Only what the player can see past the haze and in view is posed and drawn (instances packed at the front).
+      if (!view.sees(s.x, s.z) || (cull && !inView(s.x, s.y, s.z, 2 * s.height))) continue;
       const phase = s.x * 0.37 + s.z * 0.11;
       m.position.set(s.x, s.y, s.z);
       m.scale.setScalar(s.height);
@@ -184,6 +210,9 @@ function buoyGeometry(): BufferGeometry {
   return sceneryGeometry(mergeGeometries(parts, false)!);
 }
 
+/** Half the length of a 7 m sailing ship, round its waterline centre (m). */
+const SHIP_REACH = 6;
+
 /** Sailing ships looping their circles round the archipelago. */
 function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teardown: (() => void)[]): Mover {
   const geometry = singleModel(lib, 'pirate/ship-small', 7);
@@ -198,15 +227,22 @@ function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teard
   });
   const m = new Object3D();
   return (t) => {
+    let n = 0;
+    viewFrustum(view.stage.camera);
     for (let i = 0; i < sails.length; i++) {
       const s = sails[i]!;
       const dir = i % 2 ? -1 : 1;
       const a = dir * t * (5 / s.r) + i * 2.1;
-      m.position.set(s.x + Math.cos(a) * s.r, -3.4 + Math.sin(t * 0.8 + i) * 0.1, s.z + Math.sin(a) * s.r);
+      const x = s.x + Math.cos(a) * s.r;
+      const z = s.z + Math.sin(a) * s.r;
+      // Drawn only past the haze's edge and in view (packed at the front).
+      if (!view.sees(x, z) || !inView(x, 0, z, SHIP_REACH)) continue;
+      m.position.set(x, -3.4 + Math.sin(t * 0.8 + i) * 0.1, z);
       m.rotation.set(0, -a + (dir > 0 ? Math.PI : 0), Math.sin(t * 0.7 + i) * 0.05);
       m.updateMatrix();
-      mesh.setMatrixAt(i, m.matrix);
+      mesh.setMatrixAt(n++, m.matrix);
     }
+    mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
   };
 }

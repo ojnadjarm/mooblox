@@ -73,20 +73,25 @@ export function setSkyScript(sky: SkyScript, sun: readonly [number, number, numb
 const DRIFT = 0.0045;
 /** Dome radius (m), inside the camera's far plane. */
 const DOME = 800;
+/** Lowest and highest camera (m) the ring clouds are seen from: faces turned away from both are never drawn. */
+const EYE_HEIGHTS = [-5, 200] as const;
 
 /**
  * Designed sky: gradient dome with sun disc and halo plus soft cumulus, centred on the camera. One mesh, one draw and one
- * program: `sky` = 1 dome (colour from `skyColour`), 0 the camera's cloud ring, 2 the overview's composed clouds (shown only
- * while the map camera frames the archipelago, in its place).
+ * program: `sky` = 0 the camera's cloud ring, 1 dome (colour from `skyColour`), 2 the overview's composed clouds; the draw
+ * range holds the ring and dome at eye level, the dome and overview clouds while the map camera frames the archipelago.
  */
 export class Sky {
   readonly mesh: Mesh;
   private readonly drift = { value: 0 };
-  private readonly map = { value: { x: 0, y: 0, z: 0, w: 0 } };
+  private readonly map = { value: { x: 0, y: 0, z: 0 } };
+  /** Vertex counts of the ring, dome and overview clouds, in geometry order. */
+  private readonly counts: readonly number[];
 
   constructor(look: Look, seed: number) {
     setSkyScript(look.sky, look.sun.dir);
-    const parts = [cloudGeometry(cloudPuffs(seed), look), domeGeometry(), cloudGeometry(overviewPuffs(seed), look)];
+    const parts = [cloudGeometry(cloudPuffs(seed), look, EYE_HEIGHTS), domeGeometry(), cloudGeometry(overviewPuffs(seed), look, null)];
+    this.counts = parts.map((g) => g.getAttribute('position').count);
     const domeCount = parts[1]!.getAttribute('position').count;
     parts[1]!.setAttribute('color', new BufferAttribute(new Float32Array(domeCount * 3), 3));
     for (const [i, g] of parts.entries()) {
@@ -100,11 +105,14 @@ export class Sky {
     // Drawn after every opaque part: depth test rejects the covered pixels before shading.
     this.mesh.renderOrder = 2;
     this.mesh.frustumCulled = false;
+    this.overview(null);
   }
 
   /** Shows the overview's clouds round the archipelago (centre, half-extent in m) instead of the ring; null = eye level. */
   overview(frame: { x: number; z: number; extent: number } | null): void {
-    Object.assign(this.map.value, frame ? { x: frame.x, y: frame.z, z: frame.extent, w: 1 } : { w: 0 });
+    if (frame) Object.assign(this.map.value, { x: frame.x, y: frame.z, z: frame.extent });
+    const [ring, dome, map] = this.counts as [number, number, number];
+    this.mesh.geometry.setDrawRange(frame ? ring : 0, frame ? dome + map : ring + dome);
   }
 
   /** Turns the cloud layer by the wall clock (drifts on, whatever the frame rate). */
@@ -145,7 +153,7 @@ function domeGeometry(): BufferGeometry {
 }
 
 /** The sky's one material (no fog, no tone mapping): dome = `skyColour` plus a soft sun disc, clouds = their paint. */
-function skyMaterial(disc: number, drift: { value: number }, map: { value: Vec & { w: number } }): ShaderMaterial {
+function skyMaterial(disc: number, drift: { value: number }, map: { value: Vec }): ShaderMaterial {
   return new ShaderMaterial({
     uniforms: { ...SKY_UNIFORMS, uDisc: { value: new Color(disc) }, uDrift: drift, uMap: map },
     side: DoubleSide,
@@ -156,7 +164,7 @@ function skyMaterial(disc: number, drift: { value: number }, map: { value: Vec &
       attribute vec3 color;
       attribute float sky;
       uniform float uDrift;
-      uniform vec4 uMap;
+      uniform vec3 uMap;
       varying vec3 vDir;
       varying vec3 vColor;
       varying float vSky;
@@ -174,8 +182,6 @@ function skyMaterial(disc: number, drift: { value: number }, map: { value: Vec &
         if (sky < 0.5) world = vec3(cameraPosition.x, 0.0, cameraPosition.z) + turn(position, uDrift);
         if (sky > 1.5) world = vec3(uMap.x, 0.0, uMap.y) + turn(position, uDrift * 0.3) * uMap.z;
         gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
-        // One cloud set at a time: the other is moved outside the clip volume.
-        if (!dome && (sky > 1.5) != (uMap.w > 0.5)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 skySun;
@@ -196,9 +202,10 @@ const SQUASH = 0.8;
 
 /**
  * Every cloud as smooth-shaded billows on one flat base: bright where they face up and high in the cloud, warm on the sun
- * side, cool blue-grey at the base and underneath (the concepts' soft cumulus).
+ * side, cool blue-grey at the base and underneath (the concepts' soft cumulus). With `eye` (camera heights over the ring's
+ * centre) the faces turned away from every such camera are left out: a closed billow always hides them behind its front.
  */
-function cloudGeometry(puffs: readonly CloudPuff[], look: Look): BufferGeometry {
+function cloudGeometry(puffs: readonly CloudPuff[], look: Look, eye: readonly [number, number] | null): BufferGeometry {
   const sun = new Vector3(...look.sun.dir).normalize();
   const lit = new Color(look.sky.cloudLit);
   const warm = new Color(look.sky.cloudWarm);
@@ -233,10 +240,37 @@ function cloudGeometry(puffs: readonly CloudPuff[], look: Look): BufferGeometry 
         col.set([c.r, c.g, c.b], i * 3);
       }
       g.setAttribute('color', new BufferAttribute(col, 3));
-      parts.push(g);
+      parts.push(eye ? facing(g, eye) : g);
     }
   }
   const merged = mergeGeometries(parts, false)!;
   for (const g of parts) g.dispose();
   return merged;
+}
+
+/** The faces of a non-indexed geometry that face a camera at (0, y, 0) for some y in `eye` (front-facing at either end). */
+export function facing(g: BufferGeometry, eye: readonly [number, number]): BufferGeometry {
+  const pos = g.getAttribute('position');
+  const keep: number[] = [];
+  const a = new Vector3();
+  const b = new Vector3();
+  const c = new Vector3();
+  for (let f = 0; f < pos.count / 3; f++) {
+    a.fromBufferAttribute(pos, f * 3);
+    b.fromBufferAttribute(pos, f * 3 + 1).sub(a);
+    c.fromBufferAttribute(pos, f * 3 + 2).sub(a);
+    const n = b.cross(c);
+    // n . (a - camera) < 0 is front-facing; linear in the camera height, so both ends of the range decide.
+    if (eye.some((y) => n.x * a.x + n.y * (a.y - y) + n.z * a.z < 0)) keep.push(f);
+  }
+  const out = new BufferGeometry();
+  for (const [name, attr] of Object.entries(g.attributes)) {
+    const k = attr.itemSize;
+    const src = attr.array as Float32Array;
+    const dst = new Float32Array(keep.length * 3 * k);
+    keep.forEach((f, i) => dst.set(src.subarray(f * 3 * k, (f + 1) * 3 * k), i * 3 * k));
+    out.setAttribute(name, new BufferAttribute(dst, k));
+  }
+  g.dispose();
+  return out;
 }

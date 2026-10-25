@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { IcosahedronGeometry, Vector3 } from 'three';
 import { CLOUD_HIGH, CLOUD_RING, cloudPuffs, overviewPuffs } from '../../src/world/sky-data';
+import { facing } from '../../src/world/sky';
 
 describe('cloud layer design', () => {
   it('is the same for the same seed', () => {
@@ -39,5 +41,23 @@ describe('cloud layer design', () => {
       expect(c.y).toBeLessThan(0.4);
       expect(c.z).toBeLessThan(0);
     }
+  });
+});
+
+describe('cloud faces kept for the eye-level ring', () => {
+  const faces = (g: ReturnType<typeof facing>) => {
+    const p = g.getAttribute('position');
+    return Array.from({ length: p.count / 3 }, (_, f) => [0, 1, 2].map((k) => new Vector3().fromBufferAttribute(p, f * 3 + k)));
+  };
+  const front = (t: Vector3[], y: number) => new Vector3().subVectors(t[1]!, t[0]!).cross(new Vector3().subVectors(t[2]!, t[0]!)).dot(new Vector3(t[0]!.x, t[0]!.y - y, t[0]!.z)) < 0;
+  const key = (t: Vector3[]) => t.map((v) => v.toArray().map((n) => n.toFixed(4)).join()).join('|');
+
+  it('keeps every face a camera anywhere in the height range sees, and drops the far side', () => {
+    const billow = () => new IcosahedronGeometry(12, 1).translate(260, 40, -90);
+    const all = faces(billow());
+    const kept = new Set(faces(facing(billow(), [-5, 200])).map(key));
+    for (const y of [-5, 0, 3, 12, 40, 41, 120, 200]) for (const t of all) if (front(t, y)) expect(kept.has(key(t))).toBe(true);
+    expect(kept.size).toBeLessThan(all.length * 0.75);
+    expect(kept.size).toBeGreaterThan(all.length * 0.4);
   });
 });
