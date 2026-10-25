@@ -3,7 +3,7 @@ import { BufferAttribute, Color, type BufferGeometry } from 'three';
 /** Material class of a vertex: the layer of the painted surface atlas it shows (`world/surface-atlas.ts`). */
 export const Surface = {
   plain: 0, grass: 1, foliage: 2, wood: 3, rock: 4, roof: 5, plaster: 6, brick: 7, ground: 8, metal: 9,
-  sand: 10, paving: 11, meadow: 12, cliff: 13, bark: 14, hedge: 15, floor: 16,
+  sand: 10, paving: 11, meadow: 12, cliff: 13, bark: 14, hedge: 15, floor: 16, cloth: 17,
 } as const;
 export type SurfaceId = (typeof Surface)[keyof typeof Surface];
 
@@ -26,6 +26,7 @@ export const ATLAS_LAYERS: readonly { readonly metres: number; readonly strength
   { metres: 1.2, strength: 0.85 },
   { metres: 1.3, strength: 0.75 },
   { metres: 2.4, strength: 0.9 },
+  { metres: 1.2, strength: 0.6 },
 ];
 
 /** Lawn swathes: metres one tone tile covers and the colour gain per unit of tone (deeper blue-green to sunnier yellow-green). */
@@ -48,6 +49,7 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   if (/plant_|bush|flower|grass/.test(name)) return green ? Surface.foliage : brown ? Surface.wood : Surface.foliage;
   if (/rock|cliff|stone/.test(name)) return green ? Surface.grass : Surface.rock;
   if (WOOD_PROPS.test(name)) return brown ? Surface.wood : Surface.plain;
+  if (CLOTH_PROPS.test(name)) return brown && hsl.l < 0.5 ? Surface.wood : Surface.cloth;
   if (/bridge|dock|platform|boat|stall|bench|plank|crate|barrel|cart|log/.test(name)) return dark || hsl.s < 0.08 ? Surface.metal : Surface.wood;
   if (/lantern|lamp/.test(name)) return dark || hsl.s < 0.1 ? Surface.metal : Surface.plain;
   if (/building|roof|wall|house|tower|chimney|windmill/.test(name)) {
@@ -70,8 +72,11 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
 /** Warm-plank props the colour heuristic reads as brick: their brown vertices tagged wood, the rest (iron hoops) left to it. */
 const WOOD_PROPS = /stall-bench|stall-stool|barrel|crate|cart/;
 
+/** Market stalls and banners: the frame and pole wood, awnings and banner cloths canvas (the colour heuristic read red cloth as brick, teal as leaves). */
+const CLOTH_PROPS = /stall-green|stall-red|banner/;
+
 /** Kit models whose bark, clipped leaves and warm planks the colour heuristic cannot tell apart from planks, lawn and brick: tagged at bake. */
-export const TAGGED_MODELS = /tree|palm|hedge|stall-stool|barrel|crate|cart/;
+export const TAGGED_MODELS = /tree|palm|hedge|stall-stool|stall-green|stall-red|banner|barrel|crate|cart/;
 
 /** The model axis its deck planks run along (bridge boards cross it on x, dock and bench planks run its length on z); null = no grain tag. */
 export function grainAxis(id: string): 'x' | 'z' | null {

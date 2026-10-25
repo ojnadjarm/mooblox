@@ -584,6 +584,49 @@ const hedge: Painter = (g, s, rnd) => {
   }
 };
 
+/** Canvas: a soft over-under weave, long soft creases, sun-faded patches and a few weather stains (stall awnings and cloths). */
+const cloth: Painter = (g, s, rnd) => {
+  patches(g, s, rnd, 7, 0.16);
+  const t = s / 64;
+  for (let k = 0; k < 64; k++) {
+    g.fillStyle = grey(k % 2 ? 0.47 : 0.53, 0.5);
+    g.fillRect(k * t, 0, t * 0.5, s);
+    g.fillStyle = grey(k % 2 ? 0.53 : 0.47, 0.5);
+    g.fillRect(0, k * t, s, t * 0.5);
+  }
+  for (let i = 0; i < 7; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const len = s * (0.25 + rnd() * 0.35);
+    const a = (rnd() - 0.5) * 0.8;
+    const w = s * (0.012 + rnd() * 0.012);
+    wrapped(s, x, y, len, (px, py) => {
+      g.save();
+      g.translate(px, py);
+      g.rotate(a);
+      const grd = g.createLinearGradient(0, -w * 2, 0, w * 2);
+      grd.addColorStop(0, grey(0.6, 0));
+      grd.addColorStop(0.45, grey(0.62, 0.55));
+      grd.addColorStop(0.55, grey(0.36, 0.55));
+      grd.addColorStop(1, grey(0.36, 0));
+      g.fillStyle = grd;
+      g.beginPath();
+      g.ellipse(0, 0, len / 2, w * 2, 0, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    });
+  }
+  for (let i = 0; i < 4; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const r = s * (0.025 + rnd() * 0.03);
+    wrapped(s, x, y, r * 2, (px, py) => {
+      blob(g, px, py, r * 1.4, r, grey(0.42, 0.4));
+      blob(g, px + r * 0.2, py + r * 0.1, r * 0.9, r * 0.6, grey(0.46, 0.5));
+    });
+  }
+};
+
 /** One pointed leaf (a lens) of length `r` and relative `width` at angle `a`. */
 function leaf(g: Ctx, x: number, y: number, r: number, a: number, fill: string, width = 0.42): void {
   g.fillStyle = fill;
@@ -653,4 +696,5 @@ const PAINTERS: Record<number, Painter> = {
   [Surface.bark]: bark,
   [Surface.hedge]: hedge,
   [Surface.floor]: floor,
+  [Surface.cloth]: cloth,
 };

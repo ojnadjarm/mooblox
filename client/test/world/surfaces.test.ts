@@ -33,7 +33,7 @@ describe('surfaces', () => {
   });
 
   it('tags trees, palms, hedges and warm wooden props at bake, not planks or bushes', () => {
-    for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm', 'town/stall-stool', 'pirate/barrel', 'pirate/crate', 'town/cart']) expect(TAGGED_MODELS.test(id)).toBe(true);
+    for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm', 'town/stall-stool', 'pirate/barrel', 'pirate/crate', 'town/cart', 'town/stall-green', 'town/stall-red', 'town/banner-red']) expect(TAGGED_MODELS.test(id)).toBe(true);
     for (const id of ['town/stall-bench', 'nature/plant_bush', 'nature/log', 'suburb/building-type-a']) expect(TAGGED_MODELS.test(id)).toBe(false);
   });
 
@@ -42,6 +42,14 @@ describe('surfaces', () => {
     expect(surfaceOf('pirate/barrel', ...lin(0xe99068))).toBe(Surface.wood);
     expect(surfaceOf('pirate/crate', ...lin(0x654134))).toBe(Surface.wood);
     expect(surfaceOf('pirate/barrel', ...lin(0xaab2d6))).toBe(Surface.plain);
+  });
+
+  it('reads market stall frames and banner poles as wood, awnings and banner cloths as canvas', () => {
+    for (const id of ['town/stall-green', 'town/stall-red', 'town/banner-red', 'town/banner-green']) {
+      expect(surfaceOf(id, ...lin(0xbe7c5d))).toBe(Surface.wood);
+      expect(surfaceOf(id, ...lin(0x6e4537))).toBe(Surface.wood);
+      for (const cloth of [0xdb4e5b, 0x51b098, 0xfde4c7, 0xcd4b5c, 0x4daa91]) expect(surfaceOf(id, ...lin(cloth))).toBe(Surface.cloth);
+    }
   });
 
   it('marks flat tops of bridge decks and docks with a grain that turns with the yaw', () => {
