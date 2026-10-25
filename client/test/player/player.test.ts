@@ -19,7 +19,7 @@ function rig() {
     emote: () => false,
     update: () => {},
   } as unknown as Avatar;
-  const camera = { yaw: 0, toWorld: (x: number, z: number) => ({ x, z }), follow: () => {} } as unknown as FollowCamera;
+  const camera = { yaw: 0, eye: new Vector3(), toWorld: (x: number, z: number) => ({ x, z }), follow: () => {} } as unknown as FollowCamera;
   const input = { read: () => ({ x: 0, z: 1, run: true, jump: false }) };
   const player = new Player(avatar, BvhCollider.fromMeshes([ground, wall]), new Vector3(0, 0, 0), input, camera);
   const puffs: number[] = [];

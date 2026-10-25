@@ -9,6 +9,10 @@ export const focus = {
   x: 0,
   y: 0,
   z: 0,
+  /** The camera following the player (NaN = none yet), for characters in its way to fade. */
+  eyeX: NaN,
+  eyeY: 0,
+  eyeZ: 0,
   /** The idle act the player last triggered (-1 none), seconds since, and a serial per emote. */
   cue: -1,
   cueAge: 0,

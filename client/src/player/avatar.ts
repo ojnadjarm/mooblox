@@ -1,11 +1,15 @@
-import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Mesh, type Object3D } from 'three';
+import { AnimationMixer, LoopOnce, type AnimationAction, type AnimationClip, type Material, type Mesh, type MeshLambertMaterial, type Object3D } from 'three';
 import { focus, sense } from './attention';
+import { characterMaterial } from './character/material';
 import { CLIP_FOR, type AvatarState } from './clips';
+import { easeFade, seeThrough } from './fade';
 import { A, actState, IDLE_ACTS, KEEP, STOP, stepActs } from './idle-acts';
 import { Layered } from './layered';
 import { IDLE, JUMP, M, motionState, RUN, stepMotion, WALK, type MotionCode } from './motion';
 
 const FADE = 0.15;
+/** Height of the player's chest over its feet (m): what a character in the way must not hide. */
+const CHEST = 1.4;
 const CODE: Readonly<Record<AvatarState, MotionCode>> = { idle: IDLE, walk: WALK, run: RUN, jump: JUMP, fall: JUMP, sit: IDLE };
 let created = 0;
 
@@ -24,6 +28,11 @@ export class Avatar {
   private readonly a: Float64Array;
   private act: AnimationAction | null = null;
   private readonly hasAct = (i: number): boolean => this.acts[i] !== null;
+  /** How far this character is faded out of the camera's way (0 solid), its mesh, the kit's shared material and its own faded copy (made on the first fade). */
+  fade = 0;
+  private readonly mesh: Mesh | null;
+  private readonly solid: Material | null;
+  private faded: MeshLambertMaterial | null = null;
 
   constructor(
     readonly root: Object3D,
@@ -60,6 +69,9 @@ export class Avatar {
     };
     this.torso = bone('torso');
     this.head = bone('head');
+    this.mesh = (root.children.find((o) => (o as Mesh).isMesh) as Mesh | undefined) ?? null;
+    this.solid = this.mesh && !Array.isArray(this.mesh.material) && this.mesh.material.userData['fade'] ? this.mesh.material : null;
+    root.userData['avatar'] = this;
     this.torso?.apply(this.m, M.torsoPitch, -1);
     this.head?.apply(this.m, M.headPitch, -1);
     this.play('idle');
@@ -132,6 +144,22 @@ export class Avatar {
     this.mixer.update(dt);
     this.torso?.apply(m, M.torsoPitch, M.torsoStretch);
     this.head?.apply(m, M.headPitch, -1);
+    this.seeThrough(dt);
+  }
+
+  /** Fades this character while it stands between the camera and the player (or at the lens), with its own copy of the material. */
+  private seeThrough(dt: number): void {
+    const p = this.root.position;
+    const other = focus.owner !== null && focus.owner !== this && focus.eyeX === focus.eyeX && this.root.parent === focus.space;
+    const target = other ? seeThrough(p.x, p.y, p.z, focus.eyeX, focus.eyeY, focus.eyeZ, focus.x, focus.y + CHEST, focus.z) : 0;
+    const was = this.fade;
+    this.fade = easeFade(was, target, dt);
+    if (!this.solid || (this.fade === 0 && was === 0)) return;
+    if (this.fade > 0) {
+      this.faded ??= characterMaterial((this.solid as MeshLambertMaterial).map!);
+      (this.faded.userData['fade'] as { value: number }).value = this.fade;
+    }
+    this.mesh!.material = this.fade > 0 ? this.faded! : this.solid;
   }
 
   /** Starts an idle act or fades it back to the idle clip, as the act step says. */
@@ -168,6 +196,7 @@ export class Avatar {
   /** Frees this avatar's geometry; materials are shared by its kit. */
   dispose(): void {
     this.mixer.stopAllAction();
+    this.faded?.dispose();
     this.root.traverse((o) => (o as Mesh).geometry?.dispose());
   }
 }

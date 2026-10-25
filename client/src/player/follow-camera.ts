@@ -49,6 +49,11 @@ export class FollowCamera {
   private readonly probe = new Vector3();
   private readonly probeA = new Vector3();
 
+  /** Where the camera is. */
+  get eye(): Vector3 {
+    return this.camera.position;
+  }
+
   constructor(
     private readonly camera: PerspectiveCamera,
     canvas: HTMLElement,

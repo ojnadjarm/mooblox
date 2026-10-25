@@ -158,6 +158,10 @@ export class Player {
     focus.cueAge += dt;
     this.avatar.update(dt);
     this.camera.follow(root.position, dt, false, this.moved);
+    const eye = this.camera.eye;
+    focus.eyeX = eye.x;
+    focus.eyeY = eye.y;
+    focus.eyeZ = eye.z;
   }
 
   /** Follows the real ground velocity of the last step; a run stopped short on the ground kicks a puff off the face and a squash. */
