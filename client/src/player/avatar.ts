@@ -6,7 +6,7 @@ import { Layered } from './layered';
 import { IDLE, JUMP, M, motionState, RUN, stepMotion, WALK, type MotionCode } from './motion';
 
 const FADE = 0.15;
-const CODE: Readonly<Record<AvatarState, MotionCode>> = { idle: IDLE, walk: WALK, run: RUN, jump: JUMP, fall: JUMP };
+const CODE: Readonly<Record<AvatarState, MotionCode>> = { idle: IDLE, walk: WALK, run: RUN, jump: JUMP, fall: JUMP, sit: IDLE };
 let created = 0;
 
 /** One character in the world: its model, the clip for each state, idle acts now and then, and a procedural motion layer on top. */

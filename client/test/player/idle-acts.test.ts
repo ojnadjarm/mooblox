@@ -5,7 +5,7 @@ import { AnimationClip, Object3D, Quaternion, QuaternionKeyframeTrack, Vector3 }
 import { describe, expect, it } from 'vitest';
 import { focus } from '../../src/player/attention';
 import { Avatar } from '../../src/player/avatar';
-import { actClips, fallClip, jumpClip } from '../../src/player/clips';
+import { actClips, fallClip, jumpClip, sitClip } from '../../src/player/clips';
 import { A, ACTS, actState, CHEER, IDLE_ACTS, KEEP, pickAct, STOP, stepActs, WAVE } from '../../src/player/idle-acts';
 
 const all = (): boolean => true;
@@ -39,7 +39,7 @@ function rig(): { root: Object3D; clips: AnimationClip[] } {
   bone('head', torso, 1.2);
   const q = (a: number) => new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), a).toArray();
   const loop = (name: string, d: number) => new AnimationClip(name, d, [new QuaternionKeyframeTrack('arm-left.quaternion', [0, d], [...q(0.1), ...q(0.1)])]);
-  return { root, clips: [loop('idle', 1.33), loop('walk', 0.67), loop('sprint', 0.5), jumpClip(), fallClip(), loop('emote-yes', 0.67), loop('emote-no', 0.67), ...actClips()] };
+  return { root, clips: [loop('idle', 1.33), loop('walk', 0.67), loop('sprint', 0.5), jumpClip(), fallClip(), sitClip(), loop('emote-yes', 0.67), loop('emote-no', 0.67), ...actClips()] };
 }
 
 describe('idle acts (pure)', () => {
@@ -172,7 +172,26 @@ describe('idle acts on the avatar', () => {
     expect(a.mixer.existingAction(clips[1]!)!.getEffectiveWeight()).toBeCloseTo(1, 5);
   });
 
-  it('a kid that notices the player waves', () => {
+  it('a sitting kid keeps its seated loop: no idle acts, no emotes, no greeting wave', () => {
+    const space = new Object3D();
+    const { root, clips } = rig();
+    space.add(root);
+    const a = new Avatar(root, clips, 5);
+    a.play('sit');
+    Object.assign(focus, { owner: null, space, x: 0, y: 0, z: 3 });
+    try {
+      for (let i = 0; i < 60 * 40; i++) {
+        a.update(1 / 60);
+        expect(a.acting).toBeNull();
+      }
+      expect(a.emote(0)).toBe(false);
+      expect(a.mixer.existingAction(clips.find((c) => c.name === 'sit-swing')!)!.getEffectiveWeight()).toBeCloseTo(1, 5);
+    } finally {
+      Object.assign(focus, { owner: null, space: null });
+    }
+  });
+
+    it('a kid that notices the player waves', () => {
     const space = new Object3D();
     const { root, clips } = rig();
     space.add(root);

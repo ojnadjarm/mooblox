@@ -98,6 +98,8 @@ export interface Hangout {
   readonly x: number;
   readonly z: number;
   readonly face: number;
+  /** Seat top (m) of the bench or stool pair two sitting kids share, side by side; absent = on the ground. */
+  readonly seat?: number;
 }
 
 /** Painted terrain geometry (paths, terraces, rails, piers) in world space. */
@@ -464,9 +466,8 @@ class Designer {
       const a = (arc.a0 + arc.a1) / 2;
       const bx = hub.x + Math.cos(a) * r;
       const bz = hub.z + Math.sin(a) * r;
-      const k = (r - 1.2) / r;
       if (this.model('town/stall-bench', bx, 0, bz, Math.atan2(hub.x - bx, hub.z - bz), 0.55, { solid: true, wall: 0.5 })) {
-        this.hangouts.push({ kind: 'sit', x: hub.x + (bx - hub.x) * k, z: hub.z + (bz - hub.z) * k, face: Math.atan2(bx - hub.x, bz - hub.z) });
+        this.hangouts.push({ kind: 'sit', x: bx, z: bz, face: Math.atan2(hub.x - bx, hub.z - bz), seat: 0.55 });
       }
     }
   }
@@ -973,11 +974,13 @@ class Designer {
         const [gx, gz] = at(dx, dz);
         this.item(id === 'town/banner-red' && this.random() < 0.5 ? 'town/banner-green' : id, gx, gz, face + this.random() * 0.6, h, { solid: true, detail: true });
       }
+      let stools = 0;
       for (const dx of [-0.7, 0.7]) {
         const [sx, sz] = at(dx, -1.9);
-        this.item('town/stall-stool', sx, sz, this.random() * 6, 0.45, { detail: true, minor: true });
+        if (this.item('town/stall-stool', sx, sz, this.random() * 6, 0.45, { detail: true, minor: true })) stools++;
       }
-      this.hangouts.push({ kind: 'sit', x: at(0, -2.4)[0], z: at(0, -2.4)[1], face: face + Math.PI });
+      const [hx, hz] = at(0, stools === 2 ? -1.9 : -2.4);
+      this.hangouts.push(stools === 2 ? { kind: 'sit', x: hx, z: hz, face: face + Math.PI, seat: 0.45 } : { kind: 'sit', x: hx, z: hz, face: face + Math.PI });
       return true;
     }
     if (theme === 'garden') {

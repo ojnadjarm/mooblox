@@ -3,7 +3,7 @@ import { AnimationClip, Object3D, Quaternion, QuaternionKeyframeTrack, Vector3, 
 import { describe, expect, it } from 'vitest';
 import { focus } from '../../src/player/attention';
 import { Avatar } from '../../src/player/avatar';
-import { fallClip, jumpClip } from '../../src/player/clips';
+import { fallClip, jumpClip, sitClip } from '../../src/player/clips';
 import { hash01, IDLE, JUMP, M, MOTION, motionState, RUN, stepMotion, WALK, type MotionCode } from '../../src/player/motion';
 
 /** The Kenney rig's node tree (root, legs, torso with arms and head) with idle, walk and sprint loops. */
@@ -31,7 +31,7 @@ function rig(): { root: Object3D; clips: AnimationClip[] } {
       new VectorKeyframeTrack('root.position', [0, d / 2, d], [0, 0, 0, 0, 0.1, 0, 0, 0, 0]),
     ]);
   };
-  return { root, clips: [swing('idle', 1.33), swing('walk', 0.67), swing('sprint', 0.5), jumpClip(), fallClip()] };
+  return { root, clips: [swing('idle', 1.33), swing('walk', 0.67), swing('sprint', 0.5), jumpClip(), fallClip(), sitClip()] };
 }
 
 /** Runs `m` for `seconds` at 60 Hz in `code`. */
@@ -94,9 +94,9 @@ describe('motion kernel (pure)', () => {
     m[M.speed] = MOTION.runSpeed;
     m[M.turn] = 2;
     run(m, RUN, 2);
-    expect(m[M.torsoPitch]!).toBeCloseTo(MOTION.lean, 3);
+    expect(m[M.torsoPitch]!).toBeCloseTo(MOTION.lean + m[M.posture]!, 3);
     expect(m[M.torsoRoll]!).toBeCloseTo(-2 * MOTION.bank, 3);
-    expect(m[M.headPitch]!).toBeCloseTo(-MOTION.lean * MOTION.headCounter, 2);
+    expect(m[M.headPitch]!).toBeCloseTo(-(MOTION.lean + m[M.posture]!) * MOTION.headCounter, 2);
     expect(m[M.headYaw]!).toBeCloseTo(2 * MOTION.turnLead, 2);
     expect(Math.abs(m[M.torsoStretch]!)).toBeLessThanOrEqual(MOTION.breathDepth * 0.31);
     m[M.turn] = 100;
@@ -124,7 +124,7 @@ describe('motion kernel (pure)', () => {
     }
     expect(least).toBeLessThan(-0.1);
     run(m, IDLE, 2);
-    expect(Math.abs(m[M.torsoPitch]!)).toBeLessThan(0.01);
+    expect(Math.abs(m[M.torsoPitch]! - m[M.posture]!)).toBeLessThan(0.01);
     const npc = motionState(4);
     let npcMost = 0;
     for (let i = 0; i < 120; i++) {
@@ -196,7 +196,7 @@ describe('look-at, landing and weight shift (pure)', () => {
       stepMotion(m, IDLE, 1 / 60);
       deepest = Math.min(deepest, m[M.torsoStretch]!);
       rebound = Math.max(rebound, m[M.torsoStretch]!);
-      nod = Math.max(nod, m[M.torsoPitch]!);
+      nod = Math.max(nod, m[M.torsoPitch]! - m[M.posture]!);
     }
     expect(deepest).toBeLessThan(-MOTION.landDip * 0.6);
     expect(rebound).toBeGreaterThan(MOTION.landDip * 0.15);
@@ -244,6 +244,26 @@ describe('look-at, landing and weight shift (pure)', () => {
     runner[M.speed] = MOTION.runSpeed;
     run(runner, RUN, 2);
     expect(Math.abs(runner[M.torsoRoll]!)).toBeLessThan(0.002);
+  });
+
+  it('a crowd of 20 gets its own bearing (slouched or proud chest, a head tilt habit) with the eyes kept level', () => {
+    const kids = Array.from({ length: 20 }, (_, i) => motionState(i));
+    const posture = kids.map((m) => m[M.posture]!);
+    const tilt = kids.map((m) => m[M.tilt]!);
+    for (const v of [posture, tilt]) {
+      expect(Math.max(...v) - Math.min(...v)).toBeGreaterThan(0.06);
+      expect(new Set(v.map((x) => x.toFixed(3))).size).toBeGreaterThanOrEqual(15);
+    }
+    for (const m of kids) {
+      expect(Math.abs(m[M.posture]!)).toBeLessThanOrEqual(MOTION.posture);
+      expect(Math.abs(m[M.tilt]!)).toBeLessThanOrEqual(MOTION.tilt);
+      const flat = m.slice();
+      flat[M.posture] = 0;
+      run(m, IDLE, 1);
+      run(flat, IDLE, 1);
+      expect(m[M.torsoPitch]! - flat[M.torsoPitch]!).toBeCloseTo(m[M.posture]!, 9);
+      expect(m[M.headPitch]! - flat[M.headPitch]!).toBeCloseTo(-m[M.posture]! * MOTION.headCounter, 9);
+    }
   });
 });
 
@@ -293,11 +313,12 @@ describe('Avatar motion layer', () => {
     const lean1 = new Vector3(0, 1, 0).applyQuaternion(torso.quaternion).z;
     for (let i = 0; i < 600; i++) a.update(1 / 60);
     const lean2 = new Vector3(0, 1, 0).applyQuaternion(torso.quaternion).z;
-    expect(lean1).toBeCloseTo(Math.sin(MOTION.lean), 2);
+    const posture = motionState(4)[M.posture]!;
+    expect(lean1).toBeCloseTo(Math.sin(MOTION.lean + posture), 2);
     expect(lean2).toBeCloseTo(lean1, 3);
     a.play('idle');
     for (let i = 0; i < 600; i++) a.update(1 / 60);
-    expect(Math.abs(new Vector3(0, 1, 0).applyQuaternion(torso.quaternion).z)).toBeLessThan(0.01);
+    expect(new Vector3(0, 1, 0).applyQuaternion(torso.quaternion).z - Math.sin(posture)).toBeLessThan(0.01);
   });
 
   it('the stride plays slower at a slow walk than at walk speed', () => {

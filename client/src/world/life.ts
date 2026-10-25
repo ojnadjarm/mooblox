@@ -17,6 +17,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { WorldView } from '../boot/app';
 import type { Avatar } from '../player/avatar';
 import type { AvatarFactory } from '../player/avatar-kit';
+import { SEAT } from '../player/clips';
 import { paintPlace, type Critter, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import { GroundScatter, lawnTest } from './ground-scatter';
@@ -30,6 +31,8 @@ type Mover = (t: number, dt: number) => void;
 
 /** NPC kids per tier: playing, sitting and walking the paths (none on low). */
 const KID_COUNT: Readonly<Record<string, number>> = { low: 0, medium: 2, high: 3, xhigh: 8 };
+/** Two kids share a sit spot side by side, this far (m) either side of it. */
+const SIT_SIDE = 0.8;
 /** Kids further than this from the camera are not drawn. */
 const KID_DRAW = 60;
 
@@ -397,12 +400,11 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
 
 function hangout(avatar: Avatar, h: Hangout, i: number): Mover {
   if (h.kind === 'sit') {
-    avatar.root.position.set(h.x, 0.06, h.z);
-    avatar.play('idle');
-    return (t, dt) => {
-      avatar.root.rotation.y = h.face + 0.35 * Math.sin(t * 0.4 + i);
-      avatar.update(dt);
-    };
+    const side = i % 3 === 0 ? -SIT_SIDE : SIT_SIDE;
+    avatar.root.position.set(h.x + Math.cos(h.face) * side, (h.seat ?? 0.06) - SEAT, h.z - Math.sin(h.face) * side);
+    avatar.root.rotation.y = h.face;
+    avatar.play('sit');
+    return (_t, dt) => avatar.update(dt);
   }
   avatar.play('run');
   const period = 3.5 + (i % 3) * 1.3;
