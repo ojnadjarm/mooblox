@@ -2,7 +2,8 @@
 // Builds the dev page, serves the build, then per shape x tier walks the player to the farthest plot and reads frame times,
 // draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on the real GPU at DPR 1, 400x800 under 4x CPU
 // throttle (the realistic low-end proxy: no frame > 20 ms over the walk and its bridge crossing), then again on SwiftShader under
-// 6x as a stress floor (30 fps, no frame > 100 ms); memory = heap + GPU estimate <= 800 MB per page;
+// 6x as a stress floor (30 fps, no frame > 100 ms), after one cold first visit of the demo route on that browser (reported, not gated:
+// a fresh SwiftShader GPU process stalls once, T1373 R11); memory = heap + GPU estimate <= 800 MB per page;
 // the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
 // --browser gpu|soft and --throttle N override the rig (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -137,6 +138,7 @@ function sample(ms) {
 
 const results = [];
 const fails = [];
+let cold = null;
 const check = (ok, line) => {
   if (!ok) fails.push(line);
   if (gate) console.log(`${ok ? 'PASS' : 'FAIL'} ${line}`);
@@ -161,6 +163,14 @@ try {
       if (tier === 'low' && !flag('no-stress')) {
         const stress = { ...rig, browser: 'soft', throttle: 6 };
         await new Promise((r) => setTimeout(r, STRESS.coolMs));
+        if (!cold) {
+          const c = await open(stress, query('demo', tier, 'walk=far'));
+          cold = await c.page.evaluate(sample, 5000);
+          await c.page.close();
+          results.push({ shape: 'demo', tier, rig: 'cold', w: stress.w, h: stress.h, gpu: 'soft', throttle: 6, ...cold });
+          console.log(`cold first-visit worst (demo low stress, first 5 s, not gated): ${cold.maxFrame} ms, fps ${cold.fps}`);
+          await new Promise((r) => setTimeout(r, STRESS.coolMs));
+        }
         const st = await open(stress, query(shape, tier, 'walk=far'));
         await st.page.waitForTimeout(1500);
         const sm = await st.page.evaluate(sample, 5000);
@@ -223,5 +233,5 @@ if (out) {
   const kept = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).filter((r) => r.shape && !fresh.has(key(r)) && r.view === undefined) : [];
   writeFileSync(file, `${JSON.stringify([...kept, ...results], null, 1)}\n`);
 }
-if (gate) console.log(fails.length ? `perf gate: ${fails.length} over budget` : 'perf gate: all budgets met');
+if (gate) console.log(`${fails.length ? `perf gate: ${fails.length} over budget` : 'perf gate: all budgets met'}${cold ? `; cold first-visit worst ${cold.maxFrame} ms (not gated)` : ''}`);
 process.exit(gate && fails.length ? 1 : 0);
