@@ -65,6 +65,32 @@ describe('FollowCamera', () => {
     }
   });
 
+  it('running sideways behind a wall, the glide in starts before the wall cuts the line to the chest', () => {
+    for (const speed of [6, 8, 10]) {
+      const wall = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(10, 20, 4).translate(8, 0, 6))]);
+      const cam = new PerspectiveCamera(55, 1366 / 768, 0.1, 900);
+      const f = new FollowCamera(cam, canvas, wall);
+      const p = new Vector3(-8, 0, 0);
+      f.follow(p, 0, true);
+      const chest = new Vector3();
+      const to = new Vector3();
+      let hidden = 0;
+      for (let i = 0; i < 120; i++) {
+        p.x += speed / 60;
+        const before = cam.position.clone().sub(p);
+        f.follow(p, 1 / 60, false, { x: speed, z: 0 });
+        expect(cam.position.clone().sub(p).distanceTo(before)).toBeLessThan(2.5);
+        chest.copy(p).setY(1.3);
+        to.copy(cam.position).sub(chest);
+        const length = to.length();
+        to.normalize();
+        const from = chest.clone().addScaledVector(to, 0.5);
+        if (wall.resolve(from, chest.clone().addScaledVector(to, length - 0.35), 0.05).lengthSq() > 1e-6) hidden++;
+      }
+      expect(hidden).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('spreads a blocked probe over frames: one sight line per frame, same answer as all at once', () => {
     const cases = [
       { box: new BoxGeometry(20, 20, 0.5).translate(0, 0, 5), far: false },

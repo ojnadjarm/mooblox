@@ -21,12 +21,16 @@ const CLEARANCE = 0.3;
 const EASE_OUT = 2.5;
 /** How fast it glides in when a wall cuts the sight line: a dolly of a few frames, not a cut. */
 const PULL_IN = 20;
+/** The most a glide in moves in one frame, so a slow frame stays a glide, not a cut. */
+const PULL_STEP = 1.6;
 const NEAREST = 2.2;
 const SIDE = 1.2;
 /** Radius of the camera itself, pushed out of anything it touches every frame. */
 const BODY = 0.25;
 /** Seconds between sight-line probes (10 a second is plenty for an eased camera); a blocked one checks one side line per frame after. */
 const PROBE_EVERY = 0.1;
+/** Seconds ahead along the run the sight line is probed from, so a pull-in glide starts before the wall cuts in. */
+const LEAD = 0.15;
 
 /** Third-person camera behind the player: drag turns and tilts it, the wheel zooms, it looks ahead and stays out of walls. */
 export class FollowCamera {
@@ -45,6 +49,11 @@ export class FollowCamera {
   private dragging = false;
   /** Look-ahead along the view when the last probe started. */
   private probedAlong = 0;
+  /** Where the run takes the look point in LEAD seconds, relative to it now. */
+  private leadX = 0;
+  private leadZ = 0;
+  /** Look-ahead along the view this frame (the look point now, without the lead). */
+  private alongNow = 0;
   private readonly goal = new Vector3();
   private readonly dir = { x: 0, z: 0 };
   private readonly look = new Vector3();
@@ -119,21 +128,27 @@ export class FollowCamera {
     const trim = ahead - along;
     this.look.set(target.x + this.aheadX + rx * kept - rz * trim, target.y + LOOK_HEIGHT, target.z + this.aheadZ + rz * kept + rx * trim);
     this.sinceProbe += dt;
+    this.alongNow = along;
     if (snap) {
       this.pending = 0;
       this.sinceProbe = 0;
+      this.leadX = 0;
+      this.leadZ = 0;
       this.probedAlong = along;
       this.clear = this.clearDistance(this.distance);
     } else if (this.pending > 0) {
       this.probeSide();
     } else if (this.sinceProbe >= PROBE_EVERY) {
       this.sinceProbe = 0;
-      this.probedAlong = along;
+      this.leadX = velocity ? velocity.x * LEAD : 0;
+      this.leadZ = velocity ? velocity.z * LEAD : 0;
+      this.probedAlong = along + this.leadX * rz - this.leadZ * rx;
       this.probeCentre();
     }
     // A blocked probe holds the wall where it found it: a look point moved since then moves the clear reach with it.
-    const clear = this.clear < this.distance ? Math.max(NEAREST, this.clear + along - this.probedAlong) : this.clear;
-    this.reach = snap ? clear : damp(this.reach, clear, clear < this.reach ? PULL_IN : EASE_OUT, dt);
+    // The floor counts from the player, who stands the look-ahead behind the look point.
+    const clear = this.clear < this.distance ? Math.max(NEAREST + Math.max(0, along), this.clear + along - this.probedAlong) : this.clear;
+    this.reach = snap ? clear : Math.max(this.reach - PULL_STEP, damp(this.reach, clear, clear < this.reach ? PULL_IN : EASE_OUT, dt));
     const d = this.reach;
     const now = across / (half * d);
     const pulled = across / Math.sqrt(Math.sqrt(1 + now * now * now * now)) - across - kept;
@@ -164,7 +179,7 @@ export class FollowCamera {
     const d = this.distance;
     const centre = this.lineClear(d, 0);
     if (centre >= d) {
-      this.clear = d;
+      this.release(0);
     } else if (centre >= (d * (PROBES - 1)) / PROBES) {
       this.clear = Math.max(NEAREST, centre);
     } else {
@@ -176,15 +191,29 @@ export class FollowCamera {
   /** Next step of a spread-out probe: one side line; a clear one means a thin occluder (stay out), both blocked pull in. */
   private probeSide(): void {
     const d = this.distance;
-    if (this.lineClear(d, this.pending === 1 ? SIDE : -SIDE) >= d) {
-      this.clear = d;
+    const side = this.pending === 1 ? SIDE : -SIDE;
+    if (this.lineClear(d, side) >= d) {
       this.pending = 0;
+      this.release(side);
     } else if (this.pending === 1) {
       this.pending = 2;
     } else {
       this.clear = Math.max(NEAREST, this.centre);
       this.pending = 0;
     }
+  }
+
+  /** The led line `side` metres over is clear: a pulled-in camera backs out only if that line from the look point now is clear too, else only as far as its centre line allows. */
+  private release(side: number): void {
+    const d = this.distance;
+    if (this.clear >= d) return;
+    const now = this.lineClear(d, side, false);
+    if (now >= d) {
+      this.clear = d;
+      return;
+    }
+    this.clear = Math.max(NEAREST, side === 0 ? now : this.lineClear(d, 0, false));
+    this.probedAlong = this.alongNow;
   }
 
   /**
@@ -199,14 +228,14 @@ export class FollowCamera {
     return thin ? distance : Math.max(NEAREST, centre);
   }
 
-  /** How far out the line from the look point to the camera spot, shifted `side` metres sideways, is clear. */
-  private lineClear(distance: number, side: number): number {
+  /** How far out the line from the look point (led along the run) to the camera spot, shifted `side` metres sideways, is clear. */
+  private lineClear(distance: number, side: number, led = true): number {
     const collider = this.collider!;
     const rise = this.pitch * distance - LOOK_HEIGHT;
     const s = Math.sin(this.yaw);
     const c = Math.cos(this.yaw);
-    const x = this.look.x + c * side;
-    const z = this.look.z - s * side;
+    const x = this.look.x + (led ? this.leadX : 0) + c * side;
+    const z = this.look.z + (led ? this.leadZ : 0) - s * side;
     const a = this.probeA.set(x, this.look.y, z);
     const b = this.probe;
     for (let i = 1; i <= PROBES; i++) {
