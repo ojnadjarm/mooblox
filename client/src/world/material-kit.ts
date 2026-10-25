@@ -283,7 +283,7 @@ varying float vAtlasFade;
 varying vec2 vLawnUv;
 const float ATLAS_SCALE[${ATLAS_LAYERS.length}] = float[${ATLAS_LAYERS.length}](${glslFloats('metres')});
 const float ATLAS_STRENGTH[${ATLAS_LAYERS.length}] = float[${ATLAS_LAYERS.length}](${glslFloats('strength')});
-float atlasLayer(vec3 lin, float ny) {
+float atlasLayer(vec3 lin, float ny) { // twin: colourLayer (surfaces.ts)
   vec3 c = sqrt(max(lin, vec3(0.0)));
   float mx = max(c.r, max(c.g, c.b));
   float mn = min(c.r, min(c.g, c.b));

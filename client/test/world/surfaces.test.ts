@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { GRAIN, grainAxis, grainTops, Surface, surfaceOf, tagSurface, TAGGED_MODELS } from '../../src/world/surfaces';
+import { colourLayer, drawnLayer, GRAIN, grainAxis, grainTops, Surface, surfaceOf, tagSurface } from '../../src/world/surfaces';
 
 const lin = (hex: number): [number, number, number] => {
   const c = new Color(hex);
@@ -32,24 +32,16 @@ describe('surfaces', () => {
     expect(surfaceOf('', ...lin(0x9a9a9a))).toBe(Surface.rock);
   });
 
-  it('tags trees, palms, hedges and warm wooden props at bake, not planks or bushes', () => {
-    for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm', 'town/stall-stool', 'pirate/barrel', 'pirate/crate', 'town/cart', 'town/stall-green', 'town/stall-red', 'town/banner-red']) expect(TAGGED_MODELS.test(id)).toBe(true);
-    for (const id of ['town/stall-bench', 'nature/plant_bush', 'nature/log', 'suburb/building-type-a']) expect(TAGGED_MODELS.test(id)).toBe(false);
-  });
-
-  it('reads the warm planks of benches, stools, barrels, crates and carts as wood, their iron hoops from colour', () => {
-    for (const id of ['town/stall-bench', 'town/stall-stool', 'pirate/crate', 'town/cart']) expect(surfaceOf(id, ...lin(0xcc8666))).toBe(Surface.wood);
-    expect(surfaceOf('pirate/barrel', ...lin(0xe99068))).toBe(Surface.wood);
-    expect(surfaceOf('pirate/crate', ...lin(0x654134))).toBe(Surface.wood);
-    expect(surfaceOf('pirate/barrel', ...lin(0xaab2d6))).toBe(Surface.plain);
-  });
-
-  it('reads market stall frames and banner poles as wood, awnings and banner cloths as canvas', () => {
-    for (const id of ['town/stall-green', 'town/stall-red', 'town/banner-red', 'town/banner-green']) {
-      expect(surfaceOf(id, ...lin(0xbe7c5d))).toBe(Surface.wood);
-      expect(surfaceOf(id, ...lin(0x6e4537))).toBe(Surface.wood);
-      for (const cloth of [0xdb4e5b, 0x51b098, 0xfde4c7, 0xcd4b5c, 0x4daa91]) expect(surfaceOf(id, ...lin(cloth))).toBe(Surface.cloth);
-    }
+  it('picks untagged layers as the shader does: warm saturated red is brick, brick facing up floor, a tag wins', () => {
+    expect(colourLayer(...lin(0xcc8666), 0)).toBe(Surface.brick);
+    expect(colourLayer(...lin(0x9b6e49), 0)).toBe(Surface.wood);
+    expect(colourLayer(...lin(0xdb4e5b), 0)).toBe(Surface.brick);
+    expect(drawnLayer(0, ...lin(0xdb4e5b), 1)).toBe(Surface.floor);
+    expect(colourLayer(...lin(0x51b098), 0)).toBe(Surface.foliage);
+    expect(colourLayer(...lin(0x51b098), 1)).toBe(Surface.grass);
+    expect(colourLayer(...lin(0x1a1c22), 0)).toBe(Surface.metal);
+    expect(drawnLayer(Surface.cloth, ...lin(0xdb4e5b), 1)).toBe(Surface.cloth);
+    expect(drawnLayer(Surface.wood + GRAIN, ...lin(0xdb4e5b), 1)).toBe(Surface.wood);
   });
 
   it('marks flat tops of bridge decks and docks with a grain that turns with the yaw', () => {

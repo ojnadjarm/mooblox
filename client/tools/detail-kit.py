@@ -118,8 +118,12 @@ def seams(bm, faces, size, slot, any_shape=False, short=False):
     faces = [f for f in faces if f.is_valid and (any_shape or rect(f)) and (short or min(e.calc_length() for e in f.edges) > 5 * WIDTH * size)]
     if not faces:
         return
-    res = bmesh.ops.inset_individual(bm, faces=faces, thickness=WIDTH * size, depth=-DEPTH * size, use_even_offset=True)
-    paint(bm, res['faces'], slot)
+    # Even offset at a near-straight corner (a merged board's collinear vertex) shoots the vertex off to infinity.
+    straight = [f for f in faces if any(l.calc_angle() > 2.97 for l in f.loops)]
+    for group, even in ((straight, False), ([f for f in faces if f not in straight], True)):
+        if group:
+            res = bmesh.ops.inset_individual(bm, faces=group, thickness=WIDTH * size, depth=-DEPTH * size, use_even_offset=even)
+            paint(bm, res['faces'], slot)
 
 
 def sink(bm, faces, rim, depth, slot):

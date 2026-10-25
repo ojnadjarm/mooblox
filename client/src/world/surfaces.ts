@@ -48,8 +48,6 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   if (/tree|palm/.test(name)) return green ? Surface.foliage : brown || hsl.l < 0.3 ? Surface.bark : Surface.foliage;
   if (/plant_|bush|flower|grass/.test(name)) return green ? Surface.foliage : brown ? Surface.wood : Surface.foliage;
   if (/rock|cliff|stone/.test(name)) return green ? Surface.grass : Surface.rock;
-  if (WOOD_PROPS.test(name)) return brown ? Surface.wood : Surface.plain;
-  if (CLOTH_PROPS.test(name)) return brown && hsl.l < 0.5 ? Surface.wood : Surface.cloth;
   if (/bridge|dock|platform|boat|stall|bench|plank|crate|barrel|cart|log/.test(name)) return dark || hsl.s < 0.08 ? Surface.metal : Surface.wood;
   if (/lantern|lamp/.test(name)) return dark || hsl.s < 0.1 ? Surface.metal : Surface.plain;
   if (/building|roof|wall|house|tower|chimney|windmill/.test(name)) {
@@ -69,14 +67,31 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   return green ? Surface.foliage : Surface.plain;
 }
 
-/** Warm-plank props the colour heuristic reads as brick: their brown vertices tagged wood, the rest (iron hoops) left to it. */
-const WOOD_PROPS = /stall-bench|stall-stool|barrel|crate|cart/;
+/** Layer the shader picks for an untagged vertex from its linear colour and object-normal y (TS twin of `atlasLayer` in material-kit.ts). */
+export function colourLayer(r: number, g: number, b: number, ny: number): SurfaceId {
+  const [cr, cg, cb] = [Math.sqrt(Math.max(r, 0)), Math.sqrt(Math.max(g, 0)), Math.sqrt(Math.max(b, 0))];
+  const mx = Math.max(cr, cg, cb);
+  const mn = Math.min(cr, cg, cb);
+  const sat = mx > 0 ? (mx - mn) / mx : 0;
+  const up = ny > 0.7;
+  if (mx < 0.2) return Surface.metal;
+  if (cg > cr * 1.05 && cg > cb) return ny > 0.25 && ny < 0.92 && cb > cg * 0.7 ? Surface.roof : up ? Surface.grass : Surface.foliage;
+  if (cb >= cr * 0.9 && sat < 0.35) return mx < 0.85 ? Surface.rock : Surface.metal;
+  if (ny > 0.25 && ny < 0.92 && sat > 0.3) return Surface.roof;
+  if (cb >= cr) return sat < 0.2 && mx < 0.85 ? Surface.rock : Surface.metal;
+  if (sat < 0.22) return mx > 0.8 ? (up ? Surface.paving : Surface.plaster) : Surface.rock;
+  if (mx > 0.8 && sat < 0.45) return up ? Surface.sand : Surface.plaster;
+  const hue = (cg - cb) / Math.max(mx - mn, 1e-3) / 6;
+  if (hue < 0.075 && sat > 0.45 && mx > 0.75) return Surface.brick;
+  return Surface.wood;
+}
 
-/** Market stalls and banners: the frame and pole wood, awnings and banner cloths canvas (the colour heuristic read red cloth as brick, teal as leaves). */
-const CLOTH_PROPS = /stall-green|stall-red|banner/;
-
-/** Kit models whose bark, clipped leaves and warm planks the colour heuristic cannot tell apart from planks, lawn and brick: tagged at bake. */
-export const TAGGED_MODELS = /tree|palm|hedge|stall-stool|stall-green|stall-red|banner|barrel|crate|cart/;
+/** The atlas layer a vertex draws with: its `surface` tag (grain flag dropped) or else `colourLayer`; brick facing up is floor. */
+export function drawnLayer(surface: number, r: number, g: number, b: number, ny: number): SurfaceId {
+  const s = surface > GRAIN - 0.5 ? surface - GRAIN : surface;
+  const layer = s > 0.5 ? (Math.round(s) as SurfaceId) : colourLayer(r, g, b, ny);
+  return layer === Surface.brick && ny > 0.7 ? Surface.floor : layer;
+}
 
 /** The model axis its deck planks run along (bridge boards cross it on x, dock and bench planks run its length on z); null = no grain tag. */
 export function grainAxis(id: string): 'x' | 'z' | null {
