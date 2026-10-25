@@ -5,7 +5,8 @@
 # fence posts pointed, lamp posts with two collars, leaf clumps on broadleaf crowns and hedge tops, sunlit pine tiers,
 # moss pads and pebbles on rocks, blossom window boxes and shutter pairs at house windows, inner leaf fans on bushes, clumps on
 # planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks, growth rings and bark plates on the stump,
-# logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree. Seams and sunk walls use a darker copy
+# logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree, sunlit
+# grass tips, fuller flat plants, moss at path stones, rope lashings and a coil on the dock, melon stems, sprouts. Seams and sunk walls use a darker copy
 # of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
 import bpy, colorsys, math, os, sys
@@ -432,6 +433,87 @@ def spots(bm, caps, uv, white):
             dome(bm, f.calc_center_median() - n * 0.02 * r, n, 0.28 * r, 0.1 * r, white, uv, smooth=False, sides=5, rot=k)
 
 
+def tips(bm, mats, prefix, frac, top):
+    """Sunlit blade tips: faces of the leaf material above frac of the height take its lighter copy; returns that slot."""
+    li = next(i for i, m in enumerate(mats) if m.name.startswith(prefix))
+    mats.append(lighter(mats[li]))
+    for f in bm.faces:
+        if f.material_index == li and f.calc_center_median().z > frac * top:
+            f.material_index = len(mats) - 1
+    return li, len(mats) - 1
+
+
+def stones(bm, mats, size):
+    """Paving stones: moss tufts at three stone feet."""
+    moss = coloured(mats, 0, 'moss-path', MOSS[:3])
+    sides = sorted([f for f in bm.faces if abs(f.normal.z) < 0.3 and f.calc_area() > 0.002 * size * size], key=lambda f: -f.calc_area())
+    for k, f in enumerate(sides[:6:2]):
+        c, n = f.calc_center_median(), f.normal.copy()
+        dome(bm, Vector((c.x, c.y, 0)) + n * 0.02 * size, Vector((0, 0, 1)), 0.035 * size, 0.025 * size, moss, None, sides=5, rot=k)
+
+
+def dock(bm, slot, uv):
+    """Rope lashings round the four piles under their caps and a rope coil on the middle board (crisp, tan colormap texel)."""
+    rope = texel_uv(32, 344)
+    zt = max(v.co.z for v in bm.verts)
+    n = Vector((0, 1, 0))
+    for cap in components([f for f in bm.faces if f.normal.z > 0.9 and f.calc_center_median().z > zt - 0.01]):
+        vs = [v.co for f in cap for v in f.verts]
+        c = Vector((sum(v.x for v in vs) / len(vs), sum(v.y for v in vs) / len(vs), 0))
+        posts = [v.co for v in bm.verts if abs(v.co.x - c.x) < 0.17 and abs(v.co.y - c.y) < 0.17 and 0.5 < v.co.z < zt - 0.25]
+        hw = max(max(abs(p.x - c.x), abs(p.y - c.y)) for p in posts) + 0.012 if posts else 0.16
+        for z in (0.96, 1.03):
+            block(bm, c + Vector((-hw, -hw, z)), c + Vector((hw, hw, z + 0.035)), n, 0, uv, rope)
+    deck = [f for f in bm.faces if f.normal.z > 0.9 and abs(f.calc_center_median().z - 0.9) < 0.01 and abs(f.calc_center_median().x) < 0.3]
+    if deck:
+        z = deck[0].calc_center_median().z
+        res = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=10, radius1=0.16, radius2=0.16, depth=0.06,
+                                    matrix=Matrix.Translation((0, 0.45, z + 0.03)))
+        new = {f for v in res['verts'] for f in v.link_faces}
+        flat = bm.faces.layers.int.get('flat')
+        for f in new:
+            f.material_index = 0
+            f[flat] = 1
+            for lo in f.loops:
+                lo[uv].uv = rope
+        cap = max(new, key=lambda f: f.calc_center_median().z)
+        rings(bm, [cap], [(0.03, 0.012), (0.035, 0.012)], slot)
+
+
+def melon(bm, mats, uv):
+    """A stem and a curled leaf on top of each melon (crisp stem, flat leaf)."""
+    stem = coloured(mats, 0, 'melon-stem', (0.2, 0.24, 0.04))
+    leaf = next(i for i, m in enumerate(mats) if m.name.startswith('leafsDark'))
+    for spot in components([f for f in bm.faces if mats[f.material_index].name.startswith('dirt') and f.normal.z > 0.9]):
+        vs = [v.co for f in spot for v in f.verts]
+        c = sum(vs, Vector()) / len(vs)
+        n = Vector((0, 1, 0))
+        block(bm, c + Vector((-0.012, -0.012, -0.005)), c + Vector((0.012, 0.012, 0.055)), n, stem, uv, Vector((0, 0)))
+        dome(bm, c + Vector((0.035, 0.01, 0.0)), Vector((0.5, 0.15, 1)), 0.055, 0.02, leaf, uv, smooth=False, sides=5, rot=0.4)
+
+
+def furrow(bm, mats, uv):
+    """Sprouts (two crisp leaves each) along the row's ridge and a few dark clods."""
+    dirt = next(i for i, m in enumerate(mats) if m.name == 'dirt')
+    clod = next(i for i, m in enumerate(mats) if m.name.startswith('dirtDark'))
+    ridge = [f for f in bm.faces if f.material_index == dirt and f.normal.z > 0.9]
+    zt = max(f.calc_center_median().z for f in ridge)
+    vs = [v.co for f in ridge if f.calc_center_median().z > zt - 0.005 for v in f.verts]
+    y0, y1 = min(v.y for v in vs), max(v.y for v in vs)
+    x0, x1 = min(v.x for v in vs), max(v.x for v in vs)
+    ym = (y0 + y1) / 2
+    sprout = coloured(mats, 0, 'sprout', (0.12, 0.42, 0.05))
+    for k in range(4):
+        p = Vector((x0 + (x1 - x0) * (k + 0.5) / 4, ym + (y1 - y0) * (0.12 if k % 2 else -0.12), zt))
+        a = k * 1.1
+        for s in (-1, 1):
+            d = Vector((math.cos(a) * s * 0.8, math.sin(a) * s * 0.8, 1))
+            dome(bm, p, d, 0.035, 0.07, sprout, uv, smooth=False, sides=4, rot=a)
+    for k in range(3):
+        p = Vector((x0 + (x1 - x0) * (k * 0.33 + 0.2), ym + (y1 - y0) * (0.3 if k % 2 else -0.3), zt))
+        dome(bm, p - Vector((0, 0, 0.004)), Vector((0, 0, 1)), 0.025, 0.016, clod, uv, smooth=False, sides=5, rot=k)
+
+
 def plane_groups(faces, size):
     """Faces grouped by plane (normal and offset)."""
     out = {}
@@ -490,6 +572,18 @@ def recipe(name):
         return 'tent'
     if name == 'tree-large':
         return 'suburb-tree'
+    if name in ('grass_large', 'grass_leafs', 'grass_leafsLarge'):
+        return 'grass'
+    if name in ('plant_flatShort', 'plant_flatTall'):
+        return 'flat'
+    if name == 'path_stone':
+        return 'path'
+    if name == 'structure-platform-dock':
+        return 'dock'
+    if name == 'crop_melon':
+        return 'melon'
+    if name == 'crops_dirtRow':
+        return 'furrow'
     return None
 
 
@@ -690,6 +784,21 @@ def detail(o, kind):
         if greens:
             lit = max(greens, key=lambda f: sum(col(f, uv)))
             crown(bm, greens, 7, 0.24, greens[0].material_index, 2.0, uv, lit.loops[0][uv].uv.copy())
+    elif kind == 'grass':
+        li, sun = tips(bm, me.materials, 'grass', 0.55, top)
+        if o.name.endswith('leafs'):
+            fan(bm, [f for f in bm.faces if f.material_index in (li, sun)], [(0.8, 0.72)], sun)
+    elif kind == 'flat':
+        li, sun = tips(bm, me.materials, 'leafsGreen', 0.6, top)
+        fan(bm, [f for f in bm.faces if f.material_index in (li, sun)], [(0.785, 0.78)], sun)
+    elif kind == 'path':
+        stones(bm, me.materials, size)
+    elif kind == 'dock':
+        dock(bm, slot, uv)
+    elif kind == 'melon':
+        melon(bm, me.materials, uv)
+    elif kind == 'furrow':
+        furrow(bm, me.materials, uv)
     bm.to_mesh(me)
     bm.free()
     if keep:
