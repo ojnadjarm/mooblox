@@ -7,8 +7,9 @@
 # planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks, growth rings and bark plates on the stump,
 # logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree, sunlit
 # grass tips, fuller flat plants, moss at path stones, rope lashings and a coil on the dock, melon stems, sprouts, cream stripes on
-# stall awnings, a finial on the lantern cap, studs on barrel hoops, strata lines on the cliff steps. Seams and sunk walls use a darker copy
-# of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex colours carry them.
+# stall awnings, a finial on the lantern cap, studs on barrel hoops, strata lines on the cliff steps, a planked bridge deck. Seams and
+# sunk walls use a darker copy of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex
+# colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
 import bpy, colorsys, math, os, sys
 
@@ -481,6 +482,22 @@ def dock(bm, slot, uv):
         rings(bm, [cap], [(0.03, 0.012), (0.035, 0.012)], slot)
 
 
+def bridge(bm, mats, size, top, slot):
+    """The sunk stone panel between the end boards becomes 8 cross boards just under them in three warm wood tones, seamed."""
+    tones = [coloured(mats, 0, f'deck-{k}', rgb) for k, rgb in enumerate(((0.5, 0.26, 0.11), (0.66, 0.37, 0.16), (0.33, 0.15, 0.06)))]
+    deck = [f for f in bm.faces if f.normal.z > 0.9 and mats[f.material_index].name.startswith('stone')]
+    for v in {v for f in deck for v in f.verts}:
+        v.co.z = top - 0.015 * size
+    for f in deck:
+        f.material_index = tones[0]
+    lo, step = min(v.co.y for f in deck for v in f.verts), extent(deck, Vector((0, 1, 0))) / 8
+    boards(bm, deck, Vector((0, 1, 0)), 8, size, slot)
+    tag, z = bm.faces.layers.int.get('board'), top - (0.015 + DEPTH) * size
+    for f in bm.faces:
+        if f[tag] and f.material_index == tones[0] and f.normal.z > 0.9 and abs(f.calc_center_median().z - z) < 1e-3:
+            f.material_index = tones[(0, 1, 0, 2, 1, 0, 2, 0)[min(7, int((f.calc_center_median().y - lo) / step))]]
+
+
 def melon(bm, mats, uv):
     """A stem and a curled leaf on top of each melon (crisp stem, flat leaf)."""
     stem = coloured(mats, 0, 'melon-stem', (0.2, 0.24, 0.04))
@@ -624,6 +641,8 @@ def recipe(name):
         return 'furrow'
     if name == 'cliff_steps_rock':
         return 'steps'
+    if name == 'bridge_center_wood':
+        return 'bridge'
     return None
 
 
@@ -851,6 +870,8 @@ def detail(o, kind):
     elif kind == 'steps':
         dirt = [f for f in bm.faces if me.materials[f.material_index].name == 'dirt' and abs(f.normal.z) < 0.3]
         lines(bm, dirt, Vector((0, 0, 1)), [0.36 * top, 0.68 * top], 1.6 * WIDTH * size, slot)
+    elif kind == 'bridge':
+        bridge(bm, me.materials, size, top, slot)
     bm.to_mesh(me)
     bm.free()
     if keep:
