@@ -6,7 +6,8 @@
 # moss pads and pebbles on rocks, blossom window boxes and shutter pairs at house windows, inner leaf fans on bushes, clumps on
 # planter shrubs, a plant in the pot, hearts on flowers, fountain rims in stone blocks, growth rings and bark plates on the stump,
 # logs and embers in the campfire, white spots on mushroom caps, sewn panels on the tent, leaf clumps on the suburb tree, sunlit
-# grass tips, fuller flat plants, moss at path stones, rope lashings and a coil on the dock, melon stems, sprouts. Seams and sunk walls use a darker copy
+# grass tips, fuller flat plants, moss at path stones, rope lashings and a coil on the dock, melon stems, sprouts, cream stripes on
+# stall awnings, a finial on the lantern cap, studs on barrel hoops, strata lines on the cliff steps. Seams and sunk walls use a darker copy
 # of the face's own material (base colour factor), so the kit stays one colormap and the baked vertex colours carry them.
 # The imported corner normals ride through the edit as an attribute: untouched faces (pillowy roofs, bevels) keep their shading.
 import bpy, colorsys, math, os, sys
@@ -514,6 +515,43 @@ def furrow(bm, mats, uv):
         dome(bm, p - Vector((0, 0, 0.004)), Vector((0, 0, 1)), 0.025, 0.016, clod, uv, smooth=False, sides=5, rot=k)
 
 
+def stripes(bm, region, d, n, uv, luv):
+    """Every other strip across d painted with the colormap texel luv (awning stripes); only the broad upward faces are cut, small
+    faces (valance scallops) take the strip of their centre."""
+    if not region:
+        return
+    tag = bm.faces.layers.int.get('board')
+    for f in bm.faces:
+        f[tag] = 0
+    for f in region:
+        f[tag] = 2 if f.normal.z > 0.3 else 1
+    ps = [v.co.dot(d) for f in region for v in f.verts]
+    lo, hi = min(ps), max(ps)
+    for k in range(1, n):
+        faces = [f for f in bm.faces if f[tag] == 2]
+        geom = faces + list({e for f in faces for e in f.edges}) + list({v for f in faces for v in f.verts})
+        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=d * (lo + (hi - lo) * k / n), plane_no=d, dist=1e-6)
+    for f in bm.faces:
+        if f[tag] and int((f.calc_center_median().dot(d) - lo) / (hi - lo) * n) % 2:
+            for lo_ in f.loops:
+                lo_[uv].uv = luv
+
+
+def lines(bm, region, d, offs, w, slot):
+    """Painted joints: the region cut at offset +- w/2 along d for each offset, the thin bands painted in the darker slot (no inset, few tris)."""
+    tag = bm.faces.layers.int.get('board')
+    for f in bm.faces:
+        f[tag] = 0
+    for f in region:
+        f[tag] = 1
+    for o in offs:
+        for co in (o - w / 2, o + w / 2):
+            faces = [f for f in bm.faces if f[tag]]
+            geom = faces + list({e for f in faces for e in f.edges}) + list({v for f in faces for v in f.verts})
+            bmesh.ops.bisect_plane(bm, geom=geom, plane_co=d * co, plane_no=d, dist=1e-6)
+    paint(bm, [f for f in bm.faces if f[tag] and any(abs(f.calc_center_median().dot(d) - o) < w / 2 for o in offs)], slot)
+
+
 def plane_groups(faces, size):
     """Faces grouped by plane (normal and offset)."""
     out = {}
@@ -584,6 +622,8 @@ def recipe(name):
         return 'melon'
     if name == 'crops_dirtRow':
         return 'furrow'
+    if name == 'cliff_steps_rock':
+        return 'steps'
     return None
 
 
@@ -654,6 +694,8 @@ def detail(o, kind):
             if sum(f.calc_area() for f in table) > 0.05 * size * size:
                 d = min((Vector((1, 0, 0)), Vector((0, 1, 0))), key=lambda a: extent(table, a))
                 boards(bm, table, d, max(3, min(5, round(extent(table, d) / (size * 0.1)))), size, slot)
+        canopy = [f for f in bm.faces if f.calc_center_median().z > 0.6 * top and not is_wood(f) and (lambda c: max(c) - min(c) > 0.3)(col(f, uv))]
+        stripes(bm, canopy, Vector((0, 1, 0)), 5, uv, texel_uv(386, 258))
     elif kind == 'boards':
         for f in [f for f in bm.faces if rect(f) and is_wood(f) and f.calc_area() > 0.04 * size * size]:
             w = min(e.calc_length() for e in f.edges)
@@ -662,6 +704,11 @@ def detail(o, kind):
         lid = [f for f in bm.faces if f.normal.z > 0.9 and f.calc_center_median().z > top * 0.9 and is_wood(f)]
         seams(bm, [f for f in bm.faces if abs(f.normal.z) < 0.6 and is_wood(f)], size, slot)
         sink(bm, lid, size * 0.07, size * 0.03, slot)
+        hoops = [f for f in bm.faces if abs(f.normal.z) < 0.3 and (lambda c: abs(c[0] - c[1]) < 0.08 and c[2] > c[0] + 0.05)(col(f, uv))]
+        for k, f in enumerate(sorted(hoops, key=lambda f: (round(f.calc_center_median().z, 2), math.atan2(f.normal.y, f.normal.x)))):
+            if k % 2 == 0:
+                n = f.normal.copy()
+                dome(bm, f.calc_center_median() - n * 0.005 * size, n, 0.04 * size, 0.025 * size, f.material_index, uv, f.loops[0][uv].uv.copy(), smooth=False, sides=4)
         for f in bm.faces:
             f.smooth = True
     elif kind == 'house':
@@ -686,6 +733,8 @@ def detail(o, kind):
         post = [f for f in bm.faces if abs(f.normal.z) < 0.3 and all(Vector((v.co.x, v.co.y)).length < 0.045 * s for v in f.verts)
                 and all(0.6 * s < v.co.z < 1.32 * s for v in f.verts) and extent([f], Vector((0, 0, 1))) > 0.3 * s]
         collars(bm, post, (0.74 * s, 1.15 * s), 0.035 * s, 0.01 * s, slot, uv)
+        cap = max(bm.faces, key=lambda f: f.calc_center_median().z)
+        dome(bm, Vector((0, 0, top - 0.004 * s)), Vector((0, 0, 1)), 0.03 * s, 0.07 * s, cap.material_index, uv, cap.loops[0][uv].uv.copy(), smooth=False)
     elif kind in ('tree', 'pine'):
         li = next(i for i, m in enumerate(me.materials) if m.name.startswith('leafs'))
         me.materials.append(lighter(me.materials[li]))
@@ -799,6 +848,9 @@ def detail(o, kind):
         melon(bm, me.materials, uv)
     elif kind == 'furrow':
         furrow(bm, me.materials, uv)
+    elif kind == 'steps':
+        dirt = [f for f in bm.faces if me.materials[f.material_index].name == 'dirt' and abs(f.normal.z) < 0.3]
+        lines(bm, dirt, Vector((0, 0, 1)), [0.36 * top, 0.68 * top], 1.6 * WIDTH * size, slot)
     bm.to_mesh(me)
     bm.free()
     if keep:

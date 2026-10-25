@@ -1,4 +1,4 @@
-// Close-up stills of placed kit models in the demo world: node tools/asset-stills.mjs <outdir> [--prefix before] [--ids a,b] [--tier high] [--turn 0] [--query shape=8x12&course=399]
+// Close-up stills of placed kit models in the demo world: node tools/asset-stills.mjs <outdir> [--prefix before] [--ids a,b] [--tier high] [--turn 0] [--query shape=8x12&course=399] [--zoom 0.5] [--look 0.4]
 // For each id the placement nearest the hub gets a front three-quarter camera fitted to its footprint (wide fountains, tall
 // stalls fill the frame from outside); JPEG `<prefix>-<pack>__<name>.jpg`.
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ const IDS = ['town/lantern', 'town/stall-bench', 'nature/fence_simple', 'nature/
 const args = process.argv.slice(2);
 const out = args[0];
 if (!out || out.startsWith('--')) {
-  console.error('usage: node tools/asset-stills.mjs <outdir> [--prefix before] [--ids a,b] [--tier high] [--turn 0] [--query shape=8x12&course=399]');
+  console.error('usage: node tools/asset-stills.mjs <outdir> [--prefix before] [--ids a,b] [--tier high] [--turn 0] [--query shape=8x12&course=399] [--zoom 0.5] [--look 0.4]');
   process.exit(2);
 }
 const opt = (name, fallback) => {
@@ -22,6 +22,8 @@ const ids = opt('ids', IDS.join(',')).split(',');
 const tier = opt('tier', 'high');
 const turn = Number(opt('turn', '0'));
 const query = opt('query', '');
+const zoom = Number(opt('zoom', '1'));
+const look = Number(opt('look', '0.4'));
 const footprints = JSON.parse(readFileSync(new URL('../src/world/model-footprints.json', import.meta.url), 'utf8'));
 mkdirSync(out, { recursive: true });
 
@@ -35,7 +37,7 @@ try {
   await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 90000 });
   await page.evaluate(() => window.mooblox.stopOverview());
   for (const id of ids) {
-    const shot = await page.evaluate(([id, turn, fp]) => {
+    const shot = await page.evaluate(([id, turn, fp, zoom, look]) => {
       const v = window.mooblox;
       const hub = v.layout.hub;
       const all = v.dressing.districts.flatMap((d) => d.placements).filter((p) => p.id === id);
@@ -44,14 +46,14 @@ try {
       const scale = fp ? (p.width ? p.width / fp.w : p.height / fp.h) : 1;
       const h = fp ? fp.h * scale : p.height;
       const r = Math.hypot(fp ? fp.r * scale : h / 2, h / 2);
-      const d = Math.max(r * 2.3, r + 1.2);
+      const d = Math.max(r * 2.3, r + 1.2) * zoom;
       const a = p.yaw + 0.55 + turn;
       v.follow({ x: p.x, z: p.z });
-      v.stage.camera.position.set(p.x + Math.sin(a) * d, p.y + h * 0.5 + d * 0.3 + 0.25, p.z + Math.cos(a) * d);
-      v.stage.camera.lookAt(p.x, p.y + h * 0.4, p.z);
+      v.stage.camera.position.set(p.x + Math.sin(a) * d, p.y + h * (look + 0.1) + d * 0.3 + 0.25, p.z + Math.cos(a) * d);
+      v.stage.camera.lookAt(p.x, p.y + h * look, p.z);
       v.stage.focusShadow(p.x, p.z, 12);
       return { x: p.x, z: p.z, h, count: all.length };
-    }, [id, turn, footprints[id]]);
+    }, [id, turn, footprints[id], zoom, look]);
     if (!shot) {
       console.log(`${id}: not placed in the demo world`);
       continue;
