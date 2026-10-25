@@ -64,7 +64,7 @@ function turns(node: string, times: number[], poses: [number, number, number][])
   return new QuaternionKeyframeTrack(`${node}.quaternion`, times, values);
 }
 
-/** Our idle acts (the pack's emote-yes and emote-no are the others): a wave, a two-pump cheer, a slow stretch. */
+/** Our idle acts (the pack's emote-yes and emote-no are the others): a wave, a two-pump cheer, a slow stretch, and the Guide's talk. */
 export function actClips(): AnimationClip[] {
   const w = [0, 0.18, 0.36, 0.54, 0.72, 0.9, 1.1, 1.3];
   const wave = new AnimationClip('wave', 1.3, [
@@ -87,5 +87,16 @@ export function actClips(): AnimationClip[] {
     turns('head', s, [[0, 0, 0], [-0.3, 0, 0], [-0.32, 0, 0], [0, 0, 0]]),
     turns('torso', s, [[0, 0, 0], [-0.12, 0, 0], [-0.14, 0, 0], [0, 0, 0]]),
   ]);
-  return [wave, cheer, stretch];
+  return [wave, cheer, stretch, talkClip()];
+}
+
+/** Talking with the hands: three beats of the right hand (the left echoes the second), a nod on each, then both palms open out. */
+function talkClip(): AnimationClip {
+  const t = [0, 0.3, 0.55, 0.85, 1.1, 1.4, 1.7, 2.0, 2.4];
+  return new AnimationClip('talk', 2.4, [
+    turns('arm-right', t, [[0, 0, 0], [-1.4, 0, -0.35], [-0.8, 0, -0.25], [-1.45, 0, -0.45], [-0.85, 0, -0.3], [-1.5, 0, -0.4], [-0.9, 0, -1.05], [-0.9, 0, -1.05], [0, 0, 0]]),
+    turns('arm-left', t, [[0, 0, 0], [-0.25, 0, 0.1], [-0.3, 0, 0.12], [-1.0, 0, 0.3], [-0.55, 0, 0.25], [-0.6, 0, 0.25], [-0.9, 0, 1.05], [-0.9, 0, 1.05], [0, 0, 0]]),
+    turns('head', t, [[0, 0, 0], [0.1, 0, -0.06], [-0.02, 0, -0.04], [0.12, 0, 0.05], [-0.02, 0, 0.03], [0.1, 0, -0.05], [-0.08, 0, 0], [-0.08, 0, 0], [0, 0, 0]]),
+    turns('torso', t, [[0, 0, 0], [0.05, 0.1, 0], [0.02, 0.08, 0], [0.06, -0.06, 0], [0.02, -0.04, 0], [0.05, 0.08, 0], [-0.04, 0, 0], [-0.04, 0, 0], [0, 0, 0]]),
+  ]);
 }

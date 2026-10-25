@@ -1,5 +1,6 @@
 import { Vector3, type PerspectiveCamera } from 'three';
 import type { Avatar } from '../player/avatar';
+import { TALK } from '../player/idle-acts';
 import { injectStyle, UI_FONT } from '../ui/style';
 import type { TutorLine } from './tutor';
 
@@ -30,6 +31,9 @@ const HEAD = 3.1;
 const TALK_RANGE = 9;
 const TURN = 6;
 const MARGIN = 12;
+/** Talk gestures per line (said, or met again on arrival), and seconds in range before the first (its greeting wave goes first). */
+const TALKS = 2;
+const TALK_DELAY = 0.6;
 
 /** The "Guide" NPC: an avatar on the plaza with a speech bubble that follows its head. */
 export class Guide {
@@ -37,6 +41,9 @@ export class Guide {
   private readonly text: HTMLElement;
   private readonly go: HTMLButtonElement;
   private line: TutorLine | null = null;
+  /** Talk gestures still to make for the line, and seconds the player has been in range. */
+  private talks = 0;
+  private near = 0;
   private readonly head = new Vector3();
 
   constructor(
@@ -65,13 +72,17 @@ export class Guide {
     this.line = line;
     this.text.textContent = line.text;
     this.go.hidden = line.activityId === null;
+    this.talks = TALKS;
   }
 
-  /** Animates, turns towards a nearby player and keeps the bubble over the head; call once per frame. */
+  /** Animates, turns towards a nearby player, talks with its hands when it has something to say and keeps the bubble over the head; call once per frame. */
   update(dt: number, player: Vector3): void {
     const root = this.avatar.root;
-    this.avatar.update(dt);
     const near = root.position.distanceTo(player) < TALK_RANGE;
+    if (near && this.near === 0) this.talks = TALKS;
+    this.near = near ? this.near + dt : 0;
+    if (near && this.line && this.talks > 0 && this.near >= TALK_DELAY && this.avatar.acting === null && this.avatar.emote(TALK)) this.talks--;
+    this.avatar.update(dt);
     if (near) {
       const target = Math.atan2(player.x - root.position.x, player.z - root.position.z);
       const delta = Math.atan2(Math.sin(target - root.rotation.y), Math.cos(target - root.rotation.y));

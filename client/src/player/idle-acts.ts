@@ -18,16 +18,18 @@ export const ACTS = {
   answerWindow: 1.2,
 } as const;
 
-/** Clips a standing kid picks from, as often as the weight; `wave` is also the greeting. */
+/** Clips a standing kid picks from, as often as the weight; `wave` is also the greeting; `talk` (weight 0) only plays when asked (the Guide). */
 export const IDLE_ACTS: readonly { readonly clip: string; readonly weight: number }[] = [
   { clip: 'emote-yes', weight: 2 },
   { clip: 'emote-no', weight: 1 },
   { clip: 'stretch', weight: 2 },
   { clip: 'cheer', weight: 1 },
   { clip: 'wave', weight: 1 },
+  { clip: 'talk', weight: 0 },
 ];
 export const WAVE = IDLE_ACTS.findIndex((a) => a.clip === 'wave');
 export const CHEER = IDLE_ACTS.findIndex((a) => a.clip === 'cheer');
+export const TALK = IDLE_ACTS.findIndex((a) => a.clip === 'talk');
 const TOTAL = IDLE_ACTS.reduce((s, a) => s + a.weight, 0);
 
 /**

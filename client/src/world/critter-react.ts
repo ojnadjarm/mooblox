@@ -199,3 +199,17 @@ export function keepClear(s: Float64Array, i: number, bx: number, bz: number, ar
   s[o + C.vx] = vx;
   s[o + C.vz] = vz;
 }
+
+/** Moves critter `i`'s offset by the push (px, pz) out of a solid it met (a cliff or wall) and drops its speed into that solid. No allocation. */
+export function nudge(s: Float64Array, i: number, px: number, pz: number): void {
+  const d = Math.sqrt(px * px + pz * pz);
+  if (d < 1e-9) return;
+  const o = i * C.size;
+  s[o + C.ox] = s[o + C.ox]! + px;
+  s[o + C.oz] = s[o + C.oz]! + pz;
+  const into = (s[o + C.vx]! * px + s[o + C.vz]! * pz) / d;
+  if (into < 0) {
+    s[o + C.vx] = s[o + C.vx]! - (px / d) * into;
+    s[o + C.vz] = s[o + C.vz]! - (pz / d) * into;
+  }
+}

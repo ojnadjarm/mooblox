@@ -11,6 +11,7 @@ import {
   Object3D,
   Points,
   PointsMaterial,
+  Vector3,
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -20,7 +21,7 @@ import type { AvatarFactory } from '../player/avatar-kit';
 import { SEAT } from '../player/clips';
 import { focus } from '../player/attention';
 import { hash01 } from '../player/motion';
-import { C, CRITTERS, critterState, keepClear, pace, reactStep, rise } from './critter-react';
+import { C, CRITTERS, critterState, keepClear, nudge, pace, reactStep, rise } from './critter-react';
 import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import { GroundScatter, lawnTest } from './ground-scatter';
@@ -251,6 +252,8 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
   const ground = kind === 'duck' ? null : groundAreas(view, list, roam);
   const calm = calmCritters(list, tune);
   const m = new Object3D();
+  const lo = new Vector3();
+  const hi = new Vector3();
   return (t, dt) => {
     let n = 0;
     for (let i = 0; i < list.length; i++) {
@@ -275,9 +278,19 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
           m.rotation.set(0, -a, 0);
         } else {
           if (!reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + roam, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt)) still = false;
-          if (ground) keepClear(state, j, bx, bz, ground.area, ground.from[i]!, ground.from[i + 1]!, PET_BODY);
-          state[j * C.size + C.clock] = clock + dt * pace(state, j, tune);
           const o = j * C.size;
+          if (ground) {
+            keepClear(state, j, bx, bz, ground.area, ground.from[i]!, ground.from[i + 1]!, PET_BODY);
+            const vx = state[o + C.vx]!;
+            const vz = state[o + C.vz]!;
+            if (vx * vx + vz * vz > PET_STILL) {
+              lo.set(bx + state[o + C.ox]!, c.y + PET_PROBE, bz + state[o + C.oz]!);
+              hi.set(lo.x, lo.y + PET_BODY, lo.z);
+              const push = view.collider.resolve(lo, hi, PET_BODY);
+              nudge(state, j, push.x, push.z);
+            }
+          }
+          state[j * C.size + C.clock] = clock + dt * pace(state, j, tune);
           m.position.set(bx + state[o + C.ox]!, c.y + gait + rise(state, j, tune), bz + state[o + C.oz]!);
           m.rotation.set(0, state[o + C.yaw]!, 0);
         }
@@ -312,6 +325,10 @@ function calmCritters(list: readonly Critter[], tune: { readonly release: number
 /** Half-width (m) a cat or dog keeps off obstacles, and how far inside its island's rim its centre stays. */
 const PET_BODY = 0.3;
 const PET_RIM = 0.6;
+/** Height (m) of the lower end of the body capsule kept out of world solids (cliff walls, stairs, terraces): its foot clears paths by 0.15 m. */
+const PET_PROBE = 0.45;
+/** Squared speed (m²/s²) under which a pet off its wander is standing: it was pushed clear while it moved, so it skips the probe. */
+const PET_STILL = 0.01;
 
 /** Each pet's ground (`keepClear`): its island's disc, then the obstacles within `reach` m of its wander circle; critter i's run is from[i]..from[i + 1]. */
 function groundAreas(view: WorldView, list: readonly Critter[], reach: number): { area: Float64Array; from: Uint32Array } {

@@ -1,6 +1,6 @@
 import { Session } from 'node:inspector/promises';
 import { describe, expect, it } from 'vitest';
-import { C, CRITTERS, critterState, keepClear, pace, reactStep, rise, type CritterKind } from '../../src/world/critter-react';
+import { C, CRITTERS, critterState, keepClear, nudge, pace, reactStep, rise, type CritterKind } from '../../src/world/critter-react';
 
 const DT = 1 / 60;
 
@@ -82,6 +82,19 @@ describe('critter reactions', () => {
     expect(t[C.ox]!).toBeGreaterThan(2.9);
   });
 
+  it('a dog called past a cliff wall stops against it (pushed out by the world collider) and slides along it', () => {
+    const s = critterState(1);
+    for (let f = 0; f < 240; f++) {
+      reactStep(s, 0, CRITTERS.dog, 0, 0, 0, 0, 0, 6, true, 4, 1, 0, DT);
+      const x = s[C.ox]!;
+      nudge(s, 0, x > 1.2 ? 1.2 - x : 0, 0);
+      expect(s[C.ox]!).toBeLessThanOrEqual(1.2 + 1e-9);
+      if (s[C.ox]! >= 1.2 - 1e-9) expect(s[C.vx]!).toBeLessThanOrEqual(1e-9);
+    }
+    expect(s[C.ox]!).toBeGreaterThan(1.1);
+    expect(s[C.oz]!).toBeGreaterThan(0.3);
+  });
+
   it('a step allocates nothing', async () => {
     const s = critterState(64);
     const walls = new Float64Array([0, 0, 80, 2, 1, 0.7, 5, 1, 0.7]);
@@ -90,6 +103,7 @@ describe('critter reactions', () => {
         for (let i = 0; i < 64; i++) {
           reactStep(s, i, CRITTERS.dog, i, 0, 0, i, 0, 6, true, 3, 1, 2, DT);
           keepClear(s, i, i, 0, walls, 0, walls.length, 0.3);
+          nudge(s, i, -0.01, 0.002);
         }
       }
     };
