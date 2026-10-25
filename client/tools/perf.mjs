@@ -2,7 +2,7 @@
 // Builds the dev page, serves the build, then per shape x tier walks the player to the farthest plot and reads frame times,
 // draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on the real GPU at DPR 1, 400x800 under 4x CPU
 // throttle (the realistic low-end proxy: no frame > 20 ms over the walk and its bridge crossing), then again on SwiftShader under
-// 6x as a stress floor (30 fps, no frame > 100 ms), after one cold first visit of the demo route on that browser (reported, not gated:
+// 6x as a stress floor (30 fps on the first run, median worst frame of 3 runs <= 100 ms), after one cold first visit of the demo route on that browser (reported, not gated:
 // a fresh SwiftShader GPU process stalls once, T1373 R11); memory = heap + GPU estimate <= 800 MB per page;
 // the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
 // --browser gpu|soft and --throttle N override the rig (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
@@ -21,8 +21,8 @@ const BUDGETS = {
 const ALL = { loadMb: 3, loadS: 3, memoryMb: 800, frameMs: 50, bigCourse: 1.5 };
 /** The realistic low-end proxy (Iris Xe DPR 1, 4x CPU) walks over a bridge without a dropped frame. */
 const LOW_FRAME_MS = 20;
-/** Software GL (SwiftShader) under 6x CPU, a floor; each page waits `coolMs` idle first (back-to-back runs hit the host's power limit: 200 ms stalls). */
-const STRESS = { fps: 30, frameMs: 100, coolMs: 45000 };
+/** Software GL (SwiftShader) under 6x CPU, a floor; each page waits `coolMs` idle first (back-to-back runs hit the host's power limit: 200 ms stalls); worst frame gates on the median of `runs` (one random 83-200 ms SwiftShader frame per run, T1373 R13). */
+const STRESS = { fps: 30, frameMs: 100, coolMs: 45000, runs: 3 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
 
 const args = process.argv.slice(2);
@@ -171,16 +171,24 @@ try {
           console.log(`cold first-visit worst (demo low stress, first 5 s, not gated): ${cold.maxFrame} ms, fps ${cold.fps}`);
           await new Promise((r) => setTimeout(r, STRESS.coolMs));
         }
-        const st = await open(stress, query(shape, tier, 'walk=far'));
-        await st.page.waitForTimeout(1500);
-        const sm = await st.page.evaluate(sample, 5000);
-        await st.page.close();
-        const srow = { shape, tier, rig: 'stress', w: stress.w, h: stress.h, gpu: 'soft', throttle: 6, ...sm };
+        const worsts = [];
+        let sm;
+        for (let run = 0; run < STRESS.runs; run++) {
+          if (run) await new Promise((r) => setTimeout(r, STRESS.coolMs));
+          const st = await open(stress, query(shape, tier, 'walk=far'));
+          await st.page.waitForTimeout(1500);
+          const s = await st.page.evaluate(sample, 5000);
+          await st.page.close();
+          sm ??= s;
+          worsts.push(s.maxFrame);
+        }
+        const median = [...worsts].sort((a, b) => a - b)[worsts.length >> 1];
+        const srow = { shape, tier, rig: 'stress', w: stress.w, h: stress.h, gpu: 'soft', throttle: 6, ...sm, worsts, worstMedian: median };
         results.push(srow);
         console.log(JSON.stringify(srow));
         const sid = `${shape} low stress 400x800 6x cpu soft`;
         check(sm.fps >= STRESS.fps, `${sid}: fps ${sm.fps} >= ${STRESS.fps}`);
-        check(sm.maxFrame <= STRESS.frameMs, `${sid}: worst frame ${sm.maxFrame} ms <= ${STRESS.frameMs}`);
+        check(median <= STRESS.frameMs, `${sid}: worst frame median ${median} ms (runs ${worsts.join(' / ')}) <= ${STRESS.frameMs}`);
       }
       const b = BUDGETS[tier];
       const id = `${shape} ${tier} ${rig.w}x${rig.h}${rig.throttle > 1 ? ` ${rig.throttle}x cpu` : ''} ${rig.browser}`;
