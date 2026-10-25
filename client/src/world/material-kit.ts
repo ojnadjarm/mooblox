@@ -263,7 +263,7 @@ const glslFloats = (k: 'metres' | 'strength'): string =>
  * The texture language on every tier: the vertex picks its atlas layer (the `surface` attribute where a builder tagged
  * it, else from its colour and slope; brick facing up is paving), maps it by the dominant axis of the object-space normal (`GRAIN` tops along
  * their tilted normal) and fades it with distance;
- * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it), lawns a second for broad tone swathes. No extra draws.
+ * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it), lawns a second for broad tone swathes and clumps. No extra draws.
  */
 function withAtlas(m: Material, atlas: { value: DataArrayTexture | null }, key: string): void {
   if (!atlas.value) return;
@@ -339,10 +339,13 @@ varying vec2 vLawnUv;`,
         '#include <color_fragment>',
         `#include <color_fragment>
 vec4 atlasT = texture(uAtlas, vec3(vAtlasUv, vAtlasLayer));
+float atlasK = vAtlasK;
 if (abs(vAtlasLayer - ${Surface.grass}.0) < 0.5 || abs(vAtlasLayer - ${Surface.meadow}.0) < 0.5) {
-  diffuseColor.rgb *= 1.0 + (texture(uAtlas, vec3(vLawnUv, ${Surface.grass}.0)).g - 0.5) * vec3(${LAWN_TONE.gain.map((v) => v.toFixed(2)).join(', ')});
+  vec2 lawn = texture(uAtlas, vec3(vLawnUv, ${Surface.grass}.0)).gb - 0.5;
+  diffuseColor.rgb *= 1.0 + lawn.x * vec3(${LAWN_TONE.gain.map((v) => v.toFixed(2)).join(', ')}) + lawn.y * vec3(${LAWN_TONE.clump.map((v) => v.toFixed(2)).join(', ')});
+  atlasK *= mix(${LAWN_TONE.blades.map((v) => v.toFixed(2)).join(', ')}, lawn.y + 0.5);
 }
-diffuseColor.rgb *= 1.0 + (atlasT.r - 0.5) * 2.0 * vAtlasK;
+diffuseColor.rgb *= 1.0 + (atlasT.r - 0.5) * 2.0 * atlasK;
 diffuseColor.rgb = mix(diffuseColor.rgb, atlasT.rgb * atlasT.rgb, atlasT.a * vAtlasFade);`,
       );
   };

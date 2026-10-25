@@ -26,13 +26,14 @@ export function surfaceAtlas(size: number, cheap = false): DataArrayTexture {
     const px = g.getImageData(0, 0, size, size).data;
     const ac = a.getImageData(0, 0, size, size).data;
     const tone = i === Surface.grass ? lawnTone(a, size) : null;
+    const clump = i === Surface.grass ? lawnClumps(a, size) : null;
     const out = i * size * size * 4;
     for (let k = 0; k < size * size * 4; k += 4) {
       const cover = ac[k + 3]!;
       const src = cover > 8 ? ac : px;
       data[out + k] = src[k]!;
       data[out + k + 1] = tone ? tone[k]! : src[k + 1]!;
-      data[out + k + 2] = src[k + 2]!;
+      data[out + k + 2] = clump ? clump[k]! : src[k + 2]!;
       data[out + k + 3] = cover;
     }
   }
@@ -144,6 +145,36 @@ function lawnTone(g: Ctx, s: number): Uint8ClampedArray {
         g.fillStyle = grd;
         g.fillRect(-r, -r, r * 2, r * 2);
         g.restore();
+      });
+    }
+  }
+  return g.getImageData(0, 0, s, s).data;
+}
+
+/**
+ * Lawn clumps for the grass layer's blue channel, on the lawn tone's tile: many soft clumps of 0.4-1.5 m, darker clover and
+ * sunlit tufts, that mottle the lawn where the blade tile has mipped away and vary the blades' contrast so its repeat breaks up.
+ */
+function lawnClumps(g: Ctx, s: number): Uint8ClampedArray {
+  const rnd = seededRandom(0xc1a3);
+  g.fillStyle = grey(0.5);
+  g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 150; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const r = s * (0.012 + rnd() * rnd() * 0.04);
+    const v = rnd() < 0.55 ? 0.12 + rnd() * 0.18 : 0.72 + rnd() * 0.2;
+    for (let j = 0; j < 3; j++) {
+      const cx = x + (rnd() - 0.5) * r * 1.4;
+      const cy = y + (rnd() - 0.5) * r * 1.4;
+      const cr = r * (0.55 + rnd() * 0.5);
+      wrapped(s, cx, cy, cr, (px, py) => {
+        const grd = g.createRadialGradient(px, py, 0, px, py, cr);
+        grd.addColorStop(0, grey(v, 0.7));
+        grd.addColorStop(0.55, grey(v, 0.45));
+        grd.addColorStop(1, grey(v, 0));
+        g.fillStyle = grd;
+        g.fillRect(px - cr, py - cr, cr * 2, cr * 2);
       });
     }
   }
