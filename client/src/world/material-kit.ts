@@ -96,15 +96,35 @@ export class MaterialKit {
   }
 }
 
+/**
+ * Cloth (negative `sway`, `flag-cloth.ts`): a wave travelling from the pole to the tip with a faster ripple on top, offset in z,
+ * normals tilted by its slope for lighting only (the atlas keeps reading the model's normal).
+ */
+const CLOTH_GLSL = `float cloth = max(-sway, 0.0);
+#ifdef USE_INSTANCING
+vec2 clothSeed = instanceMatrix[3].xz;
+#else
+vec2 clothSeed = modelMatrix[3].xz;
+#endif
+float clothP = uTime * 5.5 - cloth * 6.0 + clothSeed.x * 0.37 + clothSeed.y * 0.11;
+float clothQ = clothP * 2.1 + 1.7;
+float clothZ = cloth * (0.09 * sin(clothP) + 0.02 * sin(clothQ));
+vec3 clothN = objectNormal;
+objectNormal.x += cloth * (0.8 * cos(clothP) + 0.37 * cos(clothQ)) * objectNormal.z;
+objectNormal = normalize(objectNormal);`;
+
 function swayMaterial(tier: MaterialTier, time: { value: number }): Material {
   const m = tier === 'low' ? new MeshLambertMaterial({ vertexColors: true }) : new MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms['uTime'] = time;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float sway;\nuniform float uTime;')
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+${CLOTH_GLSL}`)
+      .replace('#include <normal_vertex>', '#include <normal_vertex>\nobjectNormal = clothN;')
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvec4 wp = modelMatrix * vec4(position, 1.0);\nfloat ph = uTime * 1.7 + wp.x * 0.35 + wp.z * 0.27;\ntransformed.x += sin(ph) * sway * 0.12;\ntransformed.z += cos(ph * 0.8) * sway * 0.08;',
+        '#include <begin_vertex>\nvec4 wp = modelMatrix * vec4(position, 1.0);\nfloat sw = max(sway, 0.0);\nfloat ph = uTime * 1.7 + wp.x * 0.35 + wp.z * 0.27;\ntransformed.x += sin(ph) * sw * 0.12;\ntransformed.z += cos(ph * 0.8) * sw * 0.08 + clothZ;\ntransformed.y += cloth * 0.02 * sin(clothP * 0.5 + 0.8);',
       );
   };
   m.customProgramCacheKey = () => 'mooblox-sway';

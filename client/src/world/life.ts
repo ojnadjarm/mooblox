@@ -24,6 +24,7 @@ import { hash01 } from '../player/motion';
 import { C, CRITTERS, critterState, keepClear, nudge, pace, reactStep, rise } from './critter-react';
 import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
+import { clothWeights } from './flag-cloth';
 import { GroundScatter, lawnTest } from './ground-scatter';
 import { CAMPUS } from './look';
 import type { ModelLibrary } from './model-library';
@@ -66,7 +67,9 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
     const d = view.dressing;
     for (const kind of ['flag', 'boat'] as const) {
       const spots = d.life.filter((s) => s.kind === kind);
-      if (spots.length) movers.push(instanced(view, singleModel(lib, spots[0]!.id, 1), spots, view.kit.sceneryInstanced, teardown));
+      if (!spots.length) continue;
+      const geometry = singleModel(lib, spots[0]!.id, 1);
+      movers.push(instanced(view, kind === 'flag' ? clothWeights(geometry) : geometry, spots, view.kit.sceneryInstanced, teardown));
     }
     const buoys = d.life.filter((s) => s.kind === 'buoy');
     if (buoys.length) movers.push(instanced(view, buoyGeometry(), buoys, view.kit.sceneryInstanced, teardown));
@@ -157,8 +160,7 @@ function instanced(view: WorldView, geometry: BufferGeometry, spots: readonly Li
       m.position.set(s.x, s.y, s.z);
       m.scale.setScalar(s.height);
       if (s.kind === 'flag') {
-        m.rotation.set(0, s.yaw + Math.sin(t * 2.2 + phase) * 0.35, 0);
-        m.scale.x = s.height * (1 + Math.sin(t * 5 + phase) * 0.06);
+        m.rotation.set(0, s.yaw + Math.sin(t * 0.7 + phase) * 0.2, 0);
       } else {
         m.position.y = s.y + Math.sin(t * 1.3 + phase) * 0.08;
         m.rotation.set(Math.sin(t * 1.1 + phase) * 0.06, s.yaw + t * (s.kind === 'buoy' ? 0.2 : 0), Math.sin(t * 0.9 + phase) * 0.06);
