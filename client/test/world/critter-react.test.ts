@@ -1,6 +1,6 @@
 import { Session } from 'node:inspector/promises';
 import { describe, expect, it } from 'vitest';
-import { C, CRITTERS, critterState, pace, reactStep, rise, type CritterKind } from '../../src/world/critter-react';
+import { C, CRITTERS, critterState, keepClear, pace, reactStep, rise, type CritterKind } from '../../src/world/critter-react';
 
 const DT = 1 / 60;
 
@@ -59,10 +59,39 @@ describe('critter reactions', () => {
     expect(Math.hypot(2 + s[C.ox]!, s[C.oz]!)).toBeLessThanOrEqual(2.5 + 1e-9);
   });
 
+  it('a dog stays its body clear of a hedge between it and the player, and inside its island', () => {
+    const area = [0, 0, 20];
+    for (let z = -6; z <= 6; z += 1.5) area.push(2, z, 0.7);
+    const walls = new Float64Array(area);
+    const s = critterState(1);
+    let nearest = Infinity;
+    for (let f = 0; f < 240; f++) {
+      reactStep(s, 0, CRITTERS.dog, 0, 0, 0, 0, 0, 6, true, 4, 0, 0, DT);
+      keepClear(s, 0, 0, 0, walls, 0, walls.length, 0.3);
+      for (let w = 3; w < walls.length; w += 3) nearest = Math.min(nearest, Math.hypot(s[C.ox]! - walls[w]!, s[C.oz]! - walls[w + 1]!) - walls[w + 2]!);
+    }
+    expect(nearest).toBeGreaterThanOrEqual(0.3 - 1e-6);
+    expect(s[C.ox]!).toBeLessThan(2 - 0.7);
+    const land = new Float64Array([0, 0, 3]);
+    const t = critterState(1);
+    for (let f = 0; f < 240; f++) {
+      reactStep(t, 0, CRITTERS.dog, 0, 0, 0, 0, 0, 6, true, 5.5, 0, 0, DT);
+      keepClear(t, 0, 0, 0, land, 0, 3, 0.3);
+      expect(Math.hypot(t[C.ox]!, t[C.oz]!)).toBeLessThanOrEqual(3 + 1e-9);
+    }
+    expect(t[C.ox]!).toBeGreaterThan(2.9);
+  });
+
   it('a step allocates nothing', async () => {
     const s = critterState(64);
+    const walls = new Float64Array([0, 0, 80, 2, 1, 0.7, 5, 1, 0.7]);
     const steps = () => {
-      for (let f = 0; f < 2000; f++) for (let i = 0; i < 64; i++) reactStep(s, i, CRITTERS.dog, i, 0, 0, i, 0, 6, true, 3, 1, 2, DT);
+      for (let f = 0; f < 2000; f++) {
+        for (let i = 0; i < 64; i++) {
+          reactStep(s, i, CRITTERS.dog, i, 0, 0, i, 0, 6, true, 3, 1, 2, DT);
+          keepClear(s, i, i, 0, walls, 0, walls.length, 0.3);
+        }
+      }
     };
     steps();
     const session = new Session();

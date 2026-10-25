@@ -55,7 +55,7 @@ export function critterState(n: number): Float64Array {
 /**
  * Steps critter `i` of `s` by dt: (bx, bz) is where its wander puts it now heading `heading`, (hx, hz) its home it stays within `roam`
  * of, (px, pz) the player moving at `pv` m/s (`near` false: no player). Writes offset, rise, yaw and alert; the caller adds dt times
- * `pace(s, i, tune)` to the wander clock. No allocation.
+ * `pace(s, i, tune)` to the wander clock. Returns true when it is calm (settled on its wander, the player past `release`). No allocation.
  */
 export function reactStep(
   s: Float64Array,
@@ -72,7 +72,7 @@ export function reactStep(
   pz: number,
   pv: number,
   dt: number,
-): void {
+): boolean {
   const o = i * C.size;
   let ox = s[o + C.ox]!;
   let oz = s[o + C.oz]!;
@@ -89,7 +89,7 @@ export function reactStep(
   if (d > tune.release && alert < 1e-3 && Math.abs(ox) + Math.abs(oz) + Math.abs(vx) + Math.abs(vz) + s[o + C.lift]! < 1e-3) {
     s[o + C.ox] = s[o + C.oz] = s[o + C.vx] = s[o + C.vz] = s[o + C.alert] = s[o + C.lift] = s[o + C.hop] = s[o + C.startle] = 0;
     s[o + C.yaw] = heading;
-    return;
+    return true;
   }
   const wants = d < (alert > 0.5 ? tune.release : tune.notice) ? 1 : 0;
   alert += (wants - alert) * Math.min(1, (wants > alert ? ALERT_UP : ALERT_DOWN) * dt);
@@ -150,6 +150,7 @@ export function reactStep(
   s[o + C.alert] = alert;
   s[o + C.startle] = startle;
   s[o + C.yaw] = yaw;
+  return false;
 }
 
 /** How fast critter `i`'s wander clock runs now (1 = its usual wander, 0 = stopped while it watches or comes over). */
@@ -162,4 +163,39 @@ export function rise(s: Float64Array, i: number, tune: CritterTune): number {
   const o = i * C.size;
   const h = s[o + C.hop]!;
   return s[o + C.lift]! + (h > 0 ? Math.abs(Math.sin(h)) * tune.hop : 0);
+}
+
+/**
+ * Keeps critter `i` (wandering at (bx, bz)) on its ground: `area[from..from+3)` is the land disc (x, z, radius its centre stays within),
+ * then (x, z, r) obstacle circles up to `to` it stays `body` m clear of. Pushes it out and drops the speed into what it met. No allocation.
+ */
+export function keepClear(s: Float64Array, i: number, bx: number, bz: number, area: Float64Array, from: number, to: number, body: number): void {
+  const o = i * C.size;
+  let ox = s[o + C.ox]!;
+  let oz = s[o + C.oz]!;
+  if (ox === 0 && oz === 0) return;
+  let vx = s[o + C.vx]!;
+  let vz = s[o + C.vz]!;
+  for (let w = from; w < to; w += 3) {
+    const dx = bx + ox - area[w]!;
+    const dz = bz + oz - area[w + 1]!;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    const land = w === from;
+    const r = land ? area[w + 2]! : area[w + 2]! + body;
+    if (land ? d <= r : d >= r) continue;
+    const nx = d > 1e-9 ? dx / d : 1;
+    const nz = d > 1e-9 ? dz / d : 0;
+    ox += nx * (r - d);
+    oz += nz * (r - d);
+    const into = (vx * nx + vz * nz) * (land ? -1 : 1);
+    if (into < 0) {
+      const t = land ? -into : into;
+      vx -= nx * t;
+      vz -= nz * t;
+    }
+  }
+  s[o + C.ox] = ox;
+  s[o + C.oz] = oz;
+  s[o + C.vx] = vx;
+  s[o + C.vz] = vz;
 }

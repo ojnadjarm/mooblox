@@ -20,7 +20,7 @@ import type { AvatarFactory } from '../player/avatar-kit';
 import { SEAT } from '../player/clips';
 import { focus } from '../player/attention';
 import { hash01 } from '../player/motion';
-import { C, CRITTERS, critterState, pace, reactStep, rise } from './critter-react';
+import { C, CRITTERS, critterState, keepClear, pace, reactStep, rise } from './critter-react';
 import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import { GroundScatter, lawnTest } from './ground-scatter';
@@ -248,12 +248,16 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
   const tune = CRITTERS[kind];
   const state = critterState(list.length * per);
   const roam = kind === 'duck' ? 2.5 : 4;
+  const ground = kind === 'duck' ? null : groundAreas(view, list, roam);
+  const calm = calmCritters(list, tune);
   const m = new Object3D();
   return (t, dt) => {
     let n = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i]!;
       if (!view.sees(c.x, c.z)) continue;
+      const asleep = calm.asleep(i, c);
+      let still = true;
       for (let k = 0; k < per; k++) {
         const j = i * per + k;
         const clock = state[j * C.size + C.clock]!;
@@ -264,20 +268,67 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
         const r = c.r * (kind === 'duck' ? 1 - k * 0.12 : 1);
         const bx = c.x + Math.cos(a) * r;
         const bz = c.z + Math.sin(a) * r;
-        reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + roam, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt);
-        state[j * C.size + C.clock] = clock + dt * pace(state, j, tune);
-        const o = j * C.size;
         const gait = kind === 'duck' ? Math.sin(t * 2 + k) * 0.03 : Math.abs(Math.sin(t * 8 + phase)) * 0.05;
-        m.position.set(bx + state[o + C.ox]!, c.y + gait + rise(state, j, tune), bz + state[o + C.oz]!);
-        m.rotation.set(0, state[o + C.yaw]!, 0);
+        if (asleep) {
+          state[j * C.size + C.clock] = clock + dt;
+          m.position.set(bx, c.y + gait, bz);
+          m.rotation.set(0, -a, 0);
+        } else {
+          if (!reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + roam, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt)) still = false;
+          if (ground) keepClear(state, j, bx, bz, ground.area, ground.from[i]!, ground.from[i + 1]!, PET_BODY);
+          state[j * C.size + C.clock] = clock + dt * pace(state, j, tune);
+          const o = j * C.size;
+          m.position.set(bx + state[o + C.ox]!, c.y + gait + rise(state, j, tune), bz + state[o + C.oz]!);
+          m.rotation.set(0, state[o + C.yaw]!, 0);
+        }
         m.scale.setScalar(kind === 'duck' && k > 0 ? 0.7 : 1);
         m.updateMatrix();
         mesh.setMatrixAt(n++, m.matrix);
       }
+      calm.settle(i, asleep || still);
     }
     mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
   };
+}
+
+/** Which critters sleep through the reaction step: calm last frame and the player too far from home to wake them. */
+function calmCritters(list: readonly Critter[], tune: { readonly release: number }): { asleep(i: number, c: Critter): boolean; settle(i: number, calm: boolean): void } {
+  const calm = new Uint8Array(list.length).fill(1);
+  const wake = new Float64Array(list.length);
+  for (let i = 0; i < list.length; i++) wake[i] = (tune.release + list[i]!.r + 1) ** 2;
+  return {
+    asleep: (i, c) => {
+      const dx = PLAYER.x - c.x;
+      const dz = PLAYER.z - c.z;
+      return calm[i] === 1 && (!PLAYER.near || dx * dx + dz * dz > wake[i]!);
+    },
+    settle: (i, still) => {
+      calm[i] = still ? 1 : 0;
+    },
+  };
+}
+
+/** Half-width (m) a cat or dog keeps off obstacles, and how far inside its island's rim its centre stays. */
+const PET_BODY = 0.3;
+const PET_RIM = 0.6;
+
+/** Each pet's ground (`keepClear`): its island's disc, then the obstacles within `reach` m of its wander circle; critter i's run is from[i]..from[i + 1]. */
+function groundAreas(view: WorldView, list: readonly Critter[], reach: number): { area: Float64Array; from: Uint32Array } {
+  const islands = [...view.layout.hubs, ...view.layout.zones];
+  const out: number[] = [];
+  const from = new Uint32Array(list.length + 1);
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i]!;
+    from[i] = out.length;
+    const own = islands.find((d) => Math.hypot(d.x - c.x, d.z - c.z) < d.radius);
+    out.push(own?.x ?? c.x, own?.z ?? c.z, own ? own.radius - PET_RIM : c.r + reach);
+    for (const o of view.dressing.obstacles) {
+      if (Math.hypot(o.x - c.x, o.z - c.z) < c.r + reach + o.r + PET_BODY) out.push(o.x, o.z, o.r);
+    }
+  }
+  from[list.length] = out.length;
+  return { area: new Float64Array(out), from };
 }
 
 /** Butterflies: two flapping two-sided wings per instance (scenery material, no extra shader), round flower beds and fountains; they scatter up from the player. */
@@ -301,26 +352,34 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
   });
   const tune = CRITTERS.butterfly;
   const state = critterState(list.length * per);
+  const calm = calmCritters(list, tune);
   const m = new Object3D();
   return (t, dt) => {
     let n = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i]!;
       if (!view.sees(c.x, c.z)) continue;
+      const asleep = calm.asleep(i, c);
+      let still = true;
       for (let k = 0; k < per; k++) {
         const j = i * per + k;
         const p = i * 2.3 + k * 3.1;
         const a = t * (0.6 + k * 0.2) + p;
         const bx = c.x + Math.cos(a) * c.r + Math.sin(t * 1.7 + p) * 0.3;
         const bz = c.z + Math.sin(a * 1.3) * c.r;
-        reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + tune.leash, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt);
-        const o = j * C.size;
-        m.position.set(bx + state[o + C.ox]!, c.y + Math.sin(t * 2.3 + p) * 0.35 + rise(state, j, tune), bz + state[o + C.oz]!);
+        const bob = c.y + Math.sin(t * 2.3 + p) * 0.35;
+        if (asleep) m.position.set(bx, bob, bz);
+        else {
+          if (!reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + tune.leash, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt)) still = false;
+          const o = j * C.size;
+          m.position.set(bx + state[o + C.ox]!, bob + rise(state, j, tune), bz + state[o + C.oz]!);
+        }
         m.rotation.set(0, -a, 0);
         m.scale.set(Math.abs(Math.sin(t * 14 + p)) * 0.9 + 0.1, 1, 1);
         m.updateMatrix();
         mesh.setMatrixAt(n++, m.matrix);
       }
+      calm.settle(i, asleep || still);
     }
     mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
