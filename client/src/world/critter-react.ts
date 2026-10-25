@@ -86,6 +86,11 @@ export function reactStep(
   const ax = d > 1e-6 ? dx / d : 0;
   const az = d > 1e-6 ? dz / d : 1;
   let alert = s[o + C.alert]!;
+  if (d > tune.release && alert < 1e-3 && Math.abs(ox) + Math.abs(oz) + Math.abs(vx) + Math.abs(vz) + s[o + C.lift]! < 1e-3) {
+    s[o + C.ox] = s[o + C.oz] = s[o + C.vx] = s[o + C.vz] = s[o + C.alert] = s[o + C.lift] = s[o + C.hop] = s[o + C.startle] = 0;
+    s[o + C.yaw] = heading;
+    return;
+  }
   const wants = d < (alert > 0.5 ? tune.release : tune.notice) ? 1 : 0;
   alert += (wants - alert) * Math.min(1, (wants > alert ? ALERT_UP : ALERT_DOWN) * dt);
   let startle = Math.max(0, s[o + C.startle]! - dt);
