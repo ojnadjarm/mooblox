@@ -28,6 +28,9 @@ export const ATLAS_LAYERS: readonly { readonly metres: number; readonly strength
   { metres: 2.4, strength: 0.9 },
 ];
 
+/** Lawn swathes: metres one tone tile covers and the colour gain per unit of tone (deeper blue-green to sunnier yellow-green). */
+export const LAWN_TONE = { metres: 21, gain: [1.2, 0.95, 0.5] } as const;
+
 const hsl = { h: 0, s: 0, l: 0 };
 const c = new Color();
 

@@ -25,12 +25,13 @@ export function surfaceAtlas(size: number, cheap = false): DataArrayTexture {
     PAINTERS[i]?.(g, size, seededRandom(0x5eed + i * 977), a);
     const px = g.getImageData(0, 0, size, size).data;
     const ac = a.getImageData(0, 0, size, size).data;
+    const tone = i === Surface.grass ? lawnTone(a, size) : null;
     const out = i * size * size * 4;
     for (let k = 0; k < size * size * 4; k += 4) {
       const cover = ac[k + 3]!;
       const src = cover > 8 ? ac : px;
       data[out + k] = src[k]!;
-      data[out + k + 1] = src[k + 1]!;
+      data[out + k + 1] = tone ? tone[k]! : src[k + 1]!;
       data[out + k + 2] = src[k + 2]!;
       data[out + k + 3] = cover;
     }
@@ -118,6 +119,36 @@ const grass: Painter = (g, s, rnd) => {
     });
   }
 };
+
+/** Lawn tone for the grass layer's green channel: broad soft swathes of deeper and sunnier grass (`LAWN_TONE` in surfaces.ts). */
+function lawnTone(g: Ctx, s: number): Uint8ClampedArray {
+  const rnd = seededRandom(0x1a3e);
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = grey(0.5);
+  g.fillRect(0, 0, s, s);
+  for (const [n, r0, r1, spread, alpha] of [[7, 0.22, 0.36, 0.9, 0.85], [16, 0.07, 0.14, 1, 0.7]] as const) {
+    for (let i = 0; i < n; i++) {
+      const x = rnd() * s;
+      const y = rnd() * s;
+      const r = s * (r0 + rnd() * (r1 - r0));
+      const v = 0.5 + (rnd() - 0.5) * spread;
+      const sx = 0.6 + rnd() * 0.8;
+      wrapped(s, x, y, r * Math.max(1, sx), (px, py) => {
+        g.save();
+        g.translate(px, py);
+        g.scale(sx, 1 / sx);
+        const grd = g.createRadialGradient(0, 0, 0, 0, 0, r);
+        grd.addColorStop(0, grey(v, alpha));
+        grd.addColorStop(0.6, grey(v, alpha * 0.6));
+        grd.addColorStop(1, grey(v, 0));
+        g.fillStyle = grd;
+        g.fillRect(-r, -r, r * 2, r * 2);
+        g.restore();
+      });
+    }
+  }
+  return g.getImageData(0, 0, s, s).data;
+}
 
 /** Meadow: the grass tile with painted flower heads (accent layer replaces the vertex colour). */
 const meadow: Painter = (g, s, rnd, accent) => {

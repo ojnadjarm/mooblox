@@ -17,7 +17,7 @@ import {
   type Texture,
 } from 'three';
 import { surfaceAtlas } from './surface-atlas';
-import { ATLAS_LAYERS, Surface } from './surfaces';
+import { ATLAS_LAYERS, LAWN_TONE, Surface } from './surfaces';
 
 /** Rendering tier the kit builds its materials for; `rich` adds world-space detail textures (xhigh). */
 export type MaterialTier = 'standard' | 'low' | 'rich';
@@ -242,7 +242,7 @@ const glslFloats = (k: 'metres' | 'strength'): string =>
 /**
  * The texture language on every tier: the vertex picks its atlas layer (the `surface` attribute where a builder tagged
  * it, else from its colour and slope; brick facing up is paving), maps it by the dominant axis of the object-space normal and fades it with distance;
- * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it). No extra draws.
+ * the fragment does one fetch that multiplies the vertex colour (alpha accents replace it), lawns a second for broad tone swathes. No extra draws.
  */
 function withAtlas(m: Material, atlas: { value: DataArrayTexture | null }, key: string): void {
   if (!atlas.value) return;
@@ -259,6 +259,7 @@ flat varying float vAtlasLayer;
 varying vec2 vAtlasUv;
 varying float vAtlasK;
 varying float vAtlasFade;
+varying vec2 vLawnUv;
 const float ATLAS_SCALE[${ATLAS_LAYERS.length}] = float[${ATLAS_LAYERS.length}](${glslFloats('metres')});
 const float ATLAS_STRENGTH[${ATLAS_LAYERS.length}] = float[${ATLAS_LAYERS.length}](${glslFloats('strength')});
 float atlasLayer(vec3 lin, float ny) {
@@ -289,6 +290,7 @@ vec3 atlasN = abs(objectNormal);
 vAtlasUv = (atlasN.y >= max(atlasN.x, atlasN.z) ? position.xz : (atlasN.x >= atlasN.z ? vec2(position.z, -position.y) : vec2(position.x, -position.y))) * ATLAS_SCALE[atlasI];
 vAtlasK = ATLAS_STRENGTH[atlasI];
 vec3 atlasW = (modelMatrix * vec4(position, 1.0)).xyz;
+vLawnUv = mat2(0.8, 0.6, -0.6, 0.8) * atlasW.xz * ${(1 / LAWN_TONE.metres).toFixed(5)};
 vColor.xyz *= 1.0 + 0.07 * sin(atlasW.x * 0.13 + atlasW.z * 0.07) * cos(atlasW.z * 0.11 - atlasW.x * 0.05);`,
       )
       .replace(
@@ -305,12 +307,16 @@ uniform highp sampler2DArray uAtlas;
 flat varying float vAtlasLayer;
 varying vec2 vAtlasUv;
 varying float vAtlasK;
-varying float vAtlasFade;`,
+varying float vAtlasFade;
+varying vec2 vLawnUv;`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
 vec4 atlasT = texture(uAtlas, vec3(vAtlasUv, vAtlasLayer));
+if (abs(vAtlasLayer - ${Surface.grass}.0) < 0.5 || abs(vAtlasLayer - ${Surface.meadow}.0) < 0.5) {
+  diffuseColor.rgb *= 1.0 + (texture(uAtlas, vec3(vLawnUv, ${Surface.grass}.0)).g - 0.5) * vec3(${LAWN_TONE.gain.map((v) => v.toFixed(2)).join(', ')});
+}
 diffuseColor.rgb *= 1.0 + (atlasT.r - 0.5) * 2.0 * vAtlasK;
 diffuseColor.rgb = mix(diffuseColor.rgb, atlasT.rgb * atlasT.rgb, atlasT.a * vAtlasFade);`,
       );
