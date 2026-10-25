@@ -149,6 +149,7 @@ const foliage: Painter = (g, s, rnd) => {
       blob(g, px, py + r * 0.15, r, r * 0.85, grey(0.38));
       blob(g, px - r * 0.12, py - r * 0.05, r * 0.82, r * 0.68, grey(0.52));
       blob(g, px - r * 0.3, py - r * 0.28, r * 0.38, r * 0.26, grey(0.66));
+      for (let k = 0; k < 4; k++) leaf(g, px + (rnd() - 0.6) * r * 1.2, py - r * (0.2 + rnd() * 0.5), r * 0.22, -0.6 + rnd() * 0.8, grey(0.62 + rnd() * 0.1));
     });
   }
 };
@@ -179,6 +180,8 @@ const wood: Painter = (g, s, rnd) => {
           g.bezierCurveTo(x + w * 0.35, gy + h * 0.06, x + w * 0.65, gy - h * 0.06, x + w * 0.95, gy);
           g.stroke();
         }
+        if (rnd() < 0.5) knot(g, x + w * (0.25 + rnd() * 0.5), y + h * (0.35 + rnd() * 0.3), h * (0.1 + rnd() * 0.06), v);
+        for (let k = 0; k < 2; k++) blob(g, x + w * rnd(), y + h * (0.1 + rnd() * 0.08), w * 0.06, h * 0.05, grey(v + 0.16, 0.7));
         g.fillStyle = grey(0.24);
         g.fillRect(x, y, Math.max(2, s / 128), h);
         for (const nx of [x + w * 0.06, x + w * 0.94]) {
@@ -218,6 +221,8 @@ function bricks(g: Ctx, s: number, rnd: () => number, rows: number, perRow: numb
         g.fillStyle = grey(v - 0.08);
         g.fillRect(bx + gap, by + bh * 0.8, bw - gap * 2, bh * 0.16);
         if (rnd() < 0.18) blob(g, bx + bw * rnd(), by + bh * 0.5, bw * 0.12, bh * 0.14, grey(v - 0.07, 0.8));
+        if (rnd() < 0.22) blob(g, bx + (rnd() < 0.5 ? 0 : bw), by + (rnd() < 0.5 ? 0 : bh), bh * 0.18, bh * 0.14, grey(mortar - 0.12));
+        if (rnd() < 0.12) wear(g, bx + bw * 0.5, by + bh * 0.5, bw * 0.4, bh * 0.4, rnd);
       });
     }
   }
@@ -226,9 +231,10 @@ function bricks(g: Ctx, s: number, rnd: () => number, rows: number, perRow: numb
 const brick: Painter = (g, s, rnd) => bricks(g, s, rnd, 8, 4, 0.7);
 
 /** Flagstones: irregular slabs with soft edges, worn light rims and a few hairline cracks. */
-const paving: Painter = (g, s, rnd) => {
+const paving: Painter = (g, s, rnd, accent) => {
   g.fillStyle = grey(0.36);
   g.fillRect(0, 0, s, s);
+  jointMoss(accent, s, rnd, s / 4, 0.6);
   const cells = 4;
   const c = s / cells;
   const gap = Math.max(2, s / 90);
@@ -244,6 +250,9 @@ const paving: Painter = (g, s, rnd) => {
         g.fill();
         g.fillStyle = grey(v + 0.08);
         g.fillRect(px - c / 2 + gap * 2, py - c / 2 + gap * 1.5, c - gap * 4, c * 0.08);
+        g.fillStyle = grey(v - 0.07);
+        g.fillRect(px - c / 2 + gap * 2, py + c / 2 - gap - c * 0.07, c - gap * 4, c * 0.06);
+        wear(g, px, py, c * 0.3, c * 0.3, rnd);
         if (rnd() < 0.3) {
           g.strokeStyle = grey(v - 0.14);
           g.lineWidth = Math.max(1, s / 300);
@@ -285,6 +294,10 @@ const roof: Painter = (g, s, rnd) => {
         g.fill();
         g.fillStyle = grey(v + 0.1);
         g.fillRect(px - w * 0.3, py - h * 0.4, w * 0.6, h * 0.12);
+        g.fillStyle = grey(v - 0.06, 0.6);
+        g.fillRect(px - w * 0.36, py + h * 0.2, w * 0.72, h * 0.12);
+        if (rnd() < 0.25) blob(g, px + (rnd() - 0.5) * w * 0.5, py + h * 0.05, w * 0.07, h * 0.06, grey(0.74, 0.85));
+        if (rnd() < 0.1) wear(g, px, py, w * 0.3, h * 0.3, rnd);
       });
     }
   }
@@ -293,14 +306,32 @@ const roof: Painter = (g, s, rnd) => {
 /** Plaster: broad soft trowel patches, a few chipped spots showing brick beneath. */
 const plaster: Painter = (g, s, rnd) => {
   patches(g, s, rnd, 9, 0.18);
+  for (let i = 0; i < 5; i++) {
+    const x = rnd() * s;
+    const len = s * (0.15 + rnd() * 0.3);
+    const y = rnd() * s;
+    const w = s * (0.02 + rnd() * 0.03);
+    wrapped(s, x, y + len / 2, len, (px, py) => {
+      const grd = g.createLinearGradient(px, py - len / 2, px, py + len / 2);
+      grd.addColorStop(0, grey(0.4, 0.45));
+      grd.addColorStop(1, grey(0.4, 0));
+      g.fillStyle = grd;
+      g.beginPath();
+      g.roundRect(px - w / 2, py - len / 2, w, len, w / 2);
+      g.fill();
+    });
+  }
   for (let i = 0; i < 3; i++) {
     const x = rnd() * s;
     const y = rnd() * s;
     const w = s * 0.05;
     wrapped(s, x, y, w * 3, (px, py) => {
+      blob(g, px + w * 0.75, py + w * 0.6, w * 1.3, w * 0.95, grey(0.45));
       for (let k = 0; k < 3; k++) {
-        g.fillStyle = grey(0.4);
-        g.fillRect(px + (k % 2) * w * 0.55, py + k * w * 0.42, w, w * 0.36);
+        g.fillStyle = grey(0.52);
+        g.fillRect(px + (k % 2) * w * 0.55, py + k * w * 0.42, w * 0.9, w * 0.3);
+        g.fillStyle = grey(0.58);
+        g.fillRect(px + (k % 2) * w * 0.55, py + k * w * 0.42, w * 0.9, w * 0.08);
       }
     });
   }
@@ -331,6 +362,13 @@ const rock: Painter = (g, s, rnd) => {
       g.lineTo(px + pts[4]![0], py + pts[4]![1]);
       g.stroke();
     });
+  }
+  for (let i = 0; i < 6; i++) crack(g, s, rnd, 0.32);
+  for (let i = 0; i < 14; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const r = s * (0.008 + rnd() * 0.012);
+    wrapped(s, x, y, r * 2, (px, py) => blob(g, px, py, r, r * 0.8, grey(0.7, 0.8)));
   }
 };
 
@@ -397,6 +435,117 @@ const cliff: Painter = (g, s, rnd) => {
   g.fillRect(0, s - 1, s, 1);
 };
 
+/** Bark: wavy vertical ridges split by dark fissures, lit on one side, a knot or two and moss tufts (accent). */
+const bark: Painter = (g, s, rnd, accent) => {
+  g.fillStyle = grey(0.42);
+  g.fillRect(0, 0, s, s);
+  let x = 0;
+  while (x < s) {
+    const w = s * (0.06 + rnd() * 0.07);
+    const v = 0.5 + rnd() * 0.12;
+    const ph = rnd() * Math.PI * 2;
+    const seg = s / 16;
+    for (const dx of [0, -s]) {
+      for (const [l, r, val] of [[0.1, 0.92, v], [0.16, 0.34, v + 0.13]] as const) {
+        g.fillStyle = grey(val);
+        g.beginPath();
+        for (let y = -seg; y <= s + seg; y += seg) g.lineTo(dx + x + w * l + Math.sin((y / s) * Math.PI * 4 + ph) * w * 0.12, y);
+        for (let y = s + seg; y >= -seg; y -= seg) g.lineTo(dx + x + w * r + Math.sin((y / s) * Math.PI * 4 + ph + 0.7) * w * 0.12, y);
+        g.fill();
+      }
+    }
+    x += w;
+  }
+  for (let i = 0; i < 2; i++) knot(g, rnd() * s, rnd() * s, s * 0.035, 0.5);
+  const greens = ['rgba(118,160,64,', 'rgba(96,140,58,', 'rgba(140,176,78,'];
+  for (let i = 0; i < 7; i++) {
+    const x0 = rnd() * s;
+    const y0 = rnd() * s;
+    const r = s * (0.025 + rnd() * 0.04);
+    const c = greens[Math.floor(rnd() * greens.length)]!;
+    wrapped(s, x0, y0, r * 2, (px, py) => {
+      for (let k = 0; k < 6; k++) blob(accent, px + (rnd() - 0.5) * r * 1.6, py + (rnd() - 0.5) * r, r * (0.35 + rnd() * 0.3), r * (0.25 + rnd() * 0.2), `${c}0.7)`);
+    });
+  }
+};
+
+/** Clipped hedge: sprigs of a few leaves fanned from a dark heart, lit tips up, packed tight with dark gaps between. */
+const hedge: Painter = (g, s, rnd) => {
+  g.fillStyle = grey(0.34);
+  g.fillRect(0, 0, s, s);
+  patches(g, s, rnd, 6, 0.25);
+  const n = Math.round(s * 0.9);
+  for (let i = 0; i < n; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const r = s * (0.02 + rnd() * 0.012);
+    const v = 0.46 + rnd() * 0.16;
+    const turn = rnd() * Math.PI * 2;
+    wrapped(s, x, y, r * 2.2, (px, py) => {
+      blob(g, px, py + r * 0.3, r * 1.2, r, grey(0.3, 0.6));
+      for (let k = 0; k < 5; k++) {
+        const a = turn + (k / 5) * Math.PI * 2;
+        const lit = Math.sin(a) < 0 ? 0.08 : -0.05;
+        leaf(g, px + Math.cos(a) * r * 0.6, py + Math.sin(a) * r * 0.6, r * 0.7, a, grey(v + lit), 0.6);
+      }
+      blob(g, px - r * 0.2, py - r * 0.35, r * 0.35, r * 0.2, grey(v + 0.16));
+    });
+  }
+};
+
+/** One pointed leaf (a lens) of length `r` and relative `width` at angle `a`. */
+function leaf(g: Ctx, x: number, y: number, r: number, a: number, fill: string, width = 0.42): void {
+  g.fillStyle = fill;
+  g.beginPath();
+  g.ellipse(x, y, r, r * width, a, 0, Math.PI * 2);
+  g.fill();
+}
+
+/** A knot: a dark eye in light rings. */
+function knot(g: Ctx, x: number, y: number, r: number, v: number): void {
+  blob(g, x, y, r * 1.6, r, grey(v + 0.08, 0.8));
+  blob(g, x, y, r * 1.1, r * 0.7, grey(v - 0.12));
+  blob(g, x, y, r * 0.5, r * 0.32, grey(v - 0.24));
+}
+
+/** Worn spot: a few light scuffs in one patch. */
+function wear(g: Ctx, x: number, y: number, rx: number, ry: number, rnd: () => number): void {
+  for (let k = 0; k < 3; k++) blob(g, x + (rnd() - 0.5) * rx, y + (rnd() - 0.5) * ry, rx * (0.15 + rnd() * 0.2), ry * (0.08 + rnd() * 0.1), grey(0.62, 0.45));
+}
+
+/** A hairline crack wandering from a random point. */
+function crack(g: Ctx, s: number, rnd: () => number, v: number): void {
+  let x = rnd() * s;
+  let y = rnd() * s;
+  g.strokeStyle = grey(v, 0.8);
+  g.lineWidth = Math.max(1, s / 300);
+  g.beginPath();
+  g.moveTo(x, y);
+  for (let k = 0; k < 4; k++) {
+    x += (rnd() - 0.5) * s * 0.08;
+    y += s * (0.02 + rnd() * 0.04);
+    g.lineTo(x, y);
+  }
+  g.stroke();
+}
+
+/** Moss in the joints of a slab grid of cell `c`: green sprigs along a few cell edges (accent, partly transparent). */
+function jointMoss(accent: Ctx, s: number, rnd: () => number, c: number, alpha: number): void {
+  for (let i = 0; i < 9; i++) {
+    const vertical = rnd() < 0.5;
+    const row = Math.floor(rnd() * (s / c));
+    const along = rnd() * s;
+    const len = c * (0.2 + rnd() * 0.4);
+    for (let k = 0; k < 10; k++) {
+      const t = along + (k / 10) * len;
+      const off = (rnd() - 0.5) * c * 0.03;
+      const x = vertical ? row * c + (Math.floor(t / c) % 2) * c * 0.5 + off : t;
+      const y = vertical ? t : row * c + off;
+      wrapped(s, x % s, y % s, c * 0.05, (px, py) => blob(accent, px, py, c * (0.03 + rnd() * 0.025), c * (0.02 + rnd() * 0.015), `rgba(${100 + Math.floor(rnd() * 40)},${145 + Math.floor(rnd() * 30)},64,${alpha})`));
+    }
+  }
+}
+
 const PAINTERS: Record<number, Painter> = {
   [Surface.grass]: grass,
   [Surface.foliage]: foliage,
@@ -410,4 +559,6 @@ const PAINTERS: Record<number, Painter> = {
   [Surface.paving]: paving,
   [Surface.meadow]: meadow,
   [Surface.cliff]: cliff,
+  [Surface.bark]: bark,
+  [Surface.hedge]: hedge,
 };

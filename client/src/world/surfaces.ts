@@ -3,7 +3,7 @@ import { BufferAttribute, Color, type BufferGeometry } from 'three';
 /** Material class of a vertex: the layer of the painted surface atlas it shows (`world/surface-atlas.ts`). */
 export const Surface = {
   plain: 0, grass: 1, foliage: 2, wood: 3, rock: 4, roof: 5, plaster: 6, brick: 7, ground: 8, metal: 9,
-  sand: 10, paving: 11, meadow: 12, cliff: 13,
+  sand: 10, paving: 11, meadow: 12, cliff: 13, bark: 14, hedge: 15,
 } as const;
 export type SurfaceId = (typeof Surface)[keyof typeof Surface];
 
@@ -23,6 +23,8 @@ export const ATLAS_LAYERS: readonly { readonly metres: number; readonly strength
   { metres: 2, strength: 0.7 },
   { metres: 2.4, strength: 0.75 },
   { metres: 2.6, strength: 0.7 },
+  { metres: 1.2, strength: 0.85 },
+  { metres: 1.3, strength: 0.75 },
 ];
 
 const hsl = { h: 0, s: 0, l: 0 };
@@ -37,7 +39,9 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   const brown = hsl.h > 0.02 && hsl.h < 0.13 && hsl.s > 0.2;
   const chroma = Math.max(r, g, b) - Math.min(r, g, b);
   const name = id.slice(id.indexOf('/') + 1);
-  if (/tree|palm|plant_|bush|hedge|flower|grass/.test(name)) return green ? Surface.foliage : brown ? Surface.wood : Surface.foliage;
+  if (/hedge/.test(name)) return green ? Surface.hedge : brown ? Surface.wood : Surface.rock;
+  if (/tree|palm/.test(name)) return green ? Surface.foliage : brown || hsl.l < 0.3 ? Surface.bark : Surface.foliage;
+  if (/plant_|bush|flower|grass/.test(name)) return green ? Surface.foliage : brown ? Surface.wood : Surface.foliage;
   if (/rock|cliff|stone/.test(name)) return green ? Surface.grass : Surface.rock;
   if (/bridge|dock|platform|boat|stall|bench|plank|crate|barrel|cart|log/.test(name)) return dark || hsl.s < 0.08 ? Surface.metal : Surface.wood;
   if (/lantern|lamp/.test(name)) return dark || hsl.s < 0.1 ? Surface.metal : Surface.plain;
@@ -57,6 +61,9 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   }
   return green ? Surface.foliage : Surface.plain;
 }
+
+/** Kit models whose bark and clipped leaves the colour heuristic cannot tell apart from planks and lawn: tagged at bake. */
+export const TAGGED_MODELS = /tree|palm|hedge/;
 
 /** Writes a `surface` attribute (one float per vertex) from the geometry's vertex colours. */
 export function tagSurface(geometry: BufferGeometry, id: string): BufferGeometry {

@@ -1,6 +1,7 @@
 import { Box3, BufferAttribute, BufferGeometry, Color, Matrix4, Mesh, SRGBColorSpace, Vector2, type MeshStandardMaterial, type Texture } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { TAGGED_MODELS, tagSurface } from './surfaces';
 
 /** One CC0 model baked to a single vertex-coloured, non-indexed geometry standing on y = 0. */
 export interface BakedModel {
@@ -25,7 +26,9 @@ export class ModelLibrary {
         const node = bevelled?.scene ?? kit.getObjectByName(id.replace('/', '__'));
         if (!node) throw new Error(`mooblox: model ${id} is not in kit.glb`);
         node.removeFromParent();
-        lib.models.set(id, lib.bake(node));
+        const baked = lib.bake(node);
+        if (TAGGED_MODELS.test(id)) tagSurface(baked.geometry, id);
+        lib.models.set(id, baked);
       }),
     );
     return lib;

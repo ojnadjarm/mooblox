@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color } from 'three';
 import { describe, expect, it } from 'vitest';
-import { Surface, surfaceOf, tagSurface } from '../../src/world/surfaces';
+import { Surface, surfaceOf, tagSurface, TAGGED_MODELS } from '../../src/world/surfaces';
 
 const lin = (hex: number): [number, number, number] => {
   const c = new Color(hex);
@@ -17,12 +17,22 @@ describe('surfaces', () => {
 
   it('classes trees, rocks, bridges and terrain', () => {
     expect(surfaceOf('nature/tree_oak', ...lin(0x4caf50))).toBe(Surface.foliage);
-    expect(surfaceOf('nature/tree_oak', ...lin(0x8d5a34))).toBe(Surface.wood);
+    expect(surfaceOf('nature/tree_oak', ...lin(0x8d5a34))).toBe(Surface.bark);
+    expect(surfaceOf('nature/tree_oak', ...lin(0x4a3b30))).toBe(Surface.bark);
+    expect(surfaceOf('nature/tree_oak', ...lin(0xf6b4c8))).toBe(Surface.foliage);
+    expect(surfaceOf('town/hedge-large', ...lin(0x4caf50))).toBe(Surface.hedge);
+    expect(surfaceOf('town/hedge-large', ...lin(0x7d829c))).toBe(Surface.rock);
+    expect(surfaceOf('nature/plant_bush', ...lin(0x8d5a34))).toBe(Surface.wood);
     expect(surfaceOf('nature/rock_largeA', ...lin(0x9e9e9e))).toBe(Surface.rock);
     expect(surfaceOf('nature/bridge_center_wood', ...lin(0xa0703f))).toBe(Surface.wood);
     expect(surfaceOf('', ...lin(0x7cc35a))).toBe(Surface.grass);
     expect(surfaceOf('', ...lin(0xc9765a))).toBe(Surface.brick);
     expect(surfaceOf('', ...lin(0x9a9a9a))).toBe(Surface.rock);
+  });
+
+  it('tags trees, palms and hedges at bake, not planks or bushes', () => {
+    for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm']) expect(TAGGED_MODELS.test(id)).toBe(true);
+    for (const id of ['town/stall-bench', 'nature/plant_bush', 'nature/log', 'suburb/building-type-a']) expect(TAGGED_MODELS.test(id)).toBe(false);
   });
 
   it('writes one surface value per vertex', () => {

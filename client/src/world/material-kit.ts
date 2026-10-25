@@ -214,6 +214,7 @@ vec3 mbPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
         `#include <color_fragment>
 int mbS = int(vSurface + 0.5);
 if (vSurface < -0.5) mbS = (vColor.g > vColor.r * 1.08 && vColor.g > vColor.b) ? 1 : 0;
+if (mbS == 14) mbS = 3; else if (mbS == 15) mbS = 2;
 vec3 mbN = abs(vDetailNormal);
 vec2 mbUv = mbN.y >= max(mbN.x, mbN.z) ? vDetailPos.xz : (mbN.x >= mbN.z ? vDetailPos.zy : vDetailPos.xy);
 mbUv *= SCALE[mbS];
