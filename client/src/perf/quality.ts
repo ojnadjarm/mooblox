@@ -116,6 +116,9 @@ const GPU_HOLD = 30;
 /** Resizes within the last minute (60 windows) that block a GPU-timed raise. */
 const GPU_CAP = 2;
 const MINUTE = 60;
+/** GPU-over windows at the scale floor, within the last TIER_SPAN, before a tier step (a step is kept: one dense view never costs a tier). */
+const TIER_CONFIRM = 5;
+const TIER_SPAN = 10;
 
 /**
  * Dynamic render scale. A window (1 s, slowest 5% left out) slower than 50 fps lowers the scale in one step sized from how slow it
@@ -128,12 +131,15 @@ const MINUTE = 60;
  * each resize: the first timings after one are still of the old size) the scale drops towards 12 ms (at most 0.15 a window) even when the average frame looks fine (late frames hide in a ~17 ms average); a raise
  * waits 30 windows after any resize and fewer than 2 resizes in the last minute, then goes in one step to the largest scale whose
  * heaviest GPU load of those 30 windows (p90 / scale squared) is predicted under 11 ms; slow frames with the GPU under 15 ms are CPU-bound.
+ * At the floor, `starved` (with `gpuFloor`: resolution alone cannot fit) waits for 5 GPU-over windows within the last 10.
  */
 export class DynamicResolution {
   scale = 1;
   starved = false;
   /** Whether the last slow window was CPU-bound. */
   cpuBound = false;
+  /** Whether `starved` is GPU time over budget at the scale floor (a lower tier's features are the only cut left). */
+  gpuFloor = false;
   private sum = 0;
   private readonly frames: number[] = [];
   private readonly work: number[] = [];
@@ -153,6 +159,8 @@ export class DynamicResolution {
   private readonly resizes: number[] = [];
   /** GPU p90 / scale squared of the last GPU_HOLD timed windows. */
   private readonly loads: number[] = [];
+  /** Window numbers with the GPU over budget at the scale floor. */
+  private readonly floorOver: number[] = [];
 
   constructor(private readonly minScale = 0.6) {}
 
@@ -186,6 +194,7 @@ export class DynamicResolution {
     this.gpuMs.length = 0;
     const before = this.scale;
     this.starved = false;
+    this.gpuFloor = false;
     this.sinceRaise++;
     this.windows++;
     if (gpu !== null) {
@@ -195,6 +204,9 @@ export class DynamicResolution {
     }
     const gpuOver = gpu !== null && gpu > GPU_HIGH;
     this.gpuOver = gpuOver ? this.gpuOver + 1 : 0;
+    const floor = this.scale <= this.minScale + 1e-9;
+    if (gpuOver && floor) this.floorOver.push(this.windows);
+    while (this.floorOver.length > 0 && this.floorOver[0]! <= this.windows - TIER_SPAN) this.floorOver.shift();
     const confirmed = gpuOver && this.gpuOver >= GPU_CONFIRM;
     const slow = gpu === null ? avg > SLOW_MS : confirmed || (avg > SLOW_MS && !gpuOver);
     if (gpuOver && !confirmed) {
@@ -210,7 +222,9 @@ export class DynamicResolution {
         return false;
       }
       this.slowCpu = 0;
-      this.starved = this.scale <= this.minScale + 1e-9;
+      this.gpuFloor = gpu !== null && floor && this.floorOver.length >= TIER_CONFIRM;
+      this.starved = gpu === null ? floor : this.gpuFloor;
+      if (this.gpuFloor) this.floorOver.length = 0;
       const failed = this.sinceRaise <= RAISE_AFTER;
       const ratio = gpu === null ? TARGET_MS / avg : GPU_AIM / gpu;
       const most = gpu === null ? 0.25 : GPU_STEP_MAX;

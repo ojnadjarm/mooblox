@@ -43,6 +43,16 @@ describe('QualityManager', () => {
     expect(q.tier).toBe('low');
   });
 
+  it('steps an asked tier down at the same scale, unremembered, when the GPU cannot fit at the scale floor', () => {
+    const { stage, ratios } = fakeStage();
+    const timer = { begin: () => {}, end: () => {}, take: (out: number[]) => void out.push(40) } as unknown as GpuTimer;
+    const q = new QualityManager(stage, 'high', null, false, () => 2, timer);
+    for (let i = 0; i < 60 * 30 && q.tier === 'high'; i++) q.frame(16.7);
+    expect(q.tier).toBe('medium');
+    expect(q.dynamic.scale).toBe(QUALITY.high.minScale);
+    expect(ratios.at(-1)).toBe(QUALITY.high.minScale);
+  });
+
   it('feeds GPU timings to the governor and times frames outside play without sampling them', () => {
     const { stage, ratios } = fakeStage();
     const calls: string[] = [];

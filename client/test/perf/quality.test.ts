@@ -195,6 +195,22 @@ describe('DynamicResolution', () => {
       expect(d.scale).toBe(1);
     });
 
+    it('asks for a lower tier only after 5 GPU-over windows within 10 at the floor, never for one dense view', () => {
+      const d = new DynamicResolution(0.6);
+      let starved = 0;
+      const second = (full: number) => {
+        timed(d, 16.7, 1, () => full * Math.min(1, d.scale * d.scale + 0.2));
+        if (d.starved) starved++;
+      };
+      for (let s = 0; s < 8; s++) second(40);
+      expect(d.scale).toBe(0.6);
+      for (let s = 0; s < 40; s++) second(s % 4 === 0 ? 40 : 10);
+      expect(starved).toBe(0);
+      for (let s = 0; s < 4; s++) second(40);
+      expect(starved).toBe(1);
+      expect(d.gpuFloor).toBe(true);
+    });
+
     it('falls back to frame times when timings are too few', () => {
       const d = new DynamicResolution(0.6);
       for (let i = 0; i < 40; i++) {

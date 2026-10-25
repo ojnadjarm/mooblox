@@ -21,7 +21,7 @@ export class QualityManager {
   constructor(
     private readonly stage: Stage,
     private current: QualityTier,
-    /** Null when the tier was asked for (`?quality=`): never stepped down. */
+    /** Null when the tier was asked for (`?quality=`): stepped down only for this visit, and only when the GPU cannot fit at the scale floor. */
     private readonly remember: TierMemory | null = null,
     /** Software GL: starts at the scale floor (it ends there anyway, and every step on the way is a canvas resize hitch). */
     private readonly software = false,
@@ -38,9 +38,12 @@ export class QualityManager {
     return this.current;
   }
 
-  setTier(tier: QualityTier): void {
+  /** Switches tier; `keepScale` carries the render scale over (no second resize on top of the tier's own changes). */
+  setTier(tier: QualityTier, keepScale = false): void {
+    const scale = this.dynamic.scale;
     this.current = tier;
     this.dynamic = this.governor(tier);
+    if (keepScale) this.dynamic.scale = Math.max(QUALITY[tier].minScale, scale);
     this.apply();
   }
 
@@ -52,7 +55,7 @@ export class QualityManager {
   /**
    * Feeds one frame time in ms (0 = a frame outside play, not sampled), called after the frame's work (its CPU share, or the GPU
    * timer, tells GPU-bound from CPU-bound); re-applies the pixel ratio only when dynamic resolution moves (a resize reallocates the
-   * canvas: a long frame), drops a tier when it is starved and a lower one exists.
+   * canvas: a long frame), drops a tier (at the same scale) when it is starved and a lower one exists.
    */
   frame(frameMs: number): void {
     if (this.timer) {
@@ -64,10 +67,10 @@ export class QualityManager {
     }
     if (frameMs <= 0) return;
     const moved = this.dynamic.sample(frameMs, this.work());
-    const lower = this.dynamic.starved && this.remember ? lowerTier(this.current) : null;
+    const lower = this.dynamic.starved && (this.remember || this.dynamic.gpuFloor) ? lowerTier(this.current) : null;
     if (lower) {
-      this.remember!(lower);
-      this.setTier(lower);
+      this.remember?.(lower);
+      this.setTier(lower, true);
     } else if (moved) {
       this.apply();
     }

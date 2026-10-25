@@ -1,6 +1,7 @@
 // Phone frame-pacing probe: node tools/pacing-probe.mjs [out.json] [--roots dirA,dirB] [--rigs dpr2,dpr3,..] [--shapes demo,20x30] [--hold ms]
 // Per root (a client/ copy to A/B; default this one) x rig x shape: 400x800 touch page at DPR 2 or 3 on the real GPU under 4x CPU
-// (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one; high-1366: the perf gate's GPU-bound high rig, 1366x768 DPR 1, 1x; high-1920 / high-2560: the same at 1920x1080 / 2560x1440), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
+// (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one; high-1366: the perf gate's GPU-bound high rig, 1366x768 DPR 1, 1x; high-1920 / high-2560: the same at 1920x1080 / 2560x1440; auto-1920 / auto-2560: the same picked high, not asked, so it may step down a tier;
+// low-400: the perf gate's low rig, DPR 1 4x), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
 // often the canvas pixel ratio changed (each change is a resize hitch), the ratio range and the tier at the end.
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,6 +29,9 @@ const RIG = {
   'high-1366': { dpr: 1, quality: 'high', throttle: 1, w: 1366, h: 768, touch: false },
   'high-1920': { dpr: 1, quality: 'high', throttle: 1, w: 1920, h: 1080, touch: false },
   'high-2560': { dpr: 1, quality: 'high', throttle: 1, w: 2560, h: 1440, touch: false },
+  'auto-1920': { dpr: 1, quality: null, stored: 'high', throttle: 1, w: 1920, h: 1080, touch: false },
+  'auto-2560': { dpr: 1, quality: null, stored: 'high', throttle: 1, w: 2560, h: 1440, touch: false },
+  'low-400': { dpr: 1, quality: 'low', throttle: 4 },
 };
 const hold = Number(opt('hold', '4000'));
 
@@ -55,8 +59,12 @@ function stats(frames) {
   let changes = 0;
   let t = 0;
   const steps = [];
+  const tiers = [];
+  const spikes = [];
   for (let i = 1; i < frames.length; i++) {
     t += frames[i][0];
+    if (frames[i][0] > 50) spikes.push([+(t / 1000).toFixed(1), Math.round(frames[i][0])]);
+    if (frames[i][2] !== frames[i - 1][2]) tiers.push([+(t / 1000).toFixed(1), frames[i][2]]);
     if (frames[i][1] === frames[i - 1][1]) continue;
     changes++;
     const gpu = frames.slice(Math.max(0, i - 60), i).map((f) => f[3]).filter((g) => g !== null).sort((a, b) => a - b);
@@ -76,6 +84,10 @@ function stats(frames) {
     ratioMin: Math.min(...ratios),
     ratioEnd: ratios.at(-1),
     tierEnd: frames.at(-1)[2],
+    /** Each tier change: [s since start, new tier]. */
+    tiers,
+    /** Each frame over 50 ms: [s since start, ms]. */
+    spikes,
   };
 }
 
@@ -93,6 +105,7 @@ try {
           const q = [shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}`, rig.quality ? `quality=${rig.quality}` : '', 'walk=far'].filter(Boolean).join('&');
           const page = await browser.newPage({ viewport: { width: rig.w ?? 400, height: rig.h ?? 800 }, deviceScaleFactor: rig.dpr, hasTouch: rig.touch ?? true });
           page.on('pageerror', (e) => console.error('pageerror:', e.message));
+          if (rig.stored) await page.addInitScript((t) => localStorage.setItem('mooblox-tier', t), rig.stored);
           const cdp = await page.context().newCDPSession(page);
           await page.goto(`${url}?${q}`);
           await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 180000, polling: 50 });
