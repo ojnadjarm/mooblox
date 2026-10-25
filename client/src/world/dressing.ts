@@ -4,6 +4,7 @@ import { FOUNTAIN_LIP, FOUNTAIN_STEP, tieredFountain } from './landmarks/fountai
 import { gardenRoom, HEDGE_THICK, roomReach, ROOMS, type RoomSize } from './landmarks/garden-room';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { box } from './landmarks/shapes';
+import { dropUndersides, KERB, kerbRun } from './landmarks/kerb';
 import { cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
 import { outlinePrism, shelfArcs, shelfCentre, shelfOutline, shelfSamples, shelfSite, type Shelf } from './shelf';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
@@ -411,13 +412,9 @@ class Designer {
       if (Math.hypot((s.ax + s.bx) / 2 - z.x, (s.az + s.bz) / 2 - z.z) > z.radius) return;
       const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
       const yaw = Math.atan2(s.bx - s.ax, s.bz - s.az);
-      this.terrain(new BoxGeometry(2.2, 0.06, len), colour, (s.ax + s.bx) / 2, 0.03, (s.az + s.bz) / 2, yaw, false, false);
-      this.terrain(new CylinderGeometry(1.1, 1.1, 0.06, 10), colour, s.bx, 0.031, s.bz, 0, false, false);
-      for (const side of [-1, 1]) {
-        const ox = (Math.cos(yaw) * side * 1.17);
-        const oz = (-Math.sin(yaw) * side * 1.17);
-        this.terrain(new BoxGeometry(0.16, 0.1, len), this.p.stone, (s.ax + s.bx) / 2 + ox, 0.05, (s.az + s.bz) / 2 + oz, yaw, false, true);
-      }
+      this.terrain(dropUndersides(new BoxGeometry(2.2, 0.06, len)), colour, (s.ax + s.bx) / 2, 0.03, (s.az + s.bz) / 2, yaw, false, false);
+      this.terrain(dropUndersides(new CylinderGeometry(1.1, 1.1, 0.06, 10)), colour, s.bx, 0.031, s.bz, 0, false, false);
+      this.kerbs((s.ax + s.bx) / 2, (s.az + s.bz) / 2, yaw, len, 1.1);
       if (!this.entries.has(s)) return;
       for (let t = 1.2; t < len - 0.8; t += 2.4) {
         const x = s.ax + ((s.bx - s.ax) * t) / len;
@@ -441,10 +438,18 @@ class Designer {
   private avenue(hub: Circle, ux: number, uz: number, from: number, to: number, colour: number, width: number): void {
     const mid = (from + to) / 2;
     const yaw = Math.atan2(ux, uz);
-    this.terrain(new BoxGeometry(width, 0.08, to - from + 0.4), colour, hub.x + ux * mid, 0.035, hub.z + uz * mid, yaw, false, false);
+    this.terrain(dropUndersides(new BoxGeometry(width, 0.08, to - from + 0.4)), colour, hub.x + ux * mid, 0.035, hub.z + uz * mid, yaw, false, false);
+    this.kerbs(hub.x + ux * mid, hub.z + uz * mid, yaw, to - from, width / 2);
+  }
+
+  /** Chunky cream kerb runs (detail dressing) either side of a walk `len` long centred on (x, z) along `yaw`, inner faces `half` - 0.08 m off its axis. */
+  private kerbs(x: number, z: number, yaw: number, len: number, half: number): void {
+    const off = half + KERB.w / 2 - 0.08;
     for (const side of [-1, 1]) {
-      const off = width / 2 + 0.1;
-      this.terrain(new BoxGeometry(0.22, 0.1, to - from), this.p.trim, hub.x + ux * mid + uz * side * off, 0.05, hub.z + uz * mid - ux * side * off, yaw, false, false);
+      const kx = x + Math.cos(yaw) * side * off;
+      const kz = z - Math.sin(yaw) * side * off;
+      const seed = (Math.round(kx * 10) * 73856093) ^ (Math.round(kz * 10) * 19349663);
+      this.district.terrain.push({ geometry: kerbRun(len, this.p.trim, seed).rotateY(yaw).translate(kx, 0, kz), solid: false, detail: true });
     }
   }
 
