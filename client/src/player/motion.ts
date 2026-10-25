@@ -119,7 +119,11 @@ export const M = {
   /** Per-kid bearing: torso pitch offset and head roll habit (rad). */
   posture: 29,
   tilt: 30,
-  looks: 31,
+  /** Input: a spot this kid looks at when the player is not near (x, z, eye-relative height m; NaN x = none). */
+  gazeX: 31,
+  gazeZ: 32,
+  gazeUp: 33,
+  looks: 34,
 } as const;
 
 /** A 0..1 hash of an integer pair (stable across runs). */
@@ -141,6 +145,7 @@ export function motionState(seed: number): Float64Array {
   m[M.baseRate] = 1 + (hash01(seed, 2) * 2 - 1) * MOTION.rateSpread;
   m[M.period] = MOTION.glancePeriod + hash01(seed, 3) * MOTION.glanceSpread;
   m[M.focusDist] = NaN;
+  m[M.gazeX] = NaN;
   m[M.lookRate] = MOTION.lookRate + hash01(seed, 4) * MOTION.lookRateSpread;
   m[M.sinceLand] = Infinity;
   m[M.vy] = NaN;

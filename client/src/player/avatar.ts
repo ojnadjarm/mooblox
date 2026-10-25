@@ -105,6 +105,13 @@ export class Avatar {
     this.m[M.vy] = verticalSpeed;
   }
 
+  /** Looks at ground spot (x, z), `up` m above eye level, whenever the player is not near; NaN x stops. */
+  gaze(x: number, z = 0, up = 0): void {
+    this.m[M.gazeX] = x;
+    this.m[M.gazeZ] = z;
+    this.m[M.gazeUp] = up;
+  }
+
   /** Plays idle act `i` now if standing and the rig has it (an emote); false otherwise. */
   emote(i: number): boolean {
     if (this.current !== 'idle' || !this.acts[i]) return false;

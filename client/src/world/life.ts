@@ -18,12 +18,13 @@ import type { WorldView } from '../boot/app';
 import type { Avatar } from '../player/avatar';
 import type { AvatarFactory } from '../player/avatar-kit';
 import { SEAT } from '../player/clips';
-import { paintPlace, type Critter, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
+import { hash01 } from '../player/motion';
+import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import { GroundScatter, lawnTest } from './ground-scatter';
 import { CAMPUS } from './look';
 import type { ModelLibrary } from './model-library';
-import { hop, walkerAt } from './npc-schedule';
+import { hop, routeAt, strollRoute, walkerRoute, type Route, type RoutePose, type Sight } from './npc-schedule';
 import { seededRandom } from './random';
 import { sceneryGeometry, singleModel } from './scenery';
 
@@ -35,6 +36,18 @@ const KID_COUNT: Readonly<Record<string, number>> = { low: 0, medium: 2, high: 3
 const SIT_SIDE = 0.8;
 /** Kids further than this from the camera are not drawn. */
 const KID_DRAW = 60;
+/** Walker pace (m/s, base + per-kid spread: the walk clip's stride fits 3.3-6) and turn rate (1/s) towards the next heading. */
+const WALK_PACE = 3.3;
+const WALK_SPREAD = 0.6;
+const WALK_TURN = 7;
+/** Sights walkers visit (stalls, signs, fountains): kit model, ground radius when no obstacle says, and the eye height (m) of what they look at. */
+const SIGHTS: Readonly<Record<string, { readonly r: number; readonly up: number }>> = {
+  'town/stall-red': { r: 1.3, up: 0.05 },
+  'town/stall-green': { r: 1.3, up: 0.05 },
+  'nature/sign': { r: 0.4, up: -0.45 },
+  'town/fountain-round': { r: 1.6, up: -0.9 },
+  'town/fountain-round-detail': { r: 1.6, up: -0.9 },
+};
 
 /** Ambient life: flags, boats, buoys, sailing ships, ducks, cats, dogs, butterflies, smoke, gulls, petals and NPC kids. */
 export async function startLife(view: WorldView, lib: ModelLibrary, avatars: AvatarFactory | null): Promise<void> {
@@ -371,6 +384,8 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
   const spawn = view.layout.spawn;
   const near = (x: number, z: number) => Math.hypot(x - spawn.x, z - spawn.z);
   const spots = [...view.dressing.hangouts].sort((a, b) => near(a.x, a.z) - near(b.x, b.z));
+  const sights = sightsOf(view.dressing).sort((a, b) => near(a.x, a.z) - near(b.x, b.z));
+  let strollers = 0;
   const walks = [...view.dressing.paths].filter((p) => Math.hypot(p.bx - p.ax, p.bz - p.az) > 6).sort((a, b) => near(a.ax, a.az) - near(b.ax, b.az));
   for (let i = 0; i < count; i++) {
     const ids = avatars.bodies.map((b) => b.id);
@@ -387,8 +402,17 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
       avatar.root.visible = kx * kx + kz * kz < KID_DRAW * KID_DRAW;
       if (avatar.root.visible) move(t, dt);
     };
+    const speed = WALK_PACE + hash01(i, 21) * WALK_SPREAD;
+    const pause = 2 + (i % 2);
+    const route = hang
+      ? null
+      : walk
+        ? walkerRoute(walk.ax, walk.az, walk.bx, walk.bz, sights, view.dressing.obstacles, speed, pause)
+        : sights.length > 1
+          ? strollRoute(strollers++ % sights.length, sights, view.dressing.obstacles, speed, pause)
+          : null;
     if (hang) out.push(draw(hangout(avatar, hang, i)));
-    else if (walk) out.push(draw(walker(avatar, walk, i)));
+    else if (route) out.push(draw(walker(avatar, route, i, speed, sights)));
     else {
       avatar.root.position.set(Math.cos(i * 1.3) * 4.2, 0, Math.sin(i * 1.3) * 4.2);
       avatar.play('idle');
@@ -418,17 +442,43 @@ function hangout(avatar: Avatar, h: Hangout, i: number): Mover {
   };
 }
 
-function walker(avatar: Avatar, path: Segment, i: number): Mover {
+/** Stalls, signs and fountains on every island, sized by the obstacle each stands in. */
+function sightsOf(d: Dressing): Sight[] {
+  const out: Sight[] = [];
+  for (const district of d.districts) {
+    for (const p of district.placements) {
+      const kind = SIGHTS[p.id];
+      if (!kind) continue;
+      const own = d.obstacles.find((o) => Math.hypot(o.x - p.x, o.z - p.z) < 0.5);
+      out.push({ x: p.x, z: p.z, r: own?.r ?? kind.r, up: kind.up });
+    }
+  }
+  return out;
+}
+
+/** A walker on its route at its own pace: stands and looks round at bare stops, looks at the stall or sign it visits, turning smoothly. */
+function walker(avatar: Avatar, route: Route, i: number, speed: number, sights: readonly Sight[]): Mover {
+  const n = route.x.length;
+  const pose: RoutePose = { x: route.x[n - 1]!, z: route.z[n - 1]!, heading: Math.atan2(route.x[0]! - route.x[n - 1]!, route.z[0]! - route.z[n - 1]!), walking: true, sight: -1 };
+  let facing = pose.heading;
+  let looking = -1;
   avatar.play('walk');
-  const len = Math.hypot(path.bx - path.ax, path.bz - path.az);
   return (t, dt) => {
-    const { k, back, walking } = walkerAt(t + i * 3, len, 1.3, 2 + (i % 2));
-    avatar.play(walking ? 'walk' : 'idle');
-    const side = 0.5 * (back ? -1 : 1);
-    const nx = (path.bz - path.az) / len;
-    const nz = -(path.bx - path.ax) / len;
-    avatar.root.position.set(path.ax + (path.bx - path.ax) * k + nx * side, 0.06, path.az + (path.bz - path.az) * k + nz * side);
-    avatar.root.rotation.y = Math.atan2((path.bx - path.ax) * (back ? -1 : 1), (path.bz - path.az) * (back ? -1 : 1)) + (walking ? 0 : 0.7 * Math.sin(t * 1.6 + i));
+    routeAt(route, t + i * 3, pose);
+    const s = pose.sight >= 0 ? sights[pose.sight]! : null;
+    const want = s ? Math.atan2(s.x - pose.x, s.z - pose.z) : pose.walking ? pose.heading : pose.heading + 0.7 * Math.sin(t * 1.6 + i);
+    const d = Math.atan2(Math.sin(want - facing), Math.cos(want - facing));
+    const turned = d * Math.min(1, WALK_TURN * dt);
+    facing += turned;
+    if (pose.sight !== looking) {
+      looking = pose.sight;
+      if (s) avatar.gaze(s.x, s.z, s.up);
+      else avatar.gaze(NaN);
+    }
+    avatar.play(pose.walking ? 'walk' : 'idle');
+    avatar.setMotion(pose.walking ? speed : 0, dt > 0 ? turned / dt : 0);
+    avatar.root.position.set(pose.x, 0.06, pose.z);
+    avatar.root.rotation.y = facing;
     avatar.update(dt);
   };
 }

@@ -293,6 +293,32 @@ describe('Avatar motion layer', () => {
     }
   });
 
+  it('looks at its gaze spot (head up for a raised one) until the player comes near, then at the player; NaN lets go', () => {
+    const space = new Object3D();
+    const { root, clips } = rig();
+    space.add(root);
+    const npc = new Avatar(root, clips, 4);
+    const head = () => new Vector3(0, 0, 1).applyQuaternion(root.getObjectByName('head')!.getWorldQuaternion(new Quaternion()));
+    const yaw = () => Math.atan2(head().x, head().z);
+    Object.assign(focus, { owner: null, space, x: -20, y: 0, z: 0 });
+    try {
+      npc.gaze(1.5, 1.5, 0.6);
+      for (let i = 0; i < 120; i++) npc.update(1 / 60);
+      expect(yaw()).toBeCloseTo(Math.PI / 4, 1);
+      expect(head().y).toBeGreaterThan(0.15);
+      focus.x = -3;
+      focus.z = 1;
+      for (let i = 0; i < 120; i++) npc.update(1 / 60);
+      expect(yaw()).toBeLessThan(-0.6);
+      focus.x = -20;
+      npc.gaze(NaN);
+      for (let i = 0; i < 120; i++) npc.update(1 / 60);
+      expect(Math.abs(yaw())).toBeLessThan(MOTION.glanceYaw + 0.01);
+    } finally {
+      Object.assign(focus, { owner: null, space: null });
+    }
+  });
+
   it('kids built together start their loops at different phases', () => {
     const times = [0, 1, 2].map((seed) => {
       const { root, clips } = rig();
