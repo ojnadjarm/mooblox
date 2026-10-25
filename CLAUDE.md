@@ -431,3 +431,43 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     (main, dev, dev-rewards), inflates with DecompressionStream (or takes a server-inflated glb), and maps the urls to blobs on
     three's `DefaultLoadingManager`; no .gz = the old path. Fast 4G cold 975 -> 644 KB, demo 2.04 -> 1.65 s, 20x30 2.70 -> 2.28 s.
     `node tools/load-probe.mjs [out.json] [--shapes] [--tier] [--runs]`: cold + warm ms to playable, KB by kind, long tasks.
+- T1364 rounds 11-24, 2026-10-25 (art; log `~/agent-work/research/2026-10-24/T1364/ROUNDS.md`, stills `~/drop/T1364/r15`-`r24`): terraced raised
+  lawns (`cliff-wall.ts` CLIFF/TERRACE_CLIFF, `dressing.ts` terraceSides, LAWNS/LAWN_FOOT), broad shelves (`world/shelf.ts`, Designer.shelf/shelfTop),
+  pale distant sea (Look.sky.seaHorizon/sea authored pre-tone-map, red >= 0x45; distance air term in `water.ts`), solid far islands + tiered spawn
+  fountain (`landmarks/fountain.ts`; `Dressing.start` replaces layout.spawn), wayside stops (`path-stops.ts`, SIGHT_IDS mirrors life.ts SIGHTS),
+  cumulus clouds (`sky-data.ts`; `Sky.overview()` follows the map camera and sets the draw range), sea cloud shadows (`cloud-shadows.ts` + water.ts),
+  district garden rooms (`landmarks/garden-room.ts`; designWorld +30%, 8x12 ~185 ms at load only), stalls block the walk grid, activity props rebuilt
+  (`world/props/`, <= 1.3k tris each), low sky/ships trim (crossing 87.7k -> 78.9k tris), raised kerbs (`landmarks/kerb.ts`, detail dressing), soft
+  meadow lawns (#A1C270/#71A35F). Low crossing 78.3k tris (< 80k), spawn 53.7k, plot 58.0k; low GPU 60 fps; stress median demo 54, 8x12 59; vitest
+  world 274. Open: 55k sceneryTris cap never binds (lane P), hub sky ~28% vs concept 40%, 1366 game camera can land inside a bridge, 8x12 walk=far
+  autopilot stops at its first bridge.
+- T1371 rounds 10-14, 2026-10-25 (streaming perf; log `~/agent-work/research/2026-10-24/T1371/ROUNDS.md`, data `~/agent-work/evidence/T1371/`):
+  GlowPass skips bloom's full-res additive blend (high GPU median 11.3-15.2 -> 8.1-8.5 ms); district chunks welded in the build worker
+  (`chunk-weld.ts`, vertices x0.37-0.39, 16-bit index, upload ~-57%); `?walk=tour` multi-bridge walk (`world/walk-tour.ts`, `tools/crossing.mjs`,
+  6 crossings on 8x12/20x30). Tour baseline crossing frames > 20 ms / worst ms: low 8x12 0/16.8, 20x30 1/33.4; stress 209/150, 239/183; high 20x30
+  9/33.4. Rejected with data: 3*16384 chunks, CPU sign canvases, spatial/compact chunk order, per-chunk AABB culling, software sceneryTris 30k.
+  Open: stress (SwiftShader) cost is steady GPU, 22-25 ms per low frame (scenery 10-14 ms); next lever needs >= 30% less GPU per software frame.
+- T1372 rounds 3-18, 2026-10-25 (animation; log `~/agent-work/research/2026-10-24/T1372/ROUNDS.md`, page `~/drop/T1372/index.html`): look-at,
+  head leads turns, landing dip (R3); idle acts (`player/idle-acts.ts`) + NPC greeting wave (R4); emotes on keys 1-5 (`InputState.emote`,
+  `Avatar.emote`) + fall state (R5); sitting (`sit`, SEAT 0.8, paired NPC bench/stool hangouts) (R6); NPC routines (`world/npc-schedule.ts`
+  walkerRoute/strollRoute/routeAt, `Avatar.gaze`, crowd `ROLES` in life.ts) (R7-R8); critters react (`world/critter-react.ts` reactStep, keepClear,
+  collider push-out) (R9-R11); Guide `talk` clip (R11); cloth flags (`world/flag-cloth.ts`, swayMaterial wave) (R12); pets sit/doze, heap-test flake
+  fix (60k warm steps, 30 s timeout) (R13); follow camera: soft-capped look-ahead, narrow-view yaw swing, pulled-in scaling, glide pull-in PULL_IN 20/s,
+  predictive probe LEAD 0.15 s, PULL_STEP 1.6 m (R14-R18); see-through characters (`player/fade.ts` seeThrough, dither on uFade) (R16). Player CPU 6x
+  400x800 ~0.75 ms (budget 1.5), 0 B/frame, draws ~48, programs 28; camera jumps > 2.5 m 0, within 2 m 0. Open: follow() ~12 B/frame in wall-check
+  rays, chest-only blocks by thin posts, banner/fountain sway (district-prep), no wade-able shore, touch emote buttons, island-rim fall.
+- T1373 rounds 2-14, 2026-10-25 (load, warm-up, pacing; log `~/agent-work/research/2026-10-24/T1373/ROUNDS.md`): `tools/hitch-probe.mjs`; creator
+  preview context made at boot and kept (first wardrobe open 50 -> 16.8 ms); `QualityManager(stage, tier, remember, software, work, timer, budget)`:
+  frameWork CPU-bound detection (R4), `perf/gpu-timer.ts` GPU-timed dynamic resolution (R5), hysteresis (30-window raise hold, 2 resizes/min cap) (R6),
+  whole-tier step-down at the GPU floor, asked tiers too (R7), `pixelBudget`/`startScale` + localStorage `mooblox-pixels` (R8: high-1920 first-5 s
+  worst 416 -> 33 ms), `scaleFloor` 0.5 for big canvases + `Stage.warmScreen` (R9); `tools/pacing-probe.mjs`, `tools/stress-start.mjs`; perf.mjs
+  cold first-visit run (not gated, R12) and stress worst gated on the median of 3 runs (R14; gate 5.5 -> 12.6 min). Last gate 74/2 (stress demo
+  133.3, 1x2 150 ms, budget 100). Open (owner decision): soft-rig worst-frame budget vs SwiftShader first-visit and random 83-200 ms frames.
+- T1374 rounds 1-21, 2026-10-24/25 (asset detail; log `~/agent-work/research/2026-10-24/T1374/ROUNDS.md`, stills `~/drop/T1374/`):
+  `tools/detail-kit.py` (props, doors, stalls, lamps, fences, signs, leaf clumps, moss, fountains, stumps, campfire, tents, grass, dock, bridge planks,
+  masonry walls + quoins, iron lamps, planter boxes, lavender rocks; caps house 3.3k, stall 920 tris; kit 640 -> 882 KB); surface atlas 18 layers
+  (bark, hedge, wear, floor setts 16, cloth 17, lawn tone + clumps, sand ripples); grain axis on bridge/dock/bench tops (`surfaces.ts` grainAxis); kit
+  surface audit (`kit-materials.ts`, `surface-audit.ts`, `tools/kit-bake.ts`, `tools/surface-audit.mjs`, test) tags every kit vertex by family at
+  bake (535 flagged parts -> 0); house E runaway vertex fixed. Draws/programs unchanged (demo low 21/11), low 60 fps. Notes: districts merge in
+  8192-tri chunks (CHUNK_VERTICES; check per-district chunk counts before adding tris); detail-kit.py output is not byte-deterministic.
+  Open: terrain parts untagged (26.2k tris on the colour guess, lane A).
