@@ -47,6 +47,7 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   if (/tree|palm/.test(name)) return green ? Surface.foliage : brown || hsl.l < 0.3 ? Surface.bark : Surface.foliage;
   if (/plant_|bush|flower|grass/.test(name)) return green ? Surface.foliage : brown ? Surface.wood : Surface.foliage;
   if (/rock|cliff|stone/.test(name)) return green ? Surface.grass : Surface.rock;
+  if (WOOD_PROPS.test(name)) return brown ? Surface.wood : Surface.plain;
   if (/bridge|dock|platform|boat|stall|bench|plank|crate|barrel|cart|log/.test(name)) return dark || hsl.s < 0.08 ? Surface.metal : Surface.wood;
   if (/lantern|lamp/.test(name)) return dark || hsl.s < 0.1 ? Surface.metal : Surface.plain;
   if (/building|roof|wall|house|tower|chimney|windmill/.test(name)) {
@@ -66,12 +67,15 @@ export function surfaceOf(id: string, r: number, g: number, b: number): SurfaceI
   return green ? Surface.foliage : Surface.plain;
 }
 
-/** Kit models whose bark and clipped leaves the colour heuristic cannot tell apart from planks and lawn: tagged at bake. */
-export const TAGGED_MODELS = /tree|palm|hedge/;
+/** Warm-plank props the colour heuristic reads as brick: their brown vertices tagged wood, the rest (iron hoops) left to it. */
+const WOOD_PROPS = /stall-bench|stall-stool|barrel|crate|cart/;
 
-/** The model axis its deck planks run along (bridge boards cross it on x, dock planks run its length on z); null = no grain tag. */
+/** Kit models whose bark, clipped leaves and warm planks the colour heuristic cannot tell apart from planks, lawn and brick: tagged at bake. */
+export const TAGGED_MODELS = /tree|palm|hedge|stall-stool|barrel|crate|cart/;
+
+/** The model axis its deck planks run along (bridge boards cross it on x, dock and bench planks run its length on z); null = no grain tag. */
 export function grainAxis(id: string): 'x' | 'z' | null {
-  return /bridge/.test(id) ? 'x' : /platform-dock/.test(id) ? 'z' : null;
+  return /bridge/.test(id) ? 'x' : /platform-dock|stall-bench/.test(id) ? 'z' : null;
 }
 
 /** Added to a surface id: the atlas runs along the grain axis carried in the vertex normal's tilt (`grainTops`). */

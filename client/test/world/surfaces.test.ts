@@ -32,15 +32,23 @@ describe('surfaces', () => {
     expect(surfaceOf('', ...lin(0x9a9a9a))).toBe(Surface.rock);
   });
 
-  it('tags trees, palms and hedges at bake, not planks or bushes', () => {
-    for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm']) expect(TAGGED_MODELS.test(id)).toBe(true);
+  it('tags trees, palms, hedges and warm wooden props at bake, not planks or bushes', () => {
+    for (const id of ['nature/tree_oak', 'suburb/tree-large', 'town/hedge-large', 'nature/tree_palm', 'town/stall-stool', 'pirate/barrel', 'pirate/crate', 'town/cart']) expect(TAGGED_MODELS.test(id)).toBe(true);
     for (const id of ['town/stall-bench', 'nature/plant_bush', 'nature/log', 'suburb/building-type-a']) expect(TAGGED_MODELS.test(id)).toBe(false);
+  });
+
+  it('reads the warm planks of benches, stools, barrels, crates and carts as wood, their iron hoops from colour', () => {
+    for (const id of ['town/stall-bench', 'town/stall-stool', 'pirate/crate', 'town/cart']) expect(surfaceOf(id, ...lin(0xcc8666))).toBe(Surface.wood);
+    expect(surfaceOf('pirate/barrel', ...lin(0xe99068))).toBe(Surface.wood);
+    expect(surfaceOf('pirate/crate', ...lin(0x654134))).toBe(Surface.wood);
+    expect(surfaceOf('pirate/barrel', ...lin(0xaab2d6))).toBe(Surface.plain);
   });
 
   it('marks flat tops of bridge decks and docks with a grain that turns with the yaw', () => {
     expect(grainAxis('nature/bridge_center_wood')).toBe('x');
     expect(grainAxis('pirate/structure-platform-dock')).toBe('z');
-    for (const id of ['town/stall-bench', 'nature/tree_oak']) expect(grainAxis(id)).toBeNull();
+    expect(grainAxis('town/stall-bench')).toBe('z');
+    for (const id of ['town/stall-green', 'nature/tree_oak']) expect(grainAxis(id)).toBeNull();
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(new Float32Array(6), 3));
     g.setAttribute('normal', new BufferAttribute(new Float32Array([0, 1, 0, 1, 0, 0]), 3));
