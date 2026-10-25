@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { QUALITY } from '../../src/perf/quality';
+import type { GpuTimer } from '../../src/perf/gpu-timer';
 import { QualityManager } from '../../src/perf/quality-manager';
 import type { Stage } from '../../src/world/stage';
 
@@ -40,5 +41,27 @@ describe('QualityManager', () => {
     for (let i = 0; i < 50; i++) q.frame(25);
     expect(stored).toEqual(['low']);
     expect(q.tier).toBe('low');
+  });
+
+  it('feeds GPU timings to the governor and times frames outside play without sampling them', () => {
+    const { stage, ratios } = fakeStage();
+    const calls: string[] = [];
+    const timer = {
+      begin: () => void calls.push('begin'),
+      end: () => void calls.push('end'),
+      take: (out: number[]) => void out.push(20),
+    } as unknown as GpuTimer;
+    const q = new QualityManager(stage, 'high', null, false, () => 2, timer);
+    const after = ratios.length;
+    q.begin();
+    q.frame(0);
+    expect(calls).toEqual(['begin', 'end']);
+    expect(q.gpuMs).toBe(20);
+    for (let i = 0; i < 130; i++) {
+      q.begin();
+      q.frame(16.7);
+    }
+    expect(ratios.length).toBe(after + 1);
+    expect(q.dynamic.scale).toBeLessThan(1);
   });
 });

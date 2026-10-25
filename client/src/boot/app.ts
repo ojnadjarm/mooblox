@@ -9,8 +9,9 @@ import { CourseSync } from '../state/course-sync';
 import { completionToggle } from '../ui/completion-toggle';
 import { FrameGate } from '../perf/frame-gate';
 import { gpuName } from '../perf/gpu';
+import { GpuTimer } from '../perf/gpu-timer';
 import { QUALITY, pickTier, type QualityTier } from '../perf/quality';
-import { QualityManager } from '../perf/quality-manager';
+import { QualityManager, frameWork } from '../perf/quality-manager';
 import type { AvatarFactory, AvatarLook } from '../player/avatar-kit';
 import { BvhCollider } from '../player/collider';
 import { FencedCollider } from '../player/fenced-collider';
@@ -289,7 +290,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   let e = layout.extent;
   stage.focusShadow(0, 0, e + 4);
 
-  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier, SOFTWARE_GL.test(pickedGpu));
+  const software = SOFTWARE_GL.test(pickedGpu);
+  const timer = software ? null : GpuTimer.create(stage.renderer.getContext() as WebGL2RenderingContext);
+  const quality = new QualityManager(stage, tier, params.has('quality') ? null : rememberTier, software, frameWork, timer);
   const overlay = params.get('perf') === '1' ? new PerfOverlay(root, stage.renderer, quality) : null;
   const steps = new Set<(dt: number) => void>();
   let clock = 0;
@@ -409,11 +412,10 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     for (const step of steps) {
       step(dt);
     }
+    quality.begin();
     stage.render();
     budget.end();
-    if (dt > 0) {
-      quality.frame(dt * 1000);
-    }
+    quality.frame(dt * 1000);
     overlay?.frame();
   });
   const resize = (): void => {

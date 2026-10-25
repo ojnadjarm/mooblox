@@ -1,6 +1,6 @@
 // Phone frame-pacing probe: node tools/pacing-probe.mjs [out.json] [--roots dirA,dirB] [--rigs dpr2,dpr3,..] [--shapes demo,20x30] [--hold ms]
 // Per root (a client/ copy to A/B; default this one) x rig x shape: 400x800 touch page at DPR 2 or 3 on the real GPU under 4x CPU
-// (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
+// (cpu6: 6x, a CPU-bound phone; high: the high tier, a GPU-bound one; high-1366: the perf gate's GPU-bound high rig, 1366x768 DPR 1, 1x), walks to the farthest plot then idles `hold` ms (4000), and reads the frame intervals (avg, p99, 1% low fps, worst, frames > 33 ms), how
 // often the canvas pixel ratio changed (each change is a resize hitch), the ratio range and the tier at the end.
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,6 +25,7 @@ const RIG = {
   'dpr3-high': { dpr: 3, quality: 'high', throttle: 4 },
   'dpr3-high-cpu1': { dpr: 3, quality: 'high', throttle: 1 },
   'dpr2-cpu6': { dpr: 2, quality: 'medium', throttle: 6 },
+  'high-1366': { dpr: 1, quality: 'high', throttle: 1, w: 1366, h: 768, touch: false },
 };
 const hold = Number(opt('hold', '4000'));
 
@@ -38,7 +39,7 @@ function record() {
   window.__pp = rec;
   let last = performance.now();
   const tick = (t) => {
-    rec.frames.push([t - last, v.stage.renderer.getPixelRatio(), v.quality.tier]);
+    rec.frames.push([t - last, v.stage.renderer.getPixelRatio(), v.quality.tier, v.quality.gpuMs ?? null]);
     last = t;
     requestAnimationFrame(tick);
   };
@@ -50,7 +51,15 @@ function stats(frames) {
   const sorted = [...ms].sort((a, b) => b - a);
   const worst1 = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 100)));
   let changes = 0;
-  for (let i = 1; i < frames.length; i++) if (frames[i][1] !== frames[i - 1][1]) changes++;
+  let t = 0;
+  const steps = [];
+  for (let i = 1; i < frames.length; i++) {
+    t += frames[i][0];
+    if (frames[i][1] === frames[i - 1][1]) continue;
+    changes++;
+    const gpu = frames.slice(Math.max(0, i - 60), i).map((f) => f[3]).filter((g) => g !== null).sort((a, b) => a - b);
+    steps.push([+(t / 1000).toFixed(1), +frames[i][1].toFixed(2), gpu.length ? +gpu[Math.floor(gpu.length * 0.9)].toFixed(1) : null]);
+  }
   const ratios = frames.map((f) => f[1]);
   return {
     frames: ms.length,
@@ -60,6 +69,8 @@ function stats(frames) {
     worstMs: +sorted[0].toFixed(1),
     over33: ms.filter((x) => x > 33.4).length,
     ratioChanges: changes,
+    /** Each pixel ratio change: [s since start, new ratio, GPU p90 ms of the 60 frames before]. */
+    steps,
     ratioMin: Math.min(...ratios),
     ratioEnd: ratios.at(-1),
     tierEnd: frames.at(-1)[2],
@@ -78,7 +89,7 @@ try {
         const rig = RIG[name];
         for (const shape of shapes) {
           const q = [shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}`, rig.quality ? `quality=${rig.quality}` : '', 'walk=far'].filter(Boolean).join('&');
-          const page = await browser.newPage({ viewport: { width: 400, height: 800 }, deviceScaleFactor: rig.dpr, hasTouch: true });
+          const page = await browser.newPage({ viewport: { width: rig.w ?? 400, height: rig.h ?? 800 }, deviceScaleFactor: rig.dpr, hasTouch: rig.touch ?? true });
           page.on('pageerror', (e) => console.error('pageerror:', e.message));
           const cdp = await page.context().newCDPSession(page);
           await page.goto(`${url}?${q}`);
@@ -88,8 +99,8 @@ try {
           await page.waitForFunction(() => window.mooblox.probe.reached, null, { timeout: 90000, polling: 200 }).catch(() => null);
           await page.waitForTimeout(hold);
           const frames = await page.evaluate(() => window.__pp.frames);
-          const cpuBound = await page.evaluate(() => window.mooblox.quality.dynamic.cpuBound ?? null);
-          const row = { root: root.split('/').slice(-2).join('/'), rig: name, shape, dpr: rig.dpr, throttle: rig.throttle, ...stats(frames), cpuBound };
+          const { cpuBound, gpuMs } = await page.evaluate(() => ({ cpuBound: window.mooblox.quality.dynamic.cpuBound ?? null, gpuMs: window.mooblox.quality.gpuMs ?? null }));
+          const row = { root: root.split('/').slice(-2).join('/'), rig: name, shape, dpr: rig.dpr, throttle: rig.throttle, ...stats(frames), cpuBound, gpuMs };
           rows.push(row);
           console.log(JSON.stringify(row));
           await page.close();

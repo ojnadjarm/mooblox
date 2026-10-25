@@ -121,4 +121,58 @@ describe('DynamicResolution', () => {
     expect(d.scale).toBeGreaterThanOrEqual(0.7);
     expect(d.scale).toBeLessThanOrEqual(0.75);
   });
+
+  describe('with GPU timings', () => {
+    /** Frames at `ms` for `seconds`, each with a GPU time of `gpu(scale)`. */
+    const timed = (d: DynamicResolution, ms: number, seconds: number, gpu: (scale: number) => number, work = 0) => {
+      let changes = 0;
+      for (let t = 0; t < seconds * 1000; t += ms) {
+        d.gpu(gpu(d.scale));
+        if (d.sample(ms, work)) changes++;
+      }
+      return changes;
+    };
+    /** GPU time following pixels: `full` ms at scale 1. */
+    const pixels = (full: number) => (s: number) => full * s * s;
+
+    it('drops after 2 windows with the GPU p90 over budget even though the average frame looks fine', () => {
+      const d = new DynamicResolution(0.6);
+      timed(d, 17, 1, pixels(17));
+      expect(d.scale).toBe(1);
+      timed(d, 17, 1, pixels(17));
+      expect(d.scale).toBeLessThan(1);
+      expect(d.scale).toBeGreaterThanOrEqual(0.8);
+      timed(d, 16.7, 30, pixels(17));
+      expect(d.scale * d.scale * 17).toBeLessThanOrEqual(15);
+    });
+
+    it('keeps the scale on slow frames while the GPU has room (CPU-bound), and asks for a lower tier after 5 windows', () => {
+      const d = new DynamicResolution(0.6);
+      expect(timed(d, 25, 4, () => 6)).toBe(0);
+      expect(d.cpuBound).toBe(true);
+      expect(d.scale).toBe(1);
+      timed(d, 25, 1, () => 6);
+      expect(d.starved).toBe(true);
+    });
+
+    it('raises only when the next step is predicted under 11 ms, and settles without oscillating', () => {
+      const d = new DynamicResolution(0.5);
+      let changes = timed(d, 16.7, 3, pixels(24));
+      changes += timed(d, 16.7, 120, pixels(24));
+      expect(d.scale * d.scale * 24).toBeLessThanOrEqual(15);
+      expect(timed(d, 16.7, 120, pixels(24))).toBe(0);
+      expect(changes).toBeLessThanOrEqual(4);
+      timed(d, 16.7, 60, pixels(8));
+      expect(d.scale).toBe(1);
+    });
+
+    it('falls back to frame times when timings are too few', () => {
+      const d = new DynamicResolution(0.6);
+      for (let i = 0; i < 40; i++) {
+        if (i % 10 === 0) d.gpu(30);
+        d.sample(25, 0);
+      }
+      expect(d.scale).toBe(0.8);
+    });
+  });
 });
