@@ -19,7 +19,7 @@ import type { Avatar } from '../player/avatar';
 import type { AvatarFactory } from '../player/avatar-kit';
 import { SEAT } from '../player/clips';
 import { hash01 } from '../player/motion';
-import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail } from './dressing';
+import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import { GroundScatter, lawnTest } from './ground-scatter';
 import { CAMPUS } from './look';
@@ -40,6 +40,8 @@ const KID_DRAW = 60;
 const WALK_PACE = 3.3;
 const WALK_SPREAD = 0.6;
 const WALK_TURN = 7;
+/** Each kid's part, by index: 'sit' pairs share the nearest hangout, 'play' pairs the nearest playground, 'stroll' loops the sights from the plaza fountain on, 'walk' walks a path. */
+const ROLES = ['sit', 'stroll', 'sit', 'walk', 'play', 'play', 'walk', 'stroll'] as const;
 /** Sights walkers visit (stalls, signs, fountains): kit model, ground radius when no obstacle says, and the eye height (m) of what they look at. */
 const SIGHTS: Readonly<Record<string, { readonly r: number; readonly up: number }>> = {
   'town/stall-red': { r: 1.3, up: 0.05 },
@@ -378,14 +380,17 @@ function petals(view: WorldView, teardown: (() => void)[]): Mover {
 const SKINS = ['a', 'c', 'b', 'd', 'e', 'f', 'g', 'h', 'i'];
 const SHIRTS = [0xe5484d, 0x2f7fe0, 0xff9a3c, 0x8e5ad8, 0x2fa39a, 0xf07aa8, 0xf6c445, 0x5ed8d2, 0x5db761];
 
-/** NPC kids: the first ones play or sit at the hangouts nearest the spawn, the rest walk the paths. */
+/** NPC kids by `ROLES`: sitting or playing at the hangouts nearest the spawn, strolling from the plaza fountain, walking the paths. */
 async function kids(view: WorldView, avatars: AvatarFactory, count: number, shadows: boolean): Promise<Mover[]> {
   const out: Mover[] = [];
   const spawn = view.layout.spawn;
   const near = (x: number, z: number) => Math.hypot(x - spawn.x, z - spawn.z);
   const spots = [...view.dressing.hangouts].sort((a, b) => near(a.x, a.z) - near(b.x, b.z));
-  const sights = sightsOf(view.dressing).sort((a, b) => near(a.x, a.z) - near(b.x, b.z));
+  const sights = sightsOf(view.dressing, view.layout.hubs[0]).sort((a, b) => near(a.x, a.z) - near(b.x, b.z));
+  const seat = spots.find((h) => h.kind === 'sit') ?? spots[0];
+  const play = spots.find((h) => h.kind === 'play') ?? spots[1];
   let strollers = 0;
+  const taken = new Set<number>();
   const walks = [...view.dressing.paths].filter((p) => Math.hypot(p.bx - p.ax, p.bz - p.az) > 6).sort((a, b) => near(a.ax, a.az) - near(b.ax, b.az));
   for (let i = 0; i < count; i++) {
     const ids = avatars.bodies.map((b) => b.id);
@@ -393,8 +398,8 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
     const avatar = await avatars.create({ skin, tint: SHIRTS[i % SHIRTS.length]! });
     avatar.root.traverse((o) => (o.castShadow = shadows));
     view.stage.add(avatar.root);
-    const hang = i % 3 !== 2 ? spots[Math.floor((i * 2) / 3)] : undefined;
-    const walk = walks[i];
+    const role = ROLES[i % ROLES.length]!;
+    const hang = role === 'sit' ? seat : role === 'play' ? play : undefined;
     const draw = (move: Mover): Mover => (t, dt) => {
       const eye = view.stage.camera.position;
       const kx = eye.x - avatar.root.position.x;
@@ -406,11 +411,7 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
     const pause = 2 + (i % 2);
     const route = hang
       ? null
-      : walk
-        ? walkerRoute(walk.ax, walk.az, walk.bx, walk.bz, sights, view.dressing.obstacles, speed, pause)
-        : sights.length > 1
-          ? strollRoute(strollers++ % sights.length, sights, view.dressing.obstacles, speed, pause)
-          : null;
+      : ((role === 'walk' ? pathWalk(walks, taken, sights, view.dressing.obstacles, speed, pause) : null) ?? stroll(strollers++, sights, view.dressing.obstacles, speed, pause));
     if (hang) out.push(draw(hangout(avatar, hang, i)));
     else if (route) out.push(draw(walker(avatar, route, i, speed, sights)));
     else {
@@ -422,9 +423,37 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
   return out;
 }
 
+/** The walk of the nearest untaken path with a visit on it (else the nearest untaken path), now taken; null when none is left. */
+function pathWalk(walks: readonly Segment[], taken: Set<number>, sights: readonly Sight[], obstacles: Dressing['obstacles'], speed: number, pause: number): Route | null {
+  let bare = -1;
+  for (let k = 0; k < walks.length; k++) {
+    if (taken.has(k)) continue;
+    const w = walks[k]!;
+    const route = walkerRoute(w.ax, w.az, w.bx, w.bz, sights, obstacles, speed, pause);
+    if (route.sight.some((s) => s >= 0)) {
+      taken.add(k);
+      return route;
+    }
+    if (bare < 0) bare = k;
+  }
+  if (bare < 0) return null;
+  taken.add(bare);
+  const w = walks[bare]!;
+  return walkerRoute(w.ax, w.az, w.bx, w.bz, sights, obstacles, speed, pause);
+}
+
+/** The first stroll that starts at sight `from` or the next ones round the list (nearest the spawn first), or null. */
+function stroll(from: number, sights: readonly Sight[], obstacles: Dressing['obstacles'], speed: number, pause: number): Route | null {
+  for (let k = 0; k < sights.length; k++) {
+    const route = strollRoute((from + k) % sights.length, sights, obstacles, speed, pause);
+    if (route) return route;
+  }
+  return null;
+}
+
 function hangout(avatar: Avatar, h: Hangout, i: number): Mover {
   if (h.kind === 'sit') {
-    const side = i % 3 === 0 ? -SIT_SIDE : SIT_SIDE;
+    const side = i % ROLES.length === ROLES.indexOf('sit') ? -SIT_SIDE : SIT_SIDE;
     avatar.root.position.set(h.x + Math.cos(h.face) * side, (h.seat ?? 0.06) - SEAT, h.z - Math.sin(h.face) * side);
     avatar.root.rotation.y = h.face;
     avatar.play('sit');
@@ -442,9 +471,11 @@ function hangout(avatar: Avatar, h: Hangout, i: number): Mover {
   };
 }
 
-/** Stalls, signs and fountains on every island, sized by the obstacle each stands in. */
-function sightsOf(d: Dressing): Sight[] {
+/** Stalls, signs and fountains on every island, sized by the obstacle each stands in, and the spawn plaza's fountain. */
+function sightsOf(d: Dressing, plaza: { readonly x: number; readonly z: number } | undefined): Sight[] {
   const out: Sight[] = [];
+  const fountain = plaza && d.obstacles.find((o) => Math.hypot(o.x - plaza.x, o.z - plaza.z) < 0.5);
+  if (fountain) out.push({ x: fountain.x, z: fountain.z, r: fountain.r, up: -0.6 });
   for (const district of d.districts) {
     for (const p of district.placements) {
       const kind = SIGHTS[p.id];
