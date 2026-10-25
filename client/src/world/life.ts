@@ -18,7 +18,9 @@ import type { WorldView } from '../boot/app';
 import type { Avatar } from '../player/avatar';
 import type { AvatarFactory } from '../player/avatar-kit';
 import { SEAT } from '../player/clips';
+import { focus } from '../player/attention';
 import { hash01 } from '../player/motion';
+import { C, CRITTERS, critterState, pace, reactStep, rise } from './critter-react';
 import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
 import { GroundScatter, lawnTest } from './ground-scatter';
@@ -86,8 +88,27 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
   let t = 0;
   view.onFrame((dt) => {
     t += dt;
+    trackPlayer(dt);
     for (const m of movers) m(t, dt);
   });
+}
+
+/** Where the local player stands and how fast it moves (m/s), for critters to react to; `near` false while there is none. */
+const PLAYER = { near: false, x: 0, z: 0, v: 0 };
+/** A player move longer than this (m) in one frame is a teleport, not a run. */
+const PLAYER_JUMP = 2;
+
+function trackPlayer(dt: number): void {
+  if (!focus.owner) {
+    PLAYER.near = false;
+    return;
+  }
+  const d = Math.hypot(focus.x - PLAYER.x, focus.z - PLAYER.z);
+  const v = PLAYER.near && dt > 0 && d < PLAYER_JUMP ? d / dt : 0;
+  PLAYER.v += (v - PLAYER.v) * Math.min(1, 10 * dt);
+  PLAYER.near = true;
+  PLAYER.x = focus.x;
+  PLAYER.z = focus.z;
 }
 
 /** Grass tufts and pebbles on the open lawn ahead of the camera, one draw (low: fewer, nearer). */
@@ -209,11 +230,12 @@ function animalGeometry(kind: 'duck' | 'cat' | 'dog'): BufferGeometry {
   return sceneryGeometry(mergeGeometries(parts, false)!);
 }
 
-/** One instanced mesh per animal kind; each wanders its circle, ducks paddle, pets pause and trot. */
+/** One instanced mesh per animal kind; each wanders its circle (ducks paddle, pets pause and trot) and reacts to the player (`critter-react.ts`). */
 function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly Critter[], teardown: (() => void)[]): Mover {
   const per = kind === 'duck' ? 4 : 1;
   const geometry = animalGeometry(kind);
   const mesh = new InstancedMesh(geometry, view.kit.sceneryInstanced, list.length * per);
+  mesh.name = kind;
   mesh.castShadow = kind !== 'duck';
   mesh.customDepthMaterial = INSTANCED_DEPTH;
   mesh.frustumCulled = false;
@@ -223,20 +245,31 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
     mesh.dispose();
     geometry.dispose();
   });
+  const tune = CRITTERS[kind];
+  const state = critterState(list.length * per);
+  const roam = kind === 'duck' ? 2.5 : 4;
   const m = new Object3D();
-  return (t) => {
+  return (t, dt) => {
     let n = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i]!;
       if (!view.sees(c.x, c.z)) continue;
       for (let k = 0; k < per; k++) {
+        const j = i * per + k;
+        const clock = state[j * C.size + C.clock]!;
         const phase = i * 1.7 + k * 0.9;
         const speed = kind === 'duck' ? 0.25 : 0.35;
-        const pause = kind === 'duck' ? 0 : Math.max(0, Math.sin(t * 0.3 + phase)) * 2;
-        const a = (t - pause) * speed + phase + (kind === 'duck' ? k * 0.35 : 0);
+        const pause = kind === 'duck' ? 0 : Math.max(0, Math.sin(clock * 0.3 + phase)) * 2;
+        const a = (clock - pause) * speed + phase + (kind === 'duck' ? k * 0.35 : 0);
         const r = c.r * (kind === 'duck' ? 1 - k * 0.12 : 1);
-        m.position.set(c.x + Math.cos(a) * r, c.y + (kind === 'duck' ? Math.sin(t * 2 + k) * 0.03 : Math.abs(Math.sin(t * 8 + phase)) * 0.05), c.z + Math.sin(a) * r);
-        m.rotation.set(0, -a, 0);
+        const bx = c.x + Math.cos(a) * r;
+        const bz = c.z + Math.sin(a) * r;
+        reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + roam, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt);
+        state[j * C.size + C.clock] = clock + dt * pace(state, j, tune);
+        const o = j * C.size;
+        const gait = kind === 'duck' ? Math.sin(t * 2 + k) * 0.03 : Math.abs(Math.sin(t * 8 + phase)) * 0.05;
+        m.position.set(bx + state[o + C.ox]!, c.y + gait + rise(state, j, tune), bz + state[o + C.oz]!);
+        m.rotation.set(0, state[o + C.yaw]!, 0);
         m.scale.setScalar(kind === 'duck' && k > 0 ? 0.7 : 1);
         m.updateMatrix();
         mesh.setMatrixAt(n++, m.matrix);
@@ -247,7 +280,7 @@ function animals(view: WorldView, kind: 'duck' | 'cat' | 'dog', list: readonly C
   };
 }
 
-/** Butterflies: two flapping two-sided wings per instance (scenery material, no extra shader), round flower beds and fountains. */
+/** Butterflies: two flapping two-sided wings per instance (scenery material, no extra shader), round flower beds and fountains; they scatter up from the player. */
 function butterflies(view: WorldView, list: readonly Critter[], teardown: (() => void)[]): Mover {
   const per = 2;
   const flat = new BufferGeometry();
@@ -259,22 +292,30 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
   flat.setAttribute('color', new BufferAttribute(cols, 3));
   const wing = sceneryGeometry(flat);
   const mesh = new InstancedMesh(wing, view.kit.sceneryInstanced, list.length * per);
+  mesh.name = 'butterfly';
   mesh.frustumCulled = false;
   view.stage.add(mesh);
   teardown.push(() => {
     mesh.removeFromParent();
     mesh.dispose();
   });
+  const tune = CRITTERS.butterfly;
+  const state = critterState(list.length * per);
   const m = new Object3D();
-  return (t) => {
+  return (t, dt) => {
     let n = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i]!;
       if (!view.sees(c.x, c.z)) continue;
       for (let k = 0; k < per; k++) {
+        const j = i * per + k;
         const p = i * 2.3 + k * 3.1;
         const a = t * (0.6 + k * 0.2) + p;
-        m.position.set(c.x + Math.cos(a) * c.r + Math.sin(t * 1.7 + p) * 0.3, c.y + Math.sin(t * 2.3 + p) * 0.35, c.z + Math.sin(a * 1.3) * c.r);
+        const bx = c.x + Math.cos(a) * c.r + Math.sin(t * 1.7 + p) * 0.3;
+        const bz = c.z + Math.sin(a * 1.3) * c.r;
+        reactStep(state, j, tune, bx, bz, -a, c.x, c.z, c.r + tune.leash, PLAYER.near, PLAYER.x, PLAYER.z, PLAYER.v, dt);
+        const o = j * C.size;
+        m.position.set(bx + state[o + C.ox]!, c.y + Math.sin(t * 2.3 + p) * 0.35 + rise(state, j, tune), bz + state[o + C.oz]!);
         m.rotation.set(0, -a, 0);
         m.scale.set(Math.abs(Math.sin(t * 14 + p)) * 0.9 + 0.1, 1, 1);
         m.updateMatrix();
