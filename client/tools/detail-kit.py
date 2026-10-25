@@ -452,6 +452,17 @@ def masonry(bm, walls, navy, door, uv, top, size, mats, slot):
     print(f'  masonry quoins {count} plinth {len(base)}')
 
 
+def planter(bm, uv):
+    """Hedge base as the hub concept's wooden planter box: the lavender column's faces move to the warm wood column (sides) and the
+    cream one (top lip), keeping their shading rows."""
+    for f in bm.faces:
+        u = sum(lo[uv].uv.x for lo in f.loops) / len(f.loops) * 512
+        if 96 <= u < 128:
+            du = ((440 if f.normal.z > 0.7 else 304) - 112) / 512
+            for lo in f.loops:
+                lo[uv].uv.x += du
+
+
 def hidden(bm, top):
     """Drops faces nobody sees: the floor plate and the roof's underside inside the walls (a ray down from it meets the floor)."""
     floor = [f for f in bm.faces if f.normal.z < -0.9 and max(v.co.z for v in f.verts) < 0.005 * top]
@@ -870,6 +881,7 @@ def detail(o, kind):
         else:
             crown(bm, leaves, 9 if o.name.endswith('detailed') else 7, 0.26, sun, len(o.name))
     elif kind == 'hedge':
+        planter(bm, uv)
         green = [f for f in bm.faces if f.normal.z > 0.7 and (lambda c: c[1] > c[0] + 0.25)(col(f, uv))]
         if green:
             vs = [v.co for f in green for v in f.verts]
