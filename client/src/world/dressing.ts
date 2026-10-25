@@ -458,7 +458,7 @@ class Designer {
     }
   }
 
-  /** Benches inside the frame, one at the middle of each long planter run, facing the spawn pad. */
+  /** Benches inside the frame, one at the middle of each long planter run, lengthwise along it (the model is long in z), facing the spawn pad. */
   private plazaBenches(hub: Circle): void {
     const r = FRAME.r0 - 0.65;
     for (const arc of this.frame) {
@@ -466,7 +466,7 @@ class Designer {
       const a = (arc.a0 + arc.a1) / 2;
       const bx = hub.x + Math.cos(a) * r;
       const bz = hub.z + Math.sin(a) * r;
-      if (this.model('town/stall-bench', bx, 0, bz, Math.atan2(hub.x - bx, hub.z - bz), 0.55, { solid: true, wall: 0.5 })) {
+      if (this.model('town/stall-bench', bx, 0, bz, Math.atan2(hub.x - bx, hub.z - bz) + Math.PI / 2, 0.55, { solid: true, wall: 0.5 })) {
         this.hangouts.push({ kind: 'sit', x: bx, z: bz, face: Math.atan2(hub.x - bx, hub.z - bz), seat: 0.55 });
       }
     }
