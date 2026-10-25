@@ -86,7 +86,7 @@ describe('FollowCamera', () => {
   });
 
   it('looks ahead along the velocity', () => {
-    const cam = new PerspectiveCamera();
+    const cam = new PerspectiveCamera(55, 2);
     const f = new FollowCamera(cam, canvas);
     for (let i = 0; i < 120; i++) f.follow(new Vector3(), 1 / 60, false, { x: 10, z: 0 });
     expect(cam.position.x).toBeGreaterThan(2);
@@ -109,5 +109,41 @@ describe('FollowCamera', () => {
     };
     expect(across(400 / 800)).toBeLessThan(0.75);
     expect(across(1366 / 768)).toBeGreaterThan(0.25);
+  });
+
+  it('a narrow view swings round behind a sideways run; a wide view and a held drag keep the yaw', () => {
+    const turned = (aspect: number, drag = false): number => {
+      const on = new Map<string, (e: unknown) => void>();
+      const el = { addEventListener: (t: string, h: (e: unknown) => void) => on.set(t, h), setPointerCapture: () => undefined } as unknown as HTMLElement;
+      const f = new FollowCamera(new PerspectiveCamera(55, aspect, 0.1, 900), el);
+      const p = new Vector3();
+      f.follow(p, 0, true);
+      if (drag) on.get('pointerdown')!({ clientX: 0, clientY: 0, pointerId: 1 });
+      for (let i = 0; i < 120; i++) {
+        p.x += 10 / 60;
+        f.follow(p, 1 / 60, false, { x: 10, z: 0 });
+      }
+      return f.yaw;
+    };
+    expect(turned(400 / 800)).toBeLessThan(-0.9);
+    expect(turned(1366 / 768)).toBeGreaterThan(-0.25);
+    expect(turned(400 / 800, true)).toBe(0);
+  });
+
+  it('pulled in by a wall behind, a run away from it keeps the camera behind the kid, out of the wall, the kid in the picture', () => {
+    const wall = BvhCollider.fromMeshes([new Mesh(new BoxGeometry(20, 20, 0.5).translate(0, 0, 3))]);
+    for (const aspect of [400 / 800, 1366 / 768]) {
+      const cam = new PerspectiveCamera(55, aspect, 0.1, 900);
+      const f = new FollowCamera(cam, canvas, wall);
+      const p = new Vector3();
+      f.follow(p, 0, true);
+      for (let i = 0; i < 120; i++) {
+        f.follow(p, 1 / 60, false, { x: 0, z: -10 });
+        cam.updateMatrixWorld();
+        expect(cam.position.z).toBeGreaterThan(1.5);
+        expect(cam.position.z).toBeLessThan(2.75);
+        expect(Math.abs(p.clone().setY(1.3).project(cam).y)).toBeLessThan(1);
+      }
+    }
   });
 });

@@ -13,6 +13,8 @@ const PITCH_MAX = 0.85;
 const LOOK_AHEAD_RATE = 3;
 /** Share of the half-width the look-ahead may shift the player off centre across the view. */
 const FRAME = 0.5;
+/** Views narrower than this (tan of the half-angle across) swing round behind a sideways run, the narrower the more (a portrait phone 0.74). */
+const WIDE = 1;
 /** Collision: samples along the sight line, the clearance kept from walls, how fast it eases back out, the closest it comes, the fan. */
 const PROBES = 10;
 const CLEARANCE = 0.3;
@@ -38,6 +40,9 @@ export class FollowCamera {
   private centre = 0;
   private aheadX = 0;
   private aheadZ = 0;
+  private dragging = false;
+  /** Look-ahead along the view when the last probe started. */
+  private probedAlong = 0;
   private readonly goal = new Vector3();
   private readonly dir = { x: 0, z: 0 };
   private readonly look = new Vector3();
@@ -54,6 +59,7 @@ export class FollowCamera {
     canvas.addEventListener('pointerdown', (e) => {
       lastX = e.clientX;
       lastY = e.clientY;
+      this.dragging = true;
       canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointermove', (e) => {
@@ -66,6 +72,7 @@ export class FollowCamera {
     });
     const end = (): void => {
       lastX = null;
+      this.dragging = false;
     };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
@@ -79,32 +86,46 @@ export class FollowCamera {
     );
   }
 
-  /** Moves towards the spot behind `target`, looking ahead along `velocity`; `snap` jumps there at once. */
+  /** Moves towards the spot behind `target`, looking ahead along `velocity` (a narrow view also turns with it); `snap` jumps there at once. */
   follow(target: Vector3, dt: number, snap = false, velocity?: { readonly x: number; readonly z: number }): void {
     const k = snap ? 1 : 1 - Math.exp(-LOOK_AHEAD_RATE * dt);
     this.aheadX += ((velocity ? velocity.x * Feel.lookAhead : 0) - this.aheadX) * k;
     this.aheadZ += ((velocity ? velocity.z * Feel.lookAhead : 0) - this.aheadZ) * k;
+    const wide = Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect;
+    const swing = 1 - wide / WIDE;
+    if (velocity && !snap && !this.dragging && swing > 0) {
+      // A leash on a narrow view: it turns by part of the angle a sideways run sweeps round it.
+      this.yaw -= (swing * (velocity.x * Math.cos(this.yaw) - velocity.z * Math.sin(this.yaw)) * dt) / this.distance;
+    }
     // Across the view the look-ahead stays inside the frame (narrow screens, a pulled-in camera).
     const rx = Math.cos(this.yaw);
     const rz = -Math.sin(this.yaw);
     const across = this.aheadX * rx + this.aheadZ * rz;
-    const half = FRAME * Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect;
+    const half = FRAME * wide;
     // Soft cap: nearly unchanged well inside it; recapped below once the reach is known.
     const was = across / (half * this.reach);
     const kept = across / Math.sqrt(Math.sqrt(1 + was * was * was * was)) - across;
-    this.look.set(target.x + this.aheadX + rx * kept, target.y + LOOK_HEIGHT, target.z + this.aheadZ + rz * kept);
+    // A camera pulled in closer than the default looks ahead (and lags) in proportion, so it never ends up beside or past the player.
+    const near = Math.min(1, this.reach / DISTANCE);
+    const ahead = this.aheadX * rz - this.aheadZ * rx;
+    const along = ahead * near;
+    const trim = ahead - along;
+    this.look.set(target.x + this.aheadX + rx * kept - rz * trim, target.y + LOOK_HEIGHT, target.z + this.aheadZ + rz * kept + rx * trim);
     this.sinceProbe += dt;
     if (snap) {
       this.pending = 0;
       this.sinceProbe = 0;
+      this.probedAlong = along;
       this.clear = this.clearDistance(this.distance);
     } else if (this.pending > 0) {
       this.probeSide();
     } else if (this.sinceProbe >= PROBE_EVERY) {
       this.sinceProbe = 0;
+      this.probedAlong = along;
       this.probeCentre();
     }
-    const clear = this.clear;
+    // A blocked probe holds the wall where it found it: a look point moved since then moves the clear reach with it.
+    const clear = this.clear < this.distance ? Math.max(NEAREST, this.clear + along - this.probedAlong) : this.clear;
     this.reach = snap || clear < this.reach ? clear : damp(this.reach, clear, EASE_OUT, dt);
     const d = this.reach;
     const now = across / (half * d);
@@ -113,7 +134,7 @@ export class FollowCamera {
     // On the probed sight line, so a pulled-in camera rises towards the look point instead of dropping below what was probed.
     const y = this.look.y + ((this.pitch * this.distance - LOOK_HEIGHT) * d) / this.distance;
     this.goal.set(this.look.x + Math.sin(this.yaw) * d, y, this.look.z + Math.cos(this.yaw) * d);
-    const cam = this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp(-FOLLOW * dt));
+    const cam = this.camera.position.lerp(this.goal, snap ? 1 : 1 - Math.exp((-FOLLOW * dt) / near));
     // The eased camera lags its goal; it never trails further out than the clear reach.
     // Math.hypot allocates its argument list; the sum of squares does not.
     const ox = cam.x - this.look.x;
