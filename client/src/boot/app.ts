@@ -531,6 +531,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     },
     stopOverview: () => {
       overview = false;
+      stage.sky.overview(null);
     },
     follow: (target) => {
       focus = target;
@@ -777,6 +778,7 @@ function frameOverview(stage: Stage, layout: WorldLayout): void {
   const pull = Math.pow(Math.max(1, 1.4 / stage.camera.aspect), 0.6);
   stage.camera.position.set(cx - extent * 0.45 * pull, extent * 0.8 * Math.pow(pull, 2), cz + extent * 1.35 * Math.pow(pull, 0.8));
   stage.camera.lookAt(cx, -2, cz + extent * 0.12);
+  stage.sky.overview({ x: cx, z: cz, extent });
   const fog = stage.scene.fog;
   if (fog instanceof Fog) {
     const d = stage.camera.position.distanceTo(new Vector3(cx, 0, cz));

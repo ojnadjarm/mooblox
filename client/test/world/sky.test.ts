@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLOUD_HIGH, CLOUD_RING, cloudPuffs } from '../../src/world/sky-data';
+import { CLOUD_HIGH, CLOUD_RING, cloudPuffs, overviewPuffs } from '../../src/world/sky-data';
 
 describe('cloud layer design', () => {
   it('is the same for the same seed', () => {
@@ -18,13 +18,26 @@ describe('cloud layer design', () => {
     }
   });
 
-  it('builds each cloud from 3-5 lumps, biggest first', () => {
-    const all = cloudPuffs(7);
-    expect(all).toHaveLength(CLOUD_RING.count + CLOUD_HIGH.count);
+  it('builds each cloud as a cumulus of 4-7 billows on one flat base, biggest first', () => {
+    const all = [...cloudPuffs(7), ...overviewPuffs(7)];
+    expect(all).toHaveLength(CLOUD_RING.count + CLOUD_HIGH.count + 3);
     for (const c of all) {
-      expect(c.lumps.length).toBeGreaterThanOrEqual(3);
-      expect(c.lumps.length).toBeLessThanOrEqual(5);
+      expect(c.lumps.length).toBeGreaterThanOrEqual(4);
+      expect(c.lumps.length).toBeLessThanOrEqual(7);
       expect(Math.max(...c.lumps.map((l) => l.r))).toBe(c.lumps[0]!.r);
+      expect(Math.min(...c.lumps.map((l) => l.dy - l.r * 0.8))).toBeLessThan(0);
+      const width = Math.max(...c.lumps.map((l) => l.dx + l.r)) - Math.min(...c.lumps.map((l) => l.dx - l.r));
+      const height = Math.max(...c.lumps.map((l) => l.dy + l.r * 0.8));
+      expect(width / height).toBeGreaterThan(1.8);
+      expect(width / height).toBeLessThan(3.6);
+    }
+  });
+
+  it('puts the overview clouds over the sea beyond the islands, below the map camera', () => {
+    for (const c of overviewPuffs(7)) {
+      expect(Math.hypot(c.x, c.z)).toBeGreaterThan(1.2);
+      expect(c.y).toBeLessThan(0.4);
+      expect(c.z).toBeLessThan(0);
     }
   });
 });

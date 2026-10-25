@@ -89,7 +89,7 @@ export const CAMPUS: Look = {
     disc: 0xfff6df,
     cloudLit: 0xfffbf2,
     cloudWarm: 0xffe2b8,
-    cloudShade: 0xc9c6e0,
+    cloudShade: 0xc4d0e8,
   },
   fog: { color: 0xfbe3c2, near: 170, far: 620 },
   sun: { color: 0xffe6bf, intensity: 2.8, dir: [0.6, 0.62, 0.5] },

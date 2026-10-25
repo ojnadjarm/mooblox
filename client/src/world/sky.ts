@@ -11,7 +11,7 @@ import {
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { cloudPuffs, type CloudPuff } from './sky-data';
+import { cloudPuffs, overviewPuffs, type CloudPuff } from './sky-data';
 import type { Look, SkyScript } from './look';
 
 type Vec = { x: number; y: number; z: number };
@@ -75,29 +75,36 @@ const DRIFT = 0.0045;
 const DOME = 800;
 
 /**
- * Designed sky: gradient dome with sun disc and halo plus one layer of faceted clouds, centred on the camera. One mesh, one
- * draw and one program: dome vertices carry `sky` = 1 (colour from `skyColour`), cloud vertices their painted colour.
+ * Designed sky: gradient dome with sun disc and halo plus soft cumulus, centred on the camera. One mesh, one draw and one
+ * program: `sky` = 1 dome (colour from `skyColour`), 0 the camera's cloud ring, 2 the overview's composed clouds (shown only
+ * while the map camera frames the archipelago, in its place).
  */
 export class Sky {
   readonly mesh: Mesh;
   private readonly drift = { value: 0 };
+  private readonly map = { value: { x: 0, y: 0, z: 0, w: 0 } };
 
   constructor(look: Look, seed: number) {
     setSkyScript(look.sky, look.sun.dir);
-    const parts = [domeGeometry(), cloudGeometry(cloudPuffs(seed), look)];
-    const domeCount = parts[0]!.getAttribute('position').count;
-    parts[0]!.setAttribute('color', new BufferAttribute(new Float32Array(domeCount * 3), 3));
+    const parts = [cloudGeometry(cloudPuffs(seed), look), domeGeometry(), cloudGeometry(overviewPuffs(seed), look)];
+    const domeCount = parts[1]!.getAttribute('position').count;
+    parts[1]!.setAttribute('color', new BufferAttribute(new Float32Array(domeCount * 3), 3));
     for (const [i, g] of parts.entries()) {
-      g.deleteAttribute('normal');
-      g.setAttribute('sky', new BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(i === 0 ? 1 : 0), 1));
+      if (g.getAttribute('normal')) g.deleteAttribute('normal');
+      g.setAttribute('sky', new BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(i), 1));
     }
     const geometry = mergeGeometries(parts, false)!;
     for (const g of parts) g.dispose();
-    this.mesh = new Mesh(geometry, skyMaterial(look.sky.disc, this.drift));
+    this.mesh = new Mesh(geometry, skyMaterial(look.sky.disc, this.drift, this.map));
     this.mesh.name = 'sky';
     // Drawn after every opaque part: depth test rejects the covered pixels before shading.
     this.mesh.renderOrder = 2;
     this.mesh.frustumCulled = false;
+  }
+
+  /** Shows the overview's clouds round the archipelago (centre, half-extent in m) instead of the ring; null = eye level. */
+  overview(frame: { x: number; z: number; extent: number } | null): void {
+    Object.assign(this.map.value, frame ? { x: frame.x, y: frame.z, z: frame.extent, w: 1 } : { w: 0 });
   }
 
   /** Turns the cloud layer by the wall clock (drifts on, whatever the frame rate). */
@@ -138,9 +145,9 @@ function domeGeometry(): BufferGeometry {
 }
 
 /** The sky's one material (no fog, no tone mapping): dome = `skyColour` plus a soft sun disc, clouds = their paint. */
-function skyMaterial(disc: number, drift: { value: number }): ShaderMaterial {
+function skyMaterial(disc: number, drift: { value: number }, map: { value: Vec & { w: number } }): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { ...SKY_UNIFORMS, uDisc: { value: new Color(disc) }, uDrift: drift },
+    uniforms: { ...SKY_UNIFORMS, uDisc: { value: new Color(disc) }, uDrift: drift, uMap: map },
     side: DoubleSide,
     fog: false,
     toneMapped: false,
@@ -149,18 +156,26 @@ function skyMaterial(disc: number, drift: { value: number }): ShaderMaterial {
       attribute vec3 color;
       attribute float sky;
       uniform float uDrift;
+      uniform vec4 uMap;
       varying vec3 vDir;
       varying vec3 vColor;
       varying float vSky;
+      vec3 turn(vec3 p, float a) {
+        float c = cos(a), s = sin(a);
+        return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+      }
       void main() {
         vDir = position;
-        vSky = sky;
+        bool dome = abs(sky - 1.0) < 0.5;
+        vSky = dome ? 1.0 : 0.0;
         // The gradient per vertex (rings dense at the horizon); only the sun disc is per pixel.
-        vColor = sky > 0.5 ? pow(skyColour(normalize(position)), vec3(2.2)) : color;
-        float c = cos(uDrift), s = sin(uDrift);
-        vec3 cloud = vec3(cameraPosition.x, 0.0, cameraPosition.z) + vec3(c * position.x + s * position.z, position.y, -s * position.x + c * position.z);
-        vec3 world = sky > 0.5 ? cameraPosition + position * ${DOME}.0 : cloud;
+        vColor = dome ? pow(skyColour(normalize(position)), vec3(2.2)) : color;
+        vec3 world = cameraPosition + position * ${DOME}.0;
+        if (sky < 0.5) world = vec3(cameraPosition.x, 0.0, cameraPosition.z) + turn(position, uDrift);
+        if (sky > 1.5) world = vec3(uMap.x, 0.0, uMap.y) + turn(position, uDrift * 0.3) * uMap.z;
         gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+        // One cloud set at a time: the other is moved outside the clip volume.
+        if (!dome && (sky > 1.5) != (uMap.w > 0.5)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 skySun;
@@ -176,7 +191,13 @@ function skyMaterial(disc: number, drift: { value: number }): ShaderMaterial {
   });
 }
 
-/** Every cloud as faceted lumps with flat bottoms, painted lit on top, warm on the sun side and lavender underneath. */
+/** Billows are spheres squashed to this height, so a cumulus reads round, not flat. */
+const SQUASH = 0.8;
+
+/**
+ * Every cloud as smooth-shaded billows on one flat base: bright where they face up and high in the cloud, warm on the sun
+ * side, cool blue-grey at the base and underneath (the concepts' soft cumulus).
+ */
 function cloudGeometry(puffs: readonly CloudPuff[], look: Look): BufferGeometry {
   const sun = new Vector3(...look.sun.dir).normalize();
   const lit = new Color(look.sky.cloudLit);
@@ -186,26 +207,29 @@ function cloudGeometry(puffs: readonly CloudPuff[], look: Look): BufferGeometry 
   const n = new Vector3();
   const c = new Color();
   for (const p of puffs) {
-    for (const [i, lump] of p.lumps.entries()) {
-      // The main lump rounder, the shoulders as plain facets (they sit in front of it).
-      const g = new IcosahedronGeometry(lump.r, i === 0 ? 1 : 0);
+    const top = Math.max(...p.lumps.map((l) => l.dy + l.r * SQUASH));
+    for (const lump of p.lumps) {
+      const g = new IcosahedronGeometry(1, 1);
       g.deleteAttribute('uv');
       const pos = g.getAttribute('position') as BufferAttribute;
+      const nor = g.getAttribute('normal') as BufferAttribute;
+      const height = new Float32Array(pos.count);
       for (let i = 0; i < pos.count; i++) {
-        const y = pos.getY(i) * 0.62;
-        pos.setXYZ(i, pos.getX(i) * 1.15 + lump.dx, Math.max(y, -lump.r * 0.22) + lump.dy, pos.getZ(i) + lump.dz);
+        n.fromBufferAttribute(pos, i);
+        const y = n.y * lump.r * SQUASH + lump.dy;
+        height[i] = Math.max(y, 0) / top;
+        pos.setXYZ(i, n.x * lump.r + lump.dx, Math.max(y, 0), n.z * lump.r + lump.dz);
+        if (y < 0) nor.setXYZ(i, 0, -1, 0);
+        else nor.setXYZ(i, n.x, n.y / SQUASH, n.z);
       }
       g.rotateY(p.yaw);
       g.translate(p.x, p.y, p.z);
-      g.computeVertexNormals();
-      const nor = g.getAttribute('normal') as BufferAttribute;
       const col = new Float32Array(pos.count * 3);
       for (let i = 0; i < pos.count; i++) {
-        n.fromBufferAttribute(nor, i);
-        const up = n.y;
-        const s = n.dot(sun);
-        c.copy(shade).lerp(lit, Math.min(1, Math.max(0, 0.55 + up * 0.5)));
-        c.lerp(warm, Math.max(0, s) * 0.35);
+        n.fromBufferAttribute(nor, i).normalize();
+        const h = height[i]!;
+        c.copy(shade).lerp(lit, Math.min(1, Math.max(0, 0.45 + 0.45 * h + 0.35 * n.y)));
+        c.lerp(warm, Math.max(0, n.dot(sun)) * 0.3 * h);
         col.set([c.r, c.g, c.b], i * 3);
       }
       g.setAttribute('color', new BufferAttribute(col, 3));

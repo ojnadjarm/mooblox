@@ -76,7 +76,7 @@ Each colour has a lit and a shade value; the generator writes lit on up-facing a
 | Water | `#5ED8D2` shallow | `#4688D2` deep | `#54B6DB` mid; foam `#FFFFFF`; on screen deep `#2A88D2` (Neutral tone mapping lifts the darkest channel off, so author it higher) |
 | Sky | `#3A8FDB` zenith, `#7DBDEB` upper | `#FBE3C2` horizon | warm `#FFD39A` glow under and round the sun, `#FFF6DF` sun disc |
 | Far sea | `#B2E0EE` at the horizon | `#4688D2` below | thin `#F3EBD9` line where sea meets sky; pale to cerulean over the first 3-6 degrees below it |
-| Clouds | `#FFFBF2` lit, `#FFE2B8` sun side | `#C9C6E0` underside | faceted cumulus, 3-5 lumps, flat bottoms, drifting |
+| Clouds | `#FFFBF2` lit, `#FFE2B8` sun side | `#C4D0E8` base and underside | soft cumulus: a row of 3-5 billows on one flat base, 1-2 crowns on top, smooth-shaded, drifting |
 | Shadow tint | `#4B5A8C` | | hemisphere ground colour and baked AO tint |
 | Ink | `#2B2F3A` | | sign text, window frames only |
 
@@ -97,7 +97,9 @@ saturated things in a view; everything else sits a step calmer.
    pale sky-blue band at the horizon (dome below the horizon, water by camera distance 60-700 m), one bright line where it
    meets the sky; the cream lives only in the sky. Never a saturated pure-blue sea.
 3. **Clouds are always in view**: a ring just above an eye-level horizon (4-15 degrees) plus a few higher, drifting slowly.
-   Sky and clouds are one mesh, one draw, one program on every tier.
+   Sky and clouds are one mesh, one draw, one program on every tier. Clouds are soft (round 17, the concepts' cumulus):
+   billows wider than tall (about 2.5:1), bright where they face up and high in the cloud, cool blue-grey at the flat base;
+   never thin faceted slabs. The overview frames three of them over the far sea at the top of the map, seen from above.
 4. **Warm key, cool-violet bounce**: sun `#FFE6BF` from about 38 degrees, hemisphere sky `#DCE8F8` over a violet bounce
    `#8A7290`, so faces turned from the sun stay warm-violet, never grey. Neutral tone mapping keeps the palette's hue.
 5. **Life in every view**: gulls wheel over the player's island, water twinkles on the sun side, flags and trees sway.
@@ -115,7 +117,7 @@ The contrast between soft and crisp is the point. Baked into the shared models f
 
 | Rule | Objects | How |
 | --- | --- | --- |
-| Soft | tree crowns, bushes | smooth-shaded normals (puffy), no extra triangles |
+| Soft | tree crowns, bushes, clouds | smooth-shaded normals (puffy), no extra triangles |
 | Round | hedges, signs, lamps, barrels, pots, planters, fountains, mushrooms, tents, boats; island rims; plot pads | one bevel + smooth normals; rims a rolled grass lip; pads rounded corners |
 | Soft edges | buildings, market stalls, roofs | one chamfer on long edges only (wall corners, eaves, ridges) |
 | Bulging | house roofs, landmark domes, tent and keeper's-house roofs, canopies | slopes split 3x3 and pushed out most at mid-slope, smooth-shaded (pillowy); spires keep crisp hips with a flared, curved profile; mansard roofs stay flat |
