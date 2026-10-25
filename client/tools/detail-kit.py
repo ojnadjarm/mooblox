@@ -30,6 +30,7 @@ STONE = (0.68, 0.64, 0.6)        # factor on a white texel: light warm stone (qu
 PLINTH = (0.5, 0.46, 0.45)      # plinth stone, a step darker
 TIMBER = (0.36, 0.17, 0.07)     # window frames and trims
 DOOR = (0.22, 0.1, 0.04)        # door boards
+IRON = (0.06, 0.056, 0.055)     # lamp post, cap and lantern cage: dark iron
 
 
 def texel(img, mats):
@@ -176,6 +177,18 @@ def collars(bm, post, zs, band, out, slot, uv):
             f[flat] = 1
             for lo in f.loops:
                 lo[uv].uv = luv
+
+
+def cage(bm, s, mi, uv, luv):
+    """Four iron corner bars round the lantern glass under the widened cap, clear of the district's glow cylinder
+    (radius 0.102 s) at any yaw."""
+    for v in {v for f in bm.faces for v in f.verts if v.co.z > 1.48 * s}:
+        v.co.x, v.co.y = v.co.x * 1.3, v.co.y * 1.3
+    for x, y in ((1, 1), (1, -1), (-1, -1), (-1, 1)):
+        c = Vector((x * 0.088 * s, y * 0.088 * s, 0))
+        half = Vector((0.007 * s, 0.007 * s, 0))
+        block(bm, c - half + Vector((0, 0, 1.29 * s)), c + half + Vector((0, 0, 1.488 * s)), Vector((1, 0, 0)), mi, uv, luv,
+              open_=(Vector((0, 0, 1)), Vector((0, 0, -1))))
 
 
 def lighter(mat):
@@ -830,9 +843,19 @@ def detail(o, kind):
         point(bm, tops, 0.035 * size, slot)
     elif kind == 'lamp':
         s = top / 1.56
+        iron = len(me.materials)
+        me.materials.append(shade_material(me.materials[0], IRON, '-iron'))
+        me.materials.append(shade_material(me.materials[0], [c * 1.8 for c in IRON], '-iron-edge'))
+        white = texel_uv(144, 266)
+        for f in bm.faces:
+            if min(col(f, uv)) < 0.8:
+                f.material_index = iron
+                for lo in f.loops:
+                    lo[uv].uv = white
+        cage(bm, s, iron, uv, white)
         post = [f for f in bm.faces if abs(f.normal.z) < 0.3 and all(Vector((v.co.x, v.co.y)).length < 0.045 * s for v in f.verts)
                 and all(0.6 * s < v.co.z < 1.32 * s for v in f.verts) and extent([f], Vector((0, 0, 1))) > 0.3 * s]
-        collars(bm, post, (0.74 * s, 1.15 * s), 0.035 * s, 0.01 * s, slot, uv)
+        collars(bm, post, (0.74 * s, 1.15 * s), 0.035 * s, 0.01 * s, lambda i: iron + 1, uv)
         cap = max(bm.faces, key=lambda f: f.calc_center_median().z)
         dome(bm, Vector((0, 0, top - 0.004 * s)), Vector((0, 0, 1)), 0.03 * s, 0.07 * s, cap.material_index, uv, cap.loops[0][uv].uv.copy(), smooth=False)
     elif kind in ('tree', 'pine'):
