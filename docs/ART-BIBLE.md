@@ -60,8 +60,8 @@ Each colour has a lit and a shade value; the generator writes lit on up-facing a
 
 | Role | Lit | Shade | Note |
 | --- | --- | --- | --- |
-| Grass (main) | `#9BCB4E` | `#5FA866` | warm yellow-green to cool green |
-| Grass (calm lawn) | `#86C25A` | `#3E8F6E` | slightly cooler, used for open lawns |
+| Grass (main) | `#A1C270` | `#5FA866` | soft warm meadow green (on screen ~s 0.55-0.64 like the concepts, not lime) |
+| Grass (calm lawn) | `#71A35F` | `#3E8F6E` | deeper and cooler, the lawn swathes and rolled rims |
 | Path terracotta | `#E0844F` | `#B4583A` | avenues and plazas |
 | Path edging, trims | `#F4E6CC` | `#D2BC9A` | cream stone, every path and plaza edge |
 | Walls | `#F6EAD3` | `#D9C3A5` | cream plaster |

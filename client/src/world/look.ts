@@ -59,8 +59,8 @@ export interface Look {
 export const CAMPUS: Look = {
   name: 'Cosy campus island',
   palette: {
-    grass: 0x9bcb4e,
-    grassLight: 0x86c25a,
+    grass: 0xa1c270,
+    grassLight: 0x71a35f,
     leaves: [0x5db761, 0x7cc35a, 0x9bcb4e, 0x4fa866],
     dirt: 0xd39a6e,
     dirtDark: 0xa8735c,
