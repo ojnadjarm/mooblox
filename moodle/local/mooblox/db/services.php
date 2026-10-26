@@ -25,6 +25,12 @@
 defined('MOODLE_INTERNAL') || die();
 
 $functions = [
+    'local_mooblox_get_courses' => [
+        'classname' => 'local_mooblox\external\get_courses',
+        'description' => 'Returns the current user\'s courses where Mooblox is available, with progress.',
+        'type' => 'read',
+        'ajax' => true,
+    ],
     'local_mooblox_get_world' => [
         'classname' => 'local_mooblox\external\get_world',
         'description' => 'Returns the course sections, activities and completion states as world data.',

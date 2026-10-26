@@ -18,6 +18,8 @@ import { watchContext } from '../world/context-watch';
 import { liveHandle } from './live-handle';
 import { startRewards } from './rewards';
 import { startSound } from './sound';
+import { startMap } from './map';
+import { DEFAULT_MAP_BUTTON_STRINGS, mapButton } from '../ui/map-button';
 import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
 import { modelIds } from '../world/dressing';
 import { startLife } from '../world/life';
@@ -33,8 +35,17 @@ async function boot(): Promise<void> {
     throw new Error('missing #mooblox-root');
   }
   const assets = new URL(/* @vite-ignore */ './assets/', import.meta.url).href;
-  const preloaded = preloadAssets(assets, BOOT_MODELS);
   const config = readConfig(document.getElementById('mooblox-config')?.textContent);
+  if (config.mode === 'map') {
+    try {
+      await openMap(root, config, assets);
+    } catch (e) {
+      showFallback(root, `${config.wwwroot}/my/courses.php`, fallbackStrings(config.strings));
+      throw e;
+    }
+    return;
+  }
+  const preloaded = preloadAssets(assets, BOOT_MODELS);
   const fallback = () => showFallback(root, courseUrl(config.wwwroot, config.courseid), fallbackStrings(config.strings));
   try {
     await play(root, config, assets, preloaded, fallback);
@@ -42,6 +53,14 @@ async function boot(): Promise<void> {
     fallback();
     throw e;
   }
+}
+
+/** Builds the course map of every course the user can play. */
+async function openMap(root: HTMLElement, config: PlayConfig, assets: string): Promise<void> {
+  const gateway = new AjaxGateway(config);
+  keepSessionAlive(gateway, SESSION_TOUCH_MS, (e) => console.error('mooblox: session touch failed', e));
+  const map = await startMap(root, { gateway, strings: config.strings, assets, sound: config.sound, navigate: (url) => location.assign(url) });
+  Object.assign(window, { mooblox: map });
 }
 
 /** Builds the world and its people for the course in `config`. */
@@ -75,6 +94,7 @@ async function play(root: HTMLElement, config: PlayConfig, assets: string, prelo
   const keep = (l: typeof look) => gateway.savePreference(AVATAR_PREFERENCE, encodeLook(l));
   const picker = startAvatarPicker(view, player, dressed, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
   const rewards = await startRewards(view, interaction, { gateway, courseId: config.courseid, userId: config.userid, strings, assets, player, outfitter: dressed, picker });
+  if (config.mapurl) mapButton(root, config.mapurl, { ...DEFAULT_MAP_BUTTON_STRINGS, ...strings });
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
   const sound = startSound(view, player, { assets, stored: config.sound, gateway, strings, store, rewards: rewards.store, bubble: guide.bubble, collectibles: () => rewards.collectibles, goal: () => rewards.goal, badges: rewards.badges });
   Object.assign(window, { mooblox: liveHandle(view, { view, player, interaction, store, guide, picker, rewards, sound }) });

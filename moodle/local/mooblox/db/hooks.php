@@ -26,6 +26,10 @@ defined('MOODLE_INTERNAL') || die();
 
 $callbacks = [
     [
+        'hook' => \core\hook\navigation\primary_extend::class,
+        'callback' => [\local_mooblox\hook_callbacks::class, 'primary_extend'],
+    ],
+    [
         'hook' => \core\hook\navigation\secondary_extend::class,
         'callback' => [\local_mooblox\hook_callbacks::class, 'secondary_extend'],
     ],

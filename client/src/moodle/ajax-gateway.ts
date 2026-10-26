@@ -4,6 +4,7 @@ import type { ClaimDto, LookDto } from '../domain/rewards-dto';
 import { assertRewardsDto, toLook, toLookDto, toRewards } from '../domain/rewards-mapper';
 import { toWorld } from '../domain/mapper';
 import type { WorldData } from '../domain/types';
+import { toMapCourses, type CourseListGateway, type MapCourse } from '../map/courses';
 import type { MoodleGateway } from './gateway';
 import { MoodleError } from './moodle-error';
 
@@ -15,7 +16,7 @@ export interface AjaxSession {
 type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 
 /** Gateway over lib/ajax/service.php with the user's session and sesskey. */
-export class AjaxGateway implements MoodleGateway {
+export class AjaxGateway implements MoodleGateway, CourseListGateway {
   constructor(
     private readonly session: AjaxSession,
     private readonly fetchFn: Fetch = (input, init) => fetch(input, init),
@@ -57,6 +58,15 @@ export class AjaxGateway implements MoodleGateway {
 
   async setLook(look: Look): Promise<Look> {
     return toLook(await this.call<LookDto>('local_mooblox_set_look', { ...toLookDto(look) }));
+  }
+
+  async getCourses(): Promise<MapCourse[]> {
+    const dto = await this.call<unknown>('local_mooblox_get_courses', {});
+    try {
+      return toMapCourses(dto);
+    } catch (e) {
+      throw new MoodleError('protocol', `local_mooblox_get_courses: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private async call<T>(methodname: string, args: Record<string, unknown>): Promise<T> {

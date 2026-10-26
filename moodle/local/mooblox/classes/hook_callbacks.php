@@ -33,6 +33,26 @@ namespace local_mooblox;
  */
 class hook_callbacks {
     /**
+     * Adds the Mooblox course map to the primary navigation for logged-in users.
+     *
+     * @param \core\hook\navigation\primary_extend $hook
+     */
+    public static function primary_extend(
+        \core\hook\navigation\primary_extend $hook
+    ): void {
+        if (!isloggedin() || isguestuser() || !get_config('local_mooblox', 'enabled')) {
+            return;
+        }
+        $hook->get_primaryview()->add(
+            get_string('pluginname', 'local_mooblox'),
+            new \moodle_url('/local/mooblox/index.php'),
+            \navigation_node::TYPE_ROOTNODE,
+            null,
+            'local_mooblox'
+        );
+    }
+
+    /**
      * Adds the MOOBLOX tab after the course home tab for users who may play.
      *
      * @param \core\hook\navigation\secondary_extend $hook
