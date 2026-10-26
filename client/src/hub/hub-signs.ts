@@ -15,6 +15,7 @@ export type SignEntry =
       readonly trophies: number;
     }
   | { readonly kind: 'display'; readonly title: string; readonly value: string; readonly sub: string }
+  | { readonly kind: 'number'; readonly value: string }
   | { readonly kind: 'blank' };
 
 export const CELL_W = 512;
@@ -61,6 +62,7 @@ export class SignAtlas {
       c.translate((i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H);
       if (e.kind === 'pad') this.pad(e);
       else if (e.kind === 'display') this.display(e);
+      else if (e.kind === 'number') this.number(e.value);
       c.restore();
     });
     this.texture.needsUpdate = true;
@@ -125,6 +127,28 @@ export class SignAtlas {
       c.fillStyle = '#fff';
       c.fillText(e.isNew, CELL_W - 16 - w, 32);
     }
+  }
+
+  /** The lift's floor number: a white numeral on a teal disc with a cream rim, centred in the cell. */
+  private number(value: string): void {
+    const c = this.ctx;
+    const r = CELL_H / 2 - 6;
+    c.beginPath();
+    c.arc(CELL_W / 2, CELL_H / 2, r, 0, Math.PI * 2);
+    c.fillStyle = CREAM;
+    c.fill();
+    c.beginPath();
+    c.arc(CELL_W / 2, CELL_H / 2, r - 16, 0, Math.PI * 2);
+    c.fillStyle = TEAL;
+    c.fill();
+    const fit = wrap(c, value, r * 1.5, 170, 1);
+    c.font = `900 ${fit.size}px ${UI_FONT}`;
+    c.fillStyle = '#fff';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(fit.text[0] ?? '', CELL_W / 2, CELL_H / 2 + 8);
+    c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
   }
 
   private display(e: Extract<SignEntry, { kind: 'display' }>): void {

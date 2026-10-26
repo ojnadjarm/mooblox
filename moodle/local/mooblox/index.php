@@ -52,13 +52,13 @@ $config = [
     'rev' => (int) $rev,
     'strings' => [],
 ];
-$keys = ['crystals', 'done', 'down', 'empty_text', 'empty_title', 'free', 'gems', 'hint', 'list', 'new', 'stars', 'title', 'trophies',
-    'up'];
+$keys = ['crystals', 'done', 'down', 'empty_text', 'empty_title', 'free', 'gems', 'hint', 'lift_go', 'list', 'new', 'stars', 'title',
+    'trophies', 'up'];
 foreach ($keys as $key) {
     $config['strings']['hub_' . $key] = get_string('hub_' . $key, 'local_mooblox');
 }
-$placeholders = ['floor' => (object) ['floor' => '{floor}', 'floors' => '{floors}'], 'level' => '{level}', 'progress' => '{progress}',
-    'warping' => '{name}', 'xp' => '{xp}'];
+$placeholders = ['floor' => (object) ['floor' => '{floor}', 'floors' => '{floors}'], 'level' => '{level}', 'lift' => '{floor}',
+    'progress' => '{progress}', 'warping' => '{name}', 'xp' => '{xp}'];
 foreach ($placeholders as $key => $a) {
     $config['strings']['hub_' . $key] = get_string('hub_' . $key, 'local_mooblox', $a);
 }

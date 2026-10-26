@@ -7,6 +7,8 @@ export interface HubStrings {
   readonly hub_free: string;
   readonly hub_new: string;
   readonly hub_floor: string;
+  readonly hub_lift: string;
+  readonly hub_lift_go: string;
   readonly hub_up: string;
   readonly hub_down: string;
   readonly hub_gems: string;
@@ -23,12 +25,14 @@ export interface HubStrings {
 
 export const DEFAULT_HUB_STRINGS: HubStrings = {
   hub_title: 'Your worlds',
-  hub_hint: 'Walk onto a portal pad to jump into a world',
+  hub_hint: 'Walk through a portal to jump into a world',
   hub_progress: '{progress}% done',
   hub_done: 'Finished!',
   hub_free: 'Explore freely',
   hub_new: 'New!',
   hub_floor: 'Floor {floor} of {floors}',
+  hub_lift: 'Lift to floor {floor}',
+  hub_lift_go: 'Go',
   hub_up: 'Floor above',
   hub_down: 'Floor below',
   hub_gems: 'Gems',

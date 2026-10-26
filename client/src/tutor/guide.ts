@@ -17,6 +17,8 @@ const CSS = `
 .mooblox-bubble-go { display: block; margin-top: 8px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 0;
   background: #1e88e5; color: #fff; font: 800 15px ${UI_FONT}; cursor: pointer; }
 .mooblox-bubble-go[hidden] { display: none; }
+.mooblox-bubble-go kbd { font: inherit; background: rgba(255, 255, 255, .25); border-radius: 6px; padding: 0 7px; margin-right: 8px; }
+@media (pointer: coarse) { .mooblox-bubble-go kbd { display: none; } }
 `;
 
 /** Labels the guide shows besides its lines. */
@@ -45,6 +47,7 @@ export class Guide {
   private talks = 0;
   private near = 0;
   private readonly head = new Vector3();
+  private readonly onShowMe: (activityId: number) => void;
 
   constructor(
     readonly avatar: Avatar,
@@ -59,13 +62,24 @@ export class Guide {
     this.bubble.className = 'mooblox-bubble';
     this.bubble.setAttribute('role', 'status');
     this.bubble.innerHTML = `<span class="mooblox-bubble-name"></span><div class="mooblox-bubble-text"></div>
-      <button type="button" class="mooblox-bubble-go"></button>`;
+      <button type="button" class="mooblox-bubble-go"><kbd>E</kbd><span></span></button>`;
     this.bubble.querySelector('.mooblox-bubble-name')!.textContent = strings.guide;
     this.text = this.bubble.querySelector('.mooblox-bubble-text')!;
     this.go = this.bubble.querySelector('.mooblox-bubble-go')!;
-    this.go.textContent = strings.showme;
-    this.go.addEventListener('click', () => this.line?.activityId && onShowMe(this.line.activityId));
+    this.go.querySelector('span')!.textContent = strings.showme;
+    this.go.addEventListener('click', () => this.showMe());
+    this.onShowMe = onShowMe;
     host.appendChild(this.bubble);
+  }
+
+  /** Metres to the player while the bubble offers "Show me", else null (what the E key reads). */
+  showMeDistance(player: Vector3): number | null {
+    return !this.bubble.hidden && !this.go.hidden ? this.avatar.root.position.distanceTo(player) : null;
+  }
+
+  /** Walks the player to the line's activity. */
+  showMe(): void {
+    if (this.line?.activityId) this.onShowMe(this.line.activityId);
   }
 
   say(line: TutorLine): void {

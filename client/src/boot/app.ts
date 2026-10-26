@@ -19,7 +19,7 @@ import { FencedCollider } from '../player/fenced-collider';
 import { Dust } from '../player/dust';
 import { FollowCamera } from '../player/follow-camera';
 import { GuidedWalk } from '../player/guided-walk';
-import { CombinedInput, KeyboardInput, type InputSource } from '../player/input';
+import { CombinedInput, GatedInput, KeyboardInput, type InputSource } from '../player/input';
 import { MouseLook } from '../player/mouse-look';
 import { Player } from '../player/player';
 import { AccessFence, closedSections } from '../world/access-fence';
@@ -56,6 +56,7 @@ import { Palette } from '../world/palette';
 import { AvatarPicker, type AvatarPickerStrings } from '../ui/avatar-picker';
 import { BookController } from '../ui/book-controller';
 import { TouchControls } from '../ui/touch-controls';
+import { eKey } from '../ui/e-key';
 import { DEFAULT_LOOK_TIP_STRINGS, LookTip, type LookTipStrings } from '../ui/look-tip';
 import { plotRoute, STAND_OFF } from '../world/plot-route';
 import { WalkGrid } from '../world/walk-grid';
@@ -691,7 +692,7 @@ const SPAWN_HEIGHT = 2;
 const SHADOW_RADIUS = 30;
 
 /** The local player plus its guided walk and, on PC, its mouse-look. */
-export type PlayerRig = Player & { readonly guided: GuidedWalk; readonly mouseLook: MouseLook | null };
+export type PlayerRig = Player & { readonly guided: GuidedWalk; readonly mouseLook: MouseLook | null; readonly freeze: GatedInput };
 
 /** Loads the avatar and starts the local player at the spawn, driven by the keyboard plus `inputs`; a mouse gets pointer-lock look. */
 export async function startPlayer(
@@ -712,7 +713,8 @@ export async function startPlayer(
   const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
   let at: { x: number; z: number } = spawn;
   const guided = new GuidedWalk(new CombinedInput([new KeyboardInput(), touch, ...inputs]), () => at, camera);
-  const player = new Player(avatar, collider, spawn, guided, camera);
+  const gate = new GatedInput(guided);
+  const player = new Player(avatar, collider, spawn, gate, camera);
   at = player.body.position;
   const mouseLook = startMouseLook(view, camera, lookStrings);
   view.follow(player.body.position);
@@ -734,7 +736,7 @@ export async function startPlayer(
     dust?.update(dt);
     view.stage.focusShadow(player.body.position.x, player.body.position.z, SHADOW_RADIUS);
   });
-  return Object.assign(player, { guided, mouseLook });
+  return Object.assign(player, { guided, mouseLook, freeze: gate });
 }
 
 /** PC mouse-look with its corner tip, when the device has a mouse: the panels free the cursor while open. */
@@ -819,6 +821,7 @@ export async function startGuide(
   guide.say(tutor.greet({ world: course.store.world ?? view.world }));
   course.store.subscribe((world) => guide.say(tutor.nextStep({ world })));
   view.onFrame((dt) => guide.update(dt, player.avatar.root.position));
+  eKey().add({ distance: () => (view.gate.isPaused ? null : guide.showMeDistance(player.avatar.root.position)), run: () => guide.showMe() });
   return guide;
 }
 

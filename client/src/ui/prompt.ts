@@ -36,7 +36,7 @@ export class ActivityPrompt {
   private readonly text: HTMLElement;
   private readonly go: HTMLButtonElement;
 
-  constructor(host: HTMLElement, onOpen: () => void) {
+  constructor(host: HTMLElement, onOpen: () => void, label = 'Open') {
     injectStyle('mooblox-prompt-style', CSS);
     this.element = document.createElement('div');
     this.element.className = 'mooblox-prompt';
@@ -47,6 +47,7 @@ export class ActivityPrompt {
     host.appendChild(this.element);
     this.text = this.element.querySelector('.mooblox-prompt-text')!;
     this.go = this.element.querySelector('.mooblox-prompt-go')!;
+    this.go.querySelector('span')!.textContent = label;
     this.go.addEventListener('click', onOpen);
   }
 

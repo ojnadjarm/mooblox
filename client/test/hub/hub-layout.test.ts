@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { archSpots, displaySpots, floorCount, floorCourses, HUB, onLift, padOf, padSpots, padUnder, PADS_PER_FLOOR, spawnSpot } from '../../src/hub/hub-layout';
+import { archSpots, displaySpots, floorCount, floorCourses, HUB, onLift, padOf, padSpots, PADS_PER_FLOOR, portalAt, spawnSpot } from '../../src/hub/hub-layout';
 
 const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -37,9 +37,24 @@ describe('hub layout', () => {
     expect(onLift(spawnSpot(null).x, spawnSpot(null).z)).toBe(true);
     padSpots().forEach((p, i) => {
       const s = spawnSpot(i);
-      expect(padUnder(s.x, s.z)).toBe(-1);
+      expect(portalAt(s.x, 0.3, s.z)).toBe(-1);
       expect(dist(s, p)).toBeLessThan(HUB.padRadius + 2);
-      expect(padUnder(p.x, p.z)).toBe(i);
+      expect(portalAt(p.x, 0.3, p.z)).toBe(-1);
+    });
+  });
+
+  it('warps only once the kid touches a portal fluid, from its front', () => {
+    archSpots().forEach((a, i) => {
+      const at = (forward: number, side = 0) => {
+        const fx = Math.sin(a.yaw);
+        const fz = Math.cos(a.yaw);
+        return portalAt(a.x + fx * forward + fz * side, 0.35, a.z + fz * forward - fx * side);
+      };
+      expect(at(1.5)).toBe(-1);
+      expect(at(0.5)).toBe(i);
+      expect(at(0.5, 1.2)).toBe(i);
+      expect(at(0.5, 2.05)).toBe(-1);
+      expect(at(-2)).toBe(-1);
     });
   });
 });

@@ -230,6 +230,8 @@ export interface Dressing {
   readonly hall: HallSite | null;
   /** Spot on the spawn plaza for the class goal monument, facing the plaza centre, or null. */
   readonly monument: HallSite | null;
+  /** Spot on the spawn hub for the return portal to the hub of worlds (arch front facing the plaza), or null. */
+  readonly portal: HallSite | null;
 }
 
 /** A round site and the yaw its open side faces (the hub centre). */
@@ -242,6 +244,8 @@ export interface HallSite {
 
 /** Trophy hall site radii tried on the spawn hub, largest first. */
 const HALL_RADII = [3.6, 3.1, 2.6];
+/** Return portal: footprint radius round its arch, the clear approach's distance in front and its radius. */
+const RETURN_PORTAL = { r: 3.1, approach: 2.6, clear: 1.6 } as const;
 /** Monument footprint radius and its distance from the plaza centre (between the spawn pad and the plaza rim). */
 const MONUMENT_R = 1.4;
 const MONUMENT_D = 4.9;
@@ -362,6 +366,7 @@ class Designer {
   private start: { x: number; z: number; face: number } | null = null;
   private hall: HallSite | null = null;
   private monument: HallSite | null = null;
+  private portal: HallSite | null = null;
   private frame: FrameArc[] = [];
   /** Waterline rocks of the current island's cliff, laid in `shore` once its bridges and dock are known. */
   private toes: CliffToe[] = [];
@@ -420,6 +425,7 @@ class Designer {
       if (i === 0) {
         this.hall = this.hallSite(hub);
         this.monument = this.monumentSite(hub);
+        this.portal = this.portalSite(hub);
         this.plazaBenches(hub);
       }
       const stops = this.waysides(hub, this.walks.filter((w) => w.ax === hub.x && w.az === hub.z), i === 0 ? [hub] : []);
@@ -453,6 +459,7 @@ class Designer {
       occupancy: this.occ,
       hall: this.hall,
       monument: this.monument,
+      portal: this.portal,
     };
   }
 
@@ -677,6 +684,32 @@ class Designer {
           const z = hub.z + Math.sin(a) * d;
           if (this.near(x, z, r) || this.nearBridge(x, z, r + 1.6) || this.pathIndex.within(x, z, r + 0.5)) continue;
           this.reserve(x, z, r + 0.4);
+          return { x, z, r, face: Math.atan2(hub.x - x, hub.z - z) };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The return portal's site on the spawn hub: outside the plaza frame, on flat lawn off every bridge line and path, sideways
+   * from the spawn so the kid sees it ahead; its arch and a clear approach in front are reserved; no random draws.
+   */
+  private portalSite(hub: Circle): HallSite | null {
+    const back = this.focus ? Math.atan2(this.focus.z - hub.z, this.focus.x - hub.x) : 0;
+    const { r, approach, clear } = RETURN_PORTAL;
+    for (let d = FRAME.r1 + approach + 1.2; d <= hub.radius - r - 1.6; d += 0.5) {
+      for (let off = 1.0; off <= Math.PI - 0.6; off += 0.08) {
+        for (const sign of [1, -1]) {
+          const a = back + sign * off;
+          const x = hub.x + Math.cos(a) * d;
+          const z = hub.z + Math.sin(a) * d;
+          const fx = hub.x + Math.cos(a) * (d - approach);
+          const fz = hub.z + Math.sin(a) * (d - approach);
+          if (this.near(x, z, r) || this.near(fx, fz, clear) || this.nearBridge(x, z, r + 1.6) || this.nearBridge(fx, fz, clear + 0.5)) continue;
+          if (this.pathIndex.within(x, z, r + 0.5)) continue;
+          this.reserve(x, z, r);
+          this.reserve(fx, fz, clear);
           return { x, z, r, face: Math.atan2(hub.x - x, hub.z - z) };
         }
       }

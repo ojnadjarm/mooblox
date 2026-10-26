@@ -6,13 +6,13 @@ import { encodeSound, parseSound, SOUND_PREFERENCE } from '../audio/settings';
 import { MUSIC } from '../audio/sounds';
 import { byLastAccess, hubTotals, type CourseListGateway, type HubCourse } from '../hub/courses';
 import { HubHud } from '../hub/hub-hud';
-import { floorCount, floorCourses, HUB, onLift, padOf, padSpots, padUnder, spawnSpot } from '../hub/hub-layout';
+import { archSpots, floorCount, floorCourses, HUB, onLift, padOf, padSpots, portalAt, spawnSpot } from '../hub/hub-layout';
 import { buildHubScene, CELL } from '../hub/hub-scene';
 import type { SignEntry } from '../hub/hub-signs';
 import { fill, hubStrings, progressText, type HubStrings } from '../hub/hub-strings';
 import { Portals } from '../hub/portals';
 import { Showcase } from '../hub/showcase';
-import { Dwell, WARP_IN, WARP_OUT, warpIn, warpOut } from '../hub/warp';
+import { Dwell, WARP_IN, WARP_OUT, warpIn, warpOut, withWarpFlag } from '../hub/warp';
 import type { MoodleGateway } from '../moodle/gateway';
 import { pixelRatio, QUALITY } from '../perf/quality';
 import { Outfitter } from '../player/attachments';
@@ -21,12 +21,14 @@ import { BvhCollider } from '../player/collider';
 import { Dust } from '../player/dust';
 import { FollowCamera } from '../player/follow-camera';
 import { GuidedWalk } from '../player/guided-walk';
-import { CombinedInput, KeyboardInput, NO_INPUT, type InputSource } from '../player/input';
+import { CombinedInput, GatedInput, KeyboardInput } from '../player/input';
 import { decodeLook } from '../player/look';
 import { MouseLook } from '../player/mouse-look';
 import { Player } from '../player/player';
 import { CompositeCollider } from '../player/composite-collider';
+import { eKey } from '../ui/e-key';
 import { LookTip, DEFAULT_LOOK_TIP_STRINGS } from '../ui/look-tip';
+import { ActivityPrompt } from '../ui/prompt';
 import { DEFAULT_SOUND_STRINGS, SoundControl } from '../ui/sound-control';
 import { TouchControls } from '../ui/touch-controls';
 import { CAMPUS } from '../world/look';
@@ -63,28 +65,18 @@ export interface HubView {
   /** Seconds into a warp out, -1 when none. */
   readonly warping: number;
   setFloor(floor: number): void;
-  /** Walks the kid to the pad of the course at `index` (switching floor first). */
+  /** Walks the kid over the pad and through the portal of the course at `index` (switching floor first). */
   walkTo(index: number): void;
+  /** The floor number painted in the lift's centre. */
+  readonly liftNumber: string;
   /** Walks the kid onto the lift. */
   walkToLift(): void;
 }
 
 const SAVE_DELAY_MS = 800;
-const PAD_DWELL = 0.25;
-const LIFT_DWELL = 0.6;
 const LIFT_FLASH = 0.5;
 const SPAWN_Y = 1.5;
 const FOG = { near: 48, far: 190 } as const;
-
-/** Player input that goes silent while a warp or a lift ride runs. */
-class Gated implements InputSource {
-  frozen = false;
-  constructor(private readonly inner: InputSource) {}
-  read() {
-    const own = this.inner.read();
-    return this.frozen ? NO_INPUT : own;
-  }
-}
 
 /** Builds the hub in `root`: a warp room the kid walks around, a portal per course, the trophy hall and their totals. */
 export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubView> {
@@ -104,7 +96,7 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
 
   const scene = buildHubScene(kit, CAMPUS, tier === 'low', tier === 'low' ? 1.5 : 2.5);
   stage.add(scene.group);
-  const portals = new Portals(kit.glow, kit.plastic);
+  const portals = new Portals(kit.plastic, kit.time);
   stage.add(portals.group);
   const showcase = new Showcase(kit, hubTotals(courses), () => undefined, settings.shadows);
   stage.add(showcase.group);
@@ -115,11 +107,13 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
 
   const back = courses.findIndex((c) => c.id === deps.from);
   let floor = back >= 0 ? padOf(back).floor : 0;
+  let liftNumber = '';
   const hud = new HubHud(root, s, courses, (step) => setFloor((floor + step + floors) % floors, true));
   const paint = (): void => {
     const here = floorCourses(courses, floor);
-    portals.show(padSpots().map((_, i) => ({ open: !!here[i], completed: here[i]?.completed ?? false, gems: here[i]?.gems ?? 0 })));
-    scene.signs.paint(signs(s, here, courses));
+    portals.show(padSpots().map((_, i) => ({ open: !!here[i], completed: here[i]?.completed ?? false })));
+    liftNumber = String(floor + 1);
+    scene.signs.paint(signs(s, here, courses, liftNumber));
     hud.setFloor(floor, floors);
   };
 
@@ -134,7 +128,7 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
   const spawn = new Vector3(start.x, SPAWN_Y, start.z);
   let at: { x: number; z: number } = spawn;
   const guided = new GuidedWalk(new CombinedInput([new KeyboardInput(), touch]), () => at, camera);
-  const gated = new Gated(guided);
+  const gated = new GatedInput(guided);
   const player = new Player(avatar, collider, spawn, gated, camera);
   at = player.body.position;
   player.teleport(start.x, start.z, start.yaw);
@@ -189,9 +183,8 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
   };
   const footfall = new Footfall();
 
-  // Pads, lift and warps.
-  const pads = padSpots().map((p) => new Dwell(PAD_DWELL, Math.hypot(p.x - start.x, p.z - start.z) < HUB.padRadius));
-  const liftDwell = new Dwell(LIFT_DWELL, onLift(start.x, start.z));
+  // Portals, lift and warps.
+  const crossings = archSpots().map(() => new Dwell(0));
   let warp: { course: HubCourse; t: number; x: number; z: number } | null = null;
   let arrival = back >= 0 ? 0 : -1;
   let ride = -1;
@@ -208,11 +201,11 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
     paint();
     hud.say(fill(s.hub_floor, { floor: floor + 1, floors }));
   };
-  const warpTo = (pad: number): void => {
+  const warpTo = (pad: number, x: number, z: number): void => {
     const course = floorCourses(courses, floor)[pad];
     if (!course || warp) return;
-    const p = padSpots()[pad]!;
-    warp = { course, t: 0, x: p.x, z: p.z };
+    warp = { course, t: 0, x, z };
+    lift.show(null);
     gated.frozen = true;
     guided.cancel();
     hud.hint.hidden = true;
@@ -220,6 +213,15 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
     root.dataset['warping'] = String(course.id);
     engine.play('warp');
   };
+
+  const nextFloor = (): number => (floor + 1) % floors;
+  const lift = new ActivityPrompt(root, () => ride < 0 && !warp && setFloor(nextFloor(), true), s.hub_lift_go);
+  lift.element.classList.add('mooblox-hub-lift');
+  let liftReady = false;
+  eKey().add({
+    distance: () => (liftReady && ride < 0 && !warp ? Math.hypot(player.body.position.x - HUB.lift.x, player.body.position.z - HUB.lift.z) : null),
+    run: () => setFloor(nextFloor(), true),
+  });
 
   const resize = (): void => {
     stage.resize(pixelRatio(tier, window.devicePixelRatio, 1));
@@ -238,7 +240,6 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
     clock += dt;
     kit.time.value = clock;
     if (scene.water) scene.water.uniforms['uTime']!.value = clock;
-    portals.update(clock);
     showcase.update(clock);
     if (warp) {
       warp.t += dt;
@@ -251,8 +252,9 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
       hud.flash(pose.flash);
       camera.follow(root3.position, dt);
       if (warp.t >= WARP_OUT && !root.dataset['navigated']) {
-        root.dataset['navigated'] = warp.course.url;
-        deps.navigate(warp.course.url);
+        const url = withWarpFlag(warp.course.url);
+        root.dataset['navigated'] = url;
+        deps.navigate(url);
       }
     } else {
       player.update(dt);
@@ -261,11 +263,15 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
       const step = footfall.update(b.x, b.z, player.body.onGround, dt);
       if (step === 'step') engine.play('step-stone');
       else if (step === 'land') engine.play('land');
-      const pad = padUnder(b.x, b.z);
-      pads.forEach((d, i) => {
-        if (d.step(pad === i, player.body.onGround, dt)) warpTo(i);
+      const portal = portalAt(b.x, b.y, b.z);
+      crossings.forEach((d, i) => {
+        if (d.step(portal === i, true, dt)) warpTo(i, b.x, b.z);
       });
-      if (floors > 1 && ride < 0 && liftDwell.step(onLift(b.x, b.z), player.body.onGround, dt)) setFloor((floor + 1) % floors, true);
+      const ready = floors > 1 && ride < 0 && !warp && onLift(b.x, b.z);
+      if (ready !== liftReady) {
+        liftReady = ready;
+        lift.show(ready ? { name: fill(s.hub_lift, { floor: nextFloor() + 1 }), locked: null, openable: true } : null);
+      }
       if (arrival >= 0) {
         arrival += dt;
         const pose = warpIn(arrival);
@@ -302,7 +308,11 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
     const { floor: f, pad } = padOf(index);
     if (f !== floor) setFloor(f);
     const p = padSpots()[pad]!;
-    guided.start([{ x: p.x, z: p.z, r: 0.4 }]);
+    const a = archSpots()[pad]!;
+    guided.start([
+      { x: p.x, z: p.z, r: 0.6 },
+      { x: a.x + Math.sin(a.yaw) * 0.2, z: a.z + Math.cos(a.yaw) * 0.2, r: 0.3 },
+    ]);
   };
   return {
     stage,
@@ -320,14 +330,17 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
     get warping() {
       return warp ? warp.t : -1;
     },
+    get liftNumber() {
+      return liftNumber;
+    },
     setFloor: (f) => setFloor(f),
     walkTo,
     walkToLift: () => guided.start([{ x: HUB.lift.x, z: HUB.lift.z, r: 0.3 }]),
   };
 }
 
-/** Sign atlas entries for a floor: the pads and the four show-off plaques. */
-function signs(s: HubStrings, here: readonly HubCourse[], all: readonly HubCourse[]): SignEntry[] {
+/** Sign atlas entries for a floor: the pads, the four show-off plaques and the lift's floor number. */
+function signs(s: HubStrings, here: readonly HubCourse[], all: readonly HubCourse[], floorNumber: string): SignEntry[] {
   const out: SignEntry[] = [];
   for (let i = 0; i < CELL.display; i++) {
     const c = here[i];
@@ -352,6 +365,7 @@ function signs(s: HubStrings, here: readonly HubCourse[], all: readonly HubCours
     { kind: 'display', title: s.hub_crystals, value: String(t.crystals), sub: '' },
     { kind: 'display', title: s.hub_stars, value: String(t.stars), sub: '' },
     { kind: 'display', title: fill(s.hub_level, { level: t.level }), value: fill(s.hub_xp, { xp: t.xp }), sub: `${s.hub_trophies}: ${t.trophies.length}` },
+    { kind: 'number', value: floorNumber },
   );
   return out;
 }

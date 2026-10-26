@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial, RingGeometry, TorusGeometry, type Material, type ShaderMaterial } from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial, RingGeometry, type Material, type ShaderMaterial } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { WorldData } from '../domain/types';
 import { IslandBuilder } from '../world/island-builder';
@@ -7,6 +7,7 @@ import { THEMES, type ThemeId } from '../world/landmarks/themes';
 import type { Look, LookPalette } from '../world/look';
 import type { MaterialKit } from '../world/material-kit';
 import { seededRandom } from '../world/random';
+import { archParts } from './portal-arch';
 import { SIGN_CELLS, signCell, SignAtlas } from './hub-signs';
 import { archSpots, displaySpots, HUB, padSpots, type Spot } from './hub-layout';
 
@@ -18,14 +19,13 @@ export const padTheme = (i: number): { accent: number; shade: number } => {
   return { accent: t.accent, shade: t.accentShade };
 };
 
-/** Arch opening: centre height and radius of the portal disc. */
-export const PORTAL = { y: 2.95, r: 1.65, sy: 1.55 } as const;
-const ARCH = { span: 2.05, column: 3.3, tube: 0.3 } as const;
 const PAD_H = 0.3;
+/** Trophy plinths either side of each arch (local x), their radius and height: a finished course's gold cups stand on them. */
+export const PLINTH = { x: 3.3, r: 0.46, h: 1.2 } as const;
 const WALL_H = 0.95;
-/** Sign cells: pads 0..4, displays 5..8. */
-export const CELL = { display: 5 } as const;
-const SIGN = { pad: { w: 3.8, h: 1.9, y: 7.0 }, display: { w: 2.2, h: 1.1, y: 0.62 } } as const;
+/** Sign cells: pads 0..4, displays 5..8, the lift's floor number 9. */
+export const CELL = { display: 5, lift: 9 } as const;
+const SIGN = { pad: { w: 3.8, h: 1.9, y: 7.0 }, display: { w: 2.2, h: 1.1, y: 0.62 }, lift: { w: 4, h: 2, y: 0.43 } } as const;
 
 /** The built hub: everything static plus the sign atlas the floors repaint. */
 export interface HubScene {
@@ -53,6 +53,7 @@ export function buildHubScene(kit: MaterialKit, look: Look, low: boolean, rimDet
   wall(parts, p);
   padSpots().forEach((s, i) => pad(parts, p, s, i));
   archSpots().forEach((s, i) => arch(parts, p, s, i));
+  archSpots().forEach((s, i) => plinths(parts, p, s, i));
   lift(parts, p);
   for (const s of displaySpots()) parts.push(at(prism(0.8, 0.95, 1.05, 8, p.trim), s), at(prism(0.84, 0.84, 0.08, 8, padTheme(0).accent, 0, 1.05), s));
   trees(parts, p);
@@ -65,6 +66,7 @@ export function buildHubScene(kit: MaterialKit, look: Look, low: boolean, rimDet
   const quads: BufferGeometry[] = [];
   archSpots().forEach((s, i) => quads.push(quad(SIGN.pad.w, SIGN.pad.h, SIGN.pad.y, 0.45, signCell(i), s)));
   displaySpots().forEach((s, i) => quads.push(quad(SIGN.display.w, SIGN.display.h, SIGN.display.y, 0.97, signCell(CELL.display + i), s, -0.25)));
+  quads.push(quad(SIGN.lift.w, SIGN.lift.h, 0, 0, signCell(CELL.lift), { x: HUB.lift.x, z: HUB.lift.z, yaw: 0 }, -Math.PI / 2).translate(0, SIGN.lift.y, 0));
   if (quads.length > SIGN_CELLS) throw new Error('hub: more signs than atlas cells');
   const signMesh = new Mesh(mergeGeometries(quads, false)!, material);
   signMesh.name = 'hub-signs';
@@ -120,19 +122,24 @@ function pad(into: BufferGeometry[], p: LookPalette, s: Spot, i: number): void {
   into.push(at(prism(HUB.padRadius - 0.5, HUB.padRadius - 0.5, 0.05, 24, t.accent, 0, PAD_H + 0.04), s));
 }
 
-/** A portal arch: two columns and a half ring over the opening, in the pad's accent, on a stepped base. */
+/** A portal arch in the pad's accent (`portal-arch.ts`). */
 function arch(into: BufferGeometry[], p: LookPalette, s: Spot, i: number): void {
   const t = padTheme(i);
-  into.push(at(box(ARCH.span * 2 + 1.4, 0.35, 1.4, p.trimShade), s));
-  for (const side of [-1, 1]) {
-    into.push(at(prism(0.38, 0.45, ARCH.column, 8, p.trim, side * ARCH.span, 0.35), s));
-    into.push(at(prism(0.5, 0.5, 0.3, 8, t.accent, side * ARCH.span, 0.35 + ARCH.column - 0.25), s));
-  }
-  const top = facet(new TorusGeometry(ARCH.span, ARCH.tube, 8, 24, Math.PI), t.accent, 0, 0.35 + ARCH.column - 0.2, 0);
-  into.push(at(top, s));
-  into.push(at(facet(new TorusGeometry(ARCH.span - 0.34, 0.1, 6, 24, Math.PI), t.shade, 0, 0.35 + ARCH.column - 0.2, 0.05), s));
-  // Back panel so the portal reads as a doorway from behind.
-  into.push(at(box(ARCH.span * 2 - 0.2, ARCH.column - 0.2, 0.18, t.shade, 0, 0.35, -0.55), s));
+  for (const g of archParts({ trim: p.trim, trimShade: p.trimShade, accent: t.accent, shade: t.shade })) into.push(at(g, s));
+}
+
+/** The two trophy plinths beside an arch: a cream drum with an accent cap, clear of the arch base. */
+function plinths(into: BufferGeometry[], p: LookPalette, s: Spot, i: number): void {
+  for (const g of plinthParts(p, i)) into.push(at(g, s));
+}
+
+/** The plinth pair of arch slot i in the arch's local space. */
+export function plinthParts(p: Pick<LookPalette, 'trim'>, i: number): BufferGeometry[] {
+  const t = padTheme(i);
+  return [-1, 1].flatMap((side) => [
+    prism(PLINTH.r - 0.06, PLINTH.r + 0.04, PLINTH.h - 0.12, 8, p.trim, side * PLINTH.x),
+    prism(PLINTH.r, PLINTH.r, 0.12, 8, t.accent, side * PLINTH.x, PLINTH.h - 0.12),
+  ]);
 }
 
 /** The centre lift: a stepped teal platform with up arrows. */
@@ -141,7 +148,8 @@ function lift(into: BufferGeometry[], p: LookPalette): void {
   into.push(prism(r + 0.55, r + 0.7, 0.22, 32, p.trimShade, x, 0, z));
   into.push(prism(r + 0.2, r + 0.3, 0.36, 32, p.trim, x, 0, z));
   into.push(prism(r - 0.1, r - 0.1, 0.05, 32, 0x2fa39a, x, 0.36, z));
-  for (const dz of [-0.75, 0.35]) {
+  // Chevrons north of the floor number in the centre.
+  for (const dz of [-1.95, -1.45]) {
     for (const side of [-1, 1]) into.push(box(0.16, 0.04, 0.7, 0xffffff, 0, 0.41, 0).rotateY(side * 0.75).translate(x + side * 0.24, 0, z + dz));
   }
 }

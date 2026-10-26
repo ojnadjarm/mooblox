@@ -10,6 +10,7 @@ import { IslandLayout } from '../../src/world/island-layout';
 import { CAMPUS } from '../../src/world/look';
 import { MaterialKit } from '../../src/world/material-kit';
 import { bakeKit, type KitModel } from '../../tools/kit-bake';
+import { returnPortalGeometry } from '../../src/boot/return-portal';
 
 /** Kit pieces laid as walkable ground (decks, bridges): they carry props rather than stand on ground. */
 const DECK = /dock|platform|bridge|plank/;
@@ -129,7 +130,53 @@ function overlaps(shape: string): string[] {
   return bad;
 }
 
+/** The return portal on the spawn hub: its frame on ground under every foot, cutting into no prop and no solid terrain part. */
+function portalClashes(shape: string): string[] {
+  const { d, ground } = design(shape);
+  const site = d.portal;
+  if (!site) return ['no return portal site'];
+  const frame = returnPortalGeometry();
+  const m = new Matrix4().compose(new Vector3(site.x, 0, site.z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), site.face), new Vector3(1, 1, 1));
+  const world = frame.clone().applyMatrix4(m);
+  world.computeBoundingBox();
+  const box = world.boundingBox!;
+  const bad: string[] = [];
+  const bvh = ground(() => false);
+  const pos = world.getAttribute('position');
+  const v = new Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    if (v.y > box.min.y + 0.01) continue;
+    if (!grounded(bvh, v.x, v.y, v.z)) {
+      bad.push(`portal foot off the ground @${v.x.toFixed(1)},${v.z.toFixed(1)}`);
+      break;
+    }
+  }
+  const mine = new MeshBVH(world);
+  for (const dd of d.districts) {
+    for (const p of dd.placements) {
+      if (p.sway) continue;
+      const g = kit.get(p.id)!.model.geometry;
+      g.computeBoundingBox();
+      const pm = place(p);
+      if (!g.boundingBox!.clone().applyMatrix4(pm).intersectsBox(box)) continue;
+      if (mine.intersectsGeometry(g, pm)) bad.push(`portal + ${p.id} @${p.x.toFixed(1)},${p.z.toFixed(1)}`);
+    }
+    for (const t of dd.terrain) {
+      if (!t.solid) continue;
+      t.geometry.computeBoundingBox();
+      if (!t.geometry.boundingBox!.intersectsBox(box)) continue;
+      if (mine.intersectsGeometry(t.geometry, new Matrix4())) bad.push('portal + terrain');
+    }
+  }
+  return bad;
+}
+
 describe('placement', () => {
+  it.each(['demo', '3,0,5', '8x12'])('%s: the return portal stands on ground and clear of every prop', (shape) => {
+    expect(portalClashes(shape)).toEqual([]);
+  }, 120_000);
+
   it.each(['demo', '3,0,5', '8x12'])('%s: every prop, flag and landmark stands on ground under its whole foot', (shape) => {
     expect(floating(shape)).toEqual([]);
   }, 120_000);

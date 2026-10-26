@@ -167,7 +167,7 @@ try {
     await page.screenshot({ path: join(out, `${prefix}-warp.png`) });
     await page.waitForFunction(() => document.getElementById('mooblox-root').dataset.navigated, null, { timeout: 5000 });
     const want = await page.evaluate(() => window.mooblox.courses[5].url);
-    check('walking onto a pad warps into its course', (await navigated(page)) === want, await navigated(page));
+    check('walking through a portal warps into its course', (await navigated(page)).startsWith(want), await navigated(page));
     await page.close();
     const lift = await open(ctx, 12);
     await lift.page.evaluate(() => window.mooblox.walkTo(0));
@@ -176,8 +176,11 @@ try {
     await lift.page.waitForTimeout(600);
     await lift.page.keyboard.up('KeyS');
     await lift.page.evaluate(() => window.mooblox.walkToLift());
-    await lift.page.waitForFunction(() => window.mooblox.floor === 1, null, { timeout: 15000 }).catch(() => undefined);
-    check('stepping onto the lift goes up a floor', (await lift.page.evaluate(() => window.mooblox.floor)) === 1);
+    await lift.page.waitForTimeout(4000);
+    check('stepping onto the lift alone stays on the floor', (await lift.page.evaluate(() => window.mooblox.floor)) === 0);
+    await lift.page.keyboard.press('KeyE');
+    await lift.page.waitForFunction(() => window.mooblox.floor === 1, null, { timeout: 5000 }).catch(() => undefined);
+    check('E on the lift goes up a floor', (await lift.page.evaluate(() => window.mooblox.floor)) === 1);
     check('no warp from the lift', (await navigated(lift.page)) === '');
     await lift.page.close();
     const from = await open(ctx, 12, 'from=107');
@@ -202,7 +205,13 @@ try {
     await page.waitForTimeout(800);
     if (live) {
       await Promise.all([page.waitForURL(/play\.php/, { timeout: 30000, waitUntil: 'commit' }), page.evaluate((k) => window.mooblox.walkTo(k), i)]);
-      check('walking onto a pad opens play.php', page.url().includes(want.split('/local/')[1]), page.url());
+      check('walking through a portal opens play.php', page.url().includes(want.split('/local/')[1]), page.url());
+      const played = await page.waitForFunction(() => (window.mooblox?.arrival?.t ?? -1) >= 0, null, { timeout: 60000 }).then(() => true, () => false);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: join(out, `${prefix}-play-arrival.png`) });
+      check('the arrival plays after a warp', played);
+      await page.waitForFunction(() => window.mooblox.arrival.t === -1, null, { timeout: 10000 }).catch(() => undefined);
+      check('the arrival ends and the warp flag leaves the address', !page.url().includes('warp=') && (await page.evaluate(() => window.mooblox.arrival.t)) === -1, page.url());
       await page.waitForSelector('.mooblox-hud-hub', { timeout: 60000 });
       await page.waitForTimeout(2500);
       await page.screenshot({ path: join(out, `${prefix}-play-back.png`) });
@@ -214,10 +223,21 @@ try {
       const pos = await page.evaluate(() => window.mooblox.player.body.position);
       check('back in front of the pad', Math.hypot(pos.x, pos.z) > 8, JSON.stringify(pos));
       check('the arrival white-out clears', (await whiteOut(page)) === 0);
+      await page.goto(want);
+      await page.waitForFunction(() => window.mooblox?.dressing, null, { timeout: 60000 });
+      await page.waitForTimeout(1500);
+      check('no arrival on a direct entry', (await page.evaluate(() => window.mooblox.arrival?.t ?? -1)) === -1);
+      const site = await page.evaluate(() => window.mooblox.dressing.portal);
+      await page.evaluate((st) => window.mooblox.player.teleport(st.x + Math.sin(st.face) * 5, st.z + Math.cos(st.face) * 5, st.face + Math.PI), site);
+      await page.waitForTimeout(1500);
+      await page.screenshot({ path: join(out, `${prefix}-play-return-portal.png`) });
+      await page.keyboard.down('KeyW');
+      const home = await page.waitForURL(/local\/mooblox\/index\.php/, { timeout: 15000, waitUntil: 'commit' }).then(() => true, () => false);
+      check('the return portal warps back to the hub', home, page.url());
     } else {
       await page.evaluate((k) => window.mooblox.walkTo(k), i);
       await page.waitForFunction(() => document.getElementById('mooblox-root').dataset.navigated, null, { timeout: 20000 });
-      check('video walk warps into the course', (await navigated(page)) === want, await navigated(page));
+      check('video walk warps into the course', (await navigated(page)).startsWith(want), await navigated(page));
       await page.waitForTimeout(400);
     }
     await ctx.close();

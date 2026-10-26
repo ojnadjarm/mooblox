@@ -27,6 +27,9 @@ import { BOOT_MODELS } from './boot-assets';
 import { liveHandle } from './live-handle';
 import { startSound } from './sound';
 import { conceptShot } from './dev-shots';
+import { WhiteOut } from '../ui/white-out';
+import { startArrival } from './arrival';
+import { startReturnPortal } from './return-portal';
 import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
 
 const ASSETS = '/assets/';
@@ -89,7 +92,12 @@ async function boot(): Promise<void> {
     const keep = (l: typeof look) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
     const picker = startAvatarPicker(view, player, avatars, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
     const sound = startSound(view, player, { assets: ASSETS, stored: params.get('sound') ?? '', gateway, strings: {}, store, rewards: null, bubble: guide.bubble });
-    Object.assign(window, { mooblox: liveHandle(view, { probe, player, interaction, store, gateway, guide, picker, sound }) });
+    const whiteOut = new WhiteOut(root);
+    const portal = startReturnPortal(view, player, { huburl: 'hub.html', navigate: () => undefined, whiteOut, engine: () => sound.engine });
+    const warped = params.has('warp');
+    if (warped) history.replaceState(history.state, '', location.href.replace(/[?&]warp=1/, '').replace(/\.html&/, '.html?'));
+    const arrival = warped ? startArrival(view, player, whiteOut, sound.engine) : null;
+    Object.assign(window, { mooblox: liveHandle(view, { probe, player, interaction, store, gateway, guide, picker, sound, portal, arrival }) });
     if (tour) {
       const grid = new WalkGrid(view.layout, view.dressing);
       const stops = tourGoals(view.layout, grid, view.dressing.start);

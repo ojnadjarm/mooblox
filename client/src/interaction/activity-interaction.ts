@@ -1,6 +1,7 @@
 import type { Activity, WorldData } from '../domain/types';
 import type { FrameGate } from '../perf/frame-gate';
 import type { Panel } from '../ui/panel';
+import { eKey } from '../ui/e-key';
 import type { ActivityPrompt } from '../ui/prompt';
 import { htmlToText } from '../ui/style';
 import type { Plot } from '../world/layout';
@@ -15,6 +16,8 @@ export type PanelActions = (a: Activity) => HTMLElement[];
 /** Walk up to a plot → prompt → E or tap → opener in the panel; the world sleeps while it is open. */
 export class ActivityInteraction {
   private current: Plot | null = null;
+  private x = 0;
+  private z = 0;
   private readonly closed = new Set<ClosedListener>();
 
   constructor(
@@ -26,10 +29,9 @@ export class ActivityInteraction {
     private readonly gate: FrameGate,
     private readonly actionsFor: PanelActions = () => [],
   ) {
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyE' && !e.repeat && !this.panel.isOpen && !(e.target instanceof HTMLInputElement)) {
-        void this.openCurrent();
-      }
+    eKey().add({
+      distance: () => (this.current && !this.panel.isOpen ? Math.hypot(this.current.x - this.x, this.current.z - this.z) : null),
+      run: () => void this.openCurrent(),
     });
   }
 
@@ -45,6 +47,8 @@ export class ActivityInteraction {
 
   /** Follows the player; call once per frame. */
   update(x: number, z: number): void {
+    this.x = x;
+    this.z = z;
     const next = nearestPlot(this.plots(), x, z, this.current);
     if (next !== this.current) {
       this.current = next;

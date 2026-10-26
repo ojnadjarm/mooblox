@@ -1,3 +1,5 @@
+import { inOpening, toArch } from './portal-arch';
+
 /** Where everything stands in the hub (metres, y up, north = -z). Pure data shared by the scene, the triggers and the tests. */
 
 /** Pads on one floor, as a Crash Bandicoot warp room. */
@@ -73,17 +75,20 @@ export function floorCourses<T>(courses: readonly T[], floor: number): T[] {
   return courses.slice(floor * PADS_PER_FLOOR, (floor + 1) * PADS_PER_FLOOR);
 }
 
-/** Where the kid starts: on the lift facing the pads, or back in front of the pad of the course they came from. */
+/** Where the kid starts: on the lift's south side behind its floor number, facing the pads, or back in front of the pad of the course they came from. */
 export function spawnSpot(pad: number | null): Spot {
-  if (pad === null) return { x: HUB.lift.x, z: HUB.lift.z, yaw: Math.PI };
+  if (pad === null) return { x: HUB.lift.x, z: HUB.lift.z + 1.5, yaw: Math.PI };
   const p = padSpots()[pad]!;
   const k = (HUB.padRing - HUB.padRadius - 1.6) / HUB.padRing;
   return { x: p.x * k, z: p.z * k, yaw: towardsCentre(p.x, p.z) };
 }
 
-/** Index of the pad whose disc holds (x, z), or -1. */
-export function padUnder(x: number, z: number): number {
-  return padSpots().findIndex((p) => Math.hypot(p.x - x, p.z - z) <= HUB.padRadius - 0.4);
+/** Index of the arch whose portal fluid a body at (x, y, z) has stepped into, or -1. */
+export function portalAt(x: number, y: number, z: number): number {
+  return archSpots().findIndex((a) => {
+    const l = toArch(a.x, a.z, a.yaw, x, y, z);
+    return inOpening(l.x, l.y, l.z);
+  });
 }
 
 /** Whether (x, z) stands on the lift. */

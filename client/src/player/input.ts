@@ -23,6 +23,16 @@ export interface InputSource {
   read(): InputState;
 }
 
+/** Input that goes silent while `frozen` (a warp or a lift ride runs). */
+export class GatedInput implements InputSource {
+  frozen = false;
+  constructor(private readonly inner: InputSource) {}
+  read(): InputState {
+    const own = this.inner.read();
+    return this.frozen ? NO_INPUT : own;
+  }
+}
+
 /** Combines sources: the strongest stick wins, buttons are ORed, the first emote wins. */
 export class CombinedInput implements InputSource {
   private readonly state: MutableInput = { x: 0, z: 0, run: false, jump: false, emote: -1 };

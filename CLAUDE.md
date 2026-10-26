@@ -633,6 +633,19 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     summary, `--video dir --label pre|post`; `perf.mjs` walks every GPU rig over the bridges and gates crossing frames <= 34 ms
     (one missed vsync at 60 Hz), pops 0 and inline builds 0. Gate vs HEAD in one lock: GPU rigs all PASS (20x30 low worst 33.2
     -> 16.8 ms), crossings 16.8 ms except 8x12 low 33.3; SwiftShader stress misses 7 at HEAD, 4 after.
+- T1396, 2026-10-26, version 2026102616, hub round 2 (owner feedback `research/2026-10-26/playtest/HUB-FEEDBACK.md`; pre/post
+  `~/drop/T1396/index.html`):
+  - `hub/portal-arch.ts` (frame parts, `OPENING`, `inOpening`, `toArch`), `hub/portal-fluid.ts` (opening mesh + nether-style swirl
+    ShaderMaterial with a moving ring; `bakeStillFluid` for the low tier, drawn with `kit.glow` to keep 11 programs),
+    `hub/warp-beam.ts`. Gems in front of portals removed; cups sit on plinths beside the arch (`test/hub/hub-props.test.ts`: hub
+    prop overlaps 0, cups seated).
+  - Warp by walking into the fluid (`portalAt` + `Dwell`), pads do nothing; lift needs E or the Go prompt (`ActivityPrompt` label),
+    floor number painted flat on the lift. `ui/e-key.ts`: one E handler per page, the nearest offered action runs (lift, activity
+    prompt, Guide "Show me" with an E badge on PC).
+  - `play.php?warp=1` -> config `arrival` -> `boot/arrival.ts` (white-out, kid slides out of a fluid door); the flag leaves the
+    address. `boot/return-portal.ts` at `Dressing.portal` (`portalSite`, spawn island) warps to `huburl`.
+  - Checks `node tools/portal.mjs <dir> [--video]` (15) and `tools/hub.mjs --live` (arrival, return portal). Live 5.2 kid4 51, kid2 51;
+    perf demo low equal to HEAD (stress median 333 ms both, pre-existing over 100), medium calls 43 -> 45, programs 18 -> 19.
 - T1393, 2026-10-26, version 2026102615, warp hub replaces the T1392 sea map (owner: "more like Crash Bandicoot 2 or 3 ... playable";
   pre/post `~/drop/T1393/index.html`):
   - `index.php` mode `hub` (`?from=<course>` lands the kid in front of that pad with a warp-in); template `hub.mustache`; play.php
