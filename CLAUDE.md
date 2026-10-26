@@ -8,6 +8,7 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   `mfixture with 5.2`. Never touch Vass envs.
 - Moodle work ends with `/moodle-ci` (`mci quick` while iterating).
 - Fixture data and manual-test notes live in `.research/testdata/` (untracked).
+- Worktrees: never symlink `.research` into a worktree, copy it (T1393 squash-merged the symlink over the real directory).
 
 ## Built
 
