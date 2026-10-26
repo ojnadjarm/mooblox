@@ -38,6 +38,10 @@ $callbacks = [
         'callback' => [\local_mooblox\hook_callbacks::class, 'before_http_headers'],
     ],
     [
+        'hook' => \core\hook\output\before_standard_head_html_generation::class,
+        'callback' => [\local_mooblox\hook_callbacks::class, 'before_standard_head_html_generation'],
+    ],
+    [
         'hook' => \core_completion\hook\after_cm_completion_updated::class,
         'callback' => [\local_mooblox\hook_callbacks::class, 'after_cm_completion_updated'],
     ],

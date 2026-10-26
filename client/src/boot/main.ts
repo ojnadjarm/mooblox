@@ -21,6 +21,8 @@ import { startSound } from './sound';
 import { startHub } from './hub';
 import { DEFAULT_HUB_BUTTON_STRINGS, hubButton } from '../ui/hub-button';
 import { WhiteOut } from '../ui/white-out';
+import { brandMark } from '../ui/brand-mark';
+import { dismissLoading } from '../ui/loading-screen';
 import { startArrival } from './arrival';
 import { startReturnPortal } from './return-portal';
 import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
@@ -45,7 +47,10 @@ async function boot(): Promise<void> {
     } catch (e) {
       showFallback(root, `${config.wwwroot}/my/courses.php`, fallbackStrings(config.strings));
       throw e;
+    } finally {
+      dismissLoading();
     }
+    brandMark(root);
     return;
   }
   const preloaded = preloadAssets(assets, BOOT_MODELS);
@@ -55,7 +60,10 @@ async function boot(): Promise<void> {
   } catch (e) {
     fallback();
     throw e;
+  } finally {
+    dismissLoading();
   }
+  brandMark(root);
 }
 
 /** Builds the hub with a portal to every course the user can play. */

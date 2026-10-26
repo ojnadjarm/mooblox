@@ -10,6 +10,7 @@ import { seededRandom } from '../world/random';
 import { archParts } from './portal-arch';
 import { SIGN_CELLS, signCell, SignAtlas } from './hub-signs';
 import { archSpots, displaySpots, HUB, padSpots, type Spot } from './hub-layout';
+import { logoSignParts } from './logo-sign';
 
 const THEME_ORDER: readonly ThemeId[] = ['library', 'science', 'sports', 'arts', 'harbour'];
 
@@ -40,7 +41,7 @@ export interface HubScene {
 
 const EMPTY_WORLD: WorldData = { courseId: 0, courseName: '', firstName: '', sections: [], nextChange: 0 };
 
-/** Builds the hub island: plaza, balustrade, five pads with arches, the lift, display plinths, trees and every sign quad. */
+/** Builds the hub island: plaza, balustrade, five pads with arches, the lift, display plinths, trees, the Mooblox sign and every sign quad. */
 export function buildHubScene(kit: MaterialKit, look: Look, low: boolean, rimDetail: number): HubScene {
   const hub = { x: 0, z: 0, radius: HUB.radius };
   // One island holding one plot (its pad hides inside the lift): the builder needs a studded top to merge.
@@ -57,6 +58,7 @@ export function buildHubScene(kit: MaterialKit, look: Look, low: boolean, rimDet
   lift(parts, p);
   for (const s of displaySpots()) parts.push(at(prism(0.8, 0.95, 1.05, 8, p.trim), s), at(prism(0.84, 0.84, 0.08, 8, padTheme(0).accent, 0, 1.05), s));
   trees(parts, p);
+  parts.push(...logoSignParts(p));
   const solid = merged('hub-dressing', parts, kit.plastic);
   solid.castShadow = !low;
   group.add(solid);
@@ -183,10 +185,13 @@ function quad(w: number, h: number, y: number, forward: number, rect: readonly [
 
 /** One mesh of many parts, each reduced to position, normal and colour. */
 function merged(name: string, parts: readonly BufferGeometry[], material: Material): Mesh {
+  const tagged = parts.some((g) => g.getAttribute('surface'));
   const clean = parts.map((g) => {
     const flat = g.index ? g.toNonIndexed() : g;
-    for (const key of Object.keys(flat.attributes)) if (key !== 'position' && key !== 'normal' && key !== 'color') flat.deleteAttribute(key);
+    for (const key of Object.keys(flat.attributes)) if (key !== 'position' && key !== 'normal' && key !== 'color' && key !== 'surface') flat.deleteAttribute(key);
     if (!flat.getAttribute('normal')) flat.computeVertexNormals();
+    // Surface 0 = layer from colour and slope.
+    if (tagged && !flat.getAttribute('surface')) flat.setAttribute('surface', new BufferAttribute(new Float32Array(flat.getAttribute('position').count), 1));
     return flat;
   });
   const mesh = new Mesh(mergeGeometries(clean, false)!, material);

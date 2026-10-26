@@ -11,6 +11,7 @@ import { IslandLayout } from '../../src/world/island-layout';
 import { CAMPUS } from '../../src/world/look';
 import { MaterialKit } from '../../src/world/material-kit';
 import { sealedModel } from '../../src/world/model-seal';
+import { logoSignParts, type LogoSignDesign } from '../../src/hub/logo-sign';
 import { bakeKit } from '../../tools/kit-bake';
 
 /** Same-facing faces closer than this (m) along their normal z-fight from mid range (24-bit depth, near 0.1 m). */
@@ -260,4 +261,12 @@ describe('coplanar props', () => {
     }
     expect(bad).toEqual([]);
   }, 120_000);
+});
+
+describe('coplanar hub logo sign', () => {
+  it.each<LogoSignDesign>(['gateway', 'board'])('%s: no two of its solid pieces share a plane where they overlap', (design) => {
+    const all: Face[] = [];
+    logoSignParts(CAMPUS.palette, design).forEach((g, part) => faces(g, part, all));
+    expect(fights(all)).toEqual([]);
+  });
 });

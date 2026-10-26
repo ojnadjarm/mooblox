@@ -103,6 +103,22 @@ class hook_callbacks {
     }
 
     /**
+     * Gives the world and hub pages the Mooblox favicon.
+     *
+     * @param \core\hook\output\before_standard_head_html_generation $hook
+     */
+    public static function before_standard_head_html_generation(
+        \core\hook\output\before_standard_head_html_generation $hook
+    ): void {
+        global $OUTPUT, $PAGE;
+
+        if (in_array($PAGE->pagetype, ['local-mooblox-play', 'local-mooblox-index'], true)) {
+            $href = $OUTPUT->image_url('favicon', 'local_mooblox')->out(false);
+            $hook->add_html('<link rel="icon" type="image/svg+xml" href="' . s($href) . '">');
+        }
+    }
+
+    /**
      * Queues a rewards sync for the user whose activity completion changed, bulk updates included.
      *
      * @param \core_completion\hook\after_cm_completion_updated $hook

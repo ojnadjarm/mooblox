@@ -1,3 +1,4 @@
+import lockupUrl from './brand/lockup.svg?url';
 import { injectStyle, UI_FONT } from './style';
 
 /** Texts of the card shown when the 3D world cannot be drawn. */
@@ -34,6 +35,7 @@ const CSS = `
   overflow-y: auto; background: linear-gradient(180deg, #bfe3ff 0%, #e8f6ff 60%, #d8f0c8 100%); font-family: ${UI_FONT}; }
 .mooblox-fallback-card { width: 100%; max-width: 520px; box-sizing: border-box; padding: clamp(20px, 4vw, 36px); border-radius: 24px;
   background: #fff; border: 4px solid #2f7fe0; box-shadow: 0 10px 0 rgba(47, 127, 224, .25); text-align: center; color: #23304a; }
+.mooblox-fallback-logo { display: block; width: min(100%, 300px); height: auto; margin: 0 auto 18px; }
 .mooblox-fallback-card h1 { margin: 0 0 12px; font: 800 clamp(22px, 3vw, 30px)/1.2 ${UI_FONT}; }
 .mooblox-fallback-card p { margin: 0 0 22px; font: 600 clamp(16px, 1.6vw, 19px)/1.45 ${UI_FONT}; }
 .mooblox-fallback-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
@@ -51,6 +53,10 @@ export function showFallback(host: HTMLElement, href: string, s: FallbackStrings
   box.setAttribute('role', 'alert');
   const card = document.createElement('div');
   card.className = 'mooblox-fallback-card';
+  const logo = document.createElement('img');
+  logo.className = 'mooblox-fallback-logo';
+  logo.src = lockupUrl;
+  logo.alt = 'Mooblox';
   const title = document.createElement('h1');
   title.textContent = s.fallback_title;
   const text = document.createElement('p');
@@ -66,7 +72,7 @@ export function showFallback(host: HTMLElement, href: string, s: FallbackStrings
   retry.textContent = s.fallback_retry;
   retry.addEventListener('click', () => location.reload());
   actions.append(link, retry);
-  card.append(title, text, actions);
+  card.append(logo, title, text, actions);
   box.append(card);
   host.append(box);
   return box;

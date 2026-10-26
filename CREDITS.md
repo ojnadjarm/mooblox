@@ -24,3 +24,5 @@ Third-party code and assets used by MOOBLOX. Every asset file gets a row in `cli
 | Fire Crackling | AntumDeluge (OpenGameArt) | CC0 | Campfire crackle pops (`audio/crackle-*`), https://opengameart.org/content/fire-crackling |
 | Duck quacks | MOOBLOX contributors | CC0 | Synthesised by `client/tools/intake-audio.mjs` (`audio/quack-*`) |
 | Fountain water | MOOBLOX contributors | CC0 | Synthesised at run time (filtered noise, `client/src/audio/water.ts`), no file |
+| Baloo 2 | Ek Type (The Baloo 2 Project Authors) | SIL OFL 1.1 (`logo/fonts/OFL.txt`) | Mooblox wordmark, outlined to paths by `logo/build.py` (the font is not shipped to browsers), https://github.com/EkType/Baloo2 |
+| Mooblox logo | MOOBLOX contributors | GPL-3.0 (this repo) | `logo/svg/`, plugin `pix/` (icon, favicon, loading-screen lockup), client `src/ui/brand/lockup.svg` (hub sign, HUD mark, fallback card) |

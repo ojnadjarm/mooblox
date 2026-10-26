@@ -25,6 +25,10 @@
     * empty - text shown when there are no courses
     * configjson - JSON config for the client, HTML-safe encoded
     * bundleurl - URL of the client module bundle
+    * logourl - URL of the Mooblox logo for the loading screen
+    * loading - loading screen text
+    * creditby - credit line for the author
+    * creditclaude - credit line for Claude
 
     Example context (json):
     {
@@ -32,12 +36,25 @@
         "courses": [{"fullname": "Volcanoes", "url": "https://example.com/local/mooblox/play.php?id=2"}],
         "empty": "No worlds yet",
         "configjson": "{\"mode\":\"hub\",\"wwwroot\":\"https://example.com\",\"courseid\":0,\"sesskey\":\"abc\",\"firstname\":\"Mia\",\"avatar\":\"\",\"rev\":1}",
-        "bundleurl": "https://example.com/local/mooblox/client/dist/mooblox.js?rev=1"
+        "bundleurl": "https://example.com/local/mooblox/client/dist/mooblox.js?rev=1",
+        "logourl": "https://example.com/theme/image.php/boost/local_mooblox/1/logo",
+        "loading": "Building your world...",
+        "creditby": "by Oscar Nadjar",
+        "creditclaude": "Made with Claude"
     }
 }}
 <h1 class="sr-only">{{title}}</h1>
 <div id="mooblox-root" class="local-mooblox-root"></div>
+<div class="local-mooblox-loading" role="status">
+    <div class="local-mooblox-loading-brand">
+        <img src="{{logourl}}" alt="Mooblox" width="552" height="128">
+        <p class="local-mooblox-loading-credits"><span>{{creditby}}</span><span>{{creditclaude}}</span></p>
+    </div>
+    <p class="local-mooblox-loading-text">{{loading}}</p>
+    <div class="local-mooblox-loading-bar"></div>
+</div>
 <noscript>
+    <style>.local-mooblox-loading { display: none; }</style>
     <ul class="local-mooblox-hublist">
         {{#courses}}
         <li><a href="{{url}}">{{fullname}}</a></li>

@@ -51,4 +51,23 @@ final class hook_callbacks_test extends \advanced_testcase {
         $this->assertSame('embedded', $PAGE->pagelayout);
         $this->assertEmpty($PAGE->activityheader->export_for_template($renderer)['completion'] ?? null);
     }
+
+    /**
+     * The world and hub pages get the Mooblox favicon; other pages keep the site's.
+     */
+    public function test_favicon_only_on_world_pages(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $renderer = $PAGE->get_renderer('core');
+
+        $PAGE->set_pagetype('local-mooblox-play');
+        $hook = new \core\hook\output\before_standard_head_html_generation($renderer);
+        hook_callbacks::before_standard_head_html_generation($hook);
+        $this->assertMatchesRegularExpression('~<link rel="icon" type="image/svg\+xml" href="[^"]*local_mooblox[^"]*favicon~', $hook->get_output());
+
+        $PAGE->set_pagetype('course-view-topics');
+        $hook = new \core\hook\output\before_standard_head_html_generation($renderer);
+        hook_callbacks::before_standard_head_html_generation($hook);
+        $this->assertSame('', $hook->get_output());
+    }
 }

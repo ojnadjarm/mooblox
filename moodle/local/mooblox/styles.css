@@ -1,0 +1,91 @@
+.local-mooblox-loading {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 24px;
+    box-sizing: border-box;
+    background: linear-gradient(180deg, #3a8fdb 0%, #7dbdeb 42%, #fbe3c2 100%);
+    transition: opacity .45s ease;
+}
+
+.local-mooblox-loading.is-done {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.local-mooblox-loading img {
+    width: min(84vw, 552px);
+    height: auto;
+    filter: drop-shadow(0 8px 0 rgba(43, 47, 58, .18));
+    animation: local-mooblox-bob 2.6s ease-in-out infinite;
+}
+
+.local-mooblox-loading-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.local-mooblox-loading-credits {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin: 0;
+    color: rgba(43, 47, 58, .78);
+    font: 700 clamp(13px, .45vw + 10px, 17px)/1.35 "Nunito", "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+    letter-spacing: .02em;
+}
+
+.local-mooblox-loading-text {
+    margin: 0;
+    color: #2b2f3a;
+    font: 800 clamp(17px, 1.6vw, 22px)/1.3 "Nunito", "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+}
+
+.local-mooblox-loading-bar {
+    width: min(64vw, 320px);
+    height: 12px;
+    border-radius: 999px;
+    background: rgba(255, 251, 242, .7);
+    overflow: hidden;
+}
+
+.local-mooblox-loading-bar::after {
+    content: "";
+    display: block;
+    width: 40%;
+    height: 100%;
+    border-radius: 999px;
+    background: #e0844f;
+    animation: local-mooblox-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes local-mooblox-bob {
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@keyframes local-mooblox-slide {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(250%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .local-mooblox-loading img,
+    .local-mooblox-loading-bar::after {
+        animation: none;
+    }
+}

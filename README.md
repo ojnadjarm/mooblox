@@ -1,3 +1,5 @@
+<p align="center"><img src="logo/svg/lockup.svg" alt="Mooblox" width="440"></p>
+
 # MOOBLOX
 
 A Roblox-look 3D island for kids (8-12) in the browser. Each Moodle course becomes the world:

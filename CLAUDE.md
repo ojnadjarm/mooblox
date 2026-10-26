@@ -675,3 +675,22 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     Course arrival after a warp (`boot/arrival.ts`): `arrivalSpot` beside the return portal (local 1.1, 2.3, facing out sideways),
     `hub/warp.ts` `arrive` = warp-out backwards (beam, spin, shrink, white-out), `SoundRuntime.arrive` plays `warp` at once
     (`engine.unlock()`; music still starts on the first gesture, `Music.resume` retries a loop blocked before one). Stills `tools/r5-shots.mjs`.
+- T1401, 2026-10-26, versions 2026102619-2026102623, logo B in (pick `~/agent-work/research/2026-10-26/T1400/PICK.md`; pre/post `~/drop/T1401/index.html`):
+  - `logo/`: `build.py` (`uv run --with fonttools --with shapely python3 logo/build.py`) outlines the Baloo 2 wordmark to paths (`textpath.py`,
+    `fonts/Baloo2.ttf` + `fonts/OFL.txt`, build only) and writes `svg/{lockup,mono,icon,icon-mono}.svg`, plugin
+    `pix/{icon,favicon,logo}.svg` (icon = one-colour 24 px `#212529`) and `client/src/ui/brand/lockup.svg` (imported `?url`).
+  - Moodle: `before_standard_head_html_generation` hook adds the SVG favicon on pagetypes `local-mooblox-play|index`; both
+    templates draw a server-side loading screen (`styles.css` `.local-mooblox-loading`: lockup, credit lines `credit_by`,
+    `credit_claude`, `loading` text, bar) that `ui/loading-screen.ts` `dismissLoading()` fades when boot ends (also on failure).
+    Boost's primary/secondary nav templates render no node icons, so the nav tab stays text.
+  - Client: `hub/logo-sign.ts` 3D sign outside the north balustrade (owner: the flat card flickered): design `gateway` (shipped:
+    two cream posts, wooden beam, cream sticker plate, bevelled extruded letters from `hub/wordmark.json`, the block island as a
+    model) or `board` (framed plank signboard on ropes); merged into `hub-dressing` (no texture, no draw); logo pieces carry
+    `surface` = metal (atlas strength 0), `merged()` keeps `surface` (0 = colour guess). `coplanar.test.ts` checks both designs
+    (0 fights). Stills `node tools/sign-shots.mjs <dir> <prefix>` (dev hub, spawn view + DPR 2 crop).
+  - `ui/brand-mark.ts` (bottom-left HUD mark, fine pointer and >= 768 px only), lockup on the fallback card.
+  - Stills `node tools/logo-shots.mjs <dir> <pre|post> [--widths] [--only course,loading,hud,hub,fallback]` (live 5.2, student).
+- T1397 follow-up, 2026-10-26, commit 710d747 (deployed as 2026102622 with T1401's tree): the HUD Hub link (`ui/hub-button.ts`
+  `HUB_LINK_CLASS`) warps like the return portal: `boot/return-portal.ts` `warp()` (plain left click only; `leave()` navigates
+  once, fallback timer `WARP_OUT + 0.8` s). Hub pads keep the site's course order: `course_list.php` sorts by `sortorder`, then
+  `id` (`test_for_user_keeps_the_course_order`); the client `byLastAccess` sort is gone.

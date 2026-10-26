@@ -125,5 +125,9 @@ echo $OUTPUT->header();
 echo $OUTPUT->render_from_template('local_mooblox/play', [
     'configjson' => json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT),
     'bundleurl' => (new moodle_url('/local/mooblox/client/dist/mooblox.js', ['rev' => $rev]))->out(false),
+    'logourl' => $OUTPUT->image_url('logo', 'local_mooblox')->out(false),
+    'loading' => get_string('loading', 'local_mooblox'),
+    'creditby' => get_string('credit_by', 'local_mooblox'),
+    'creditclaude' => get_string('credit_claude', 'local_mooblox'),
 ]);
 echo $OUTPUT->footer();

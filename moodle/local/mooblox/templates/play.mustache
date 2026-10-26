@@ -22,13 +22,29 @@
     Context variables required for this template:
     * configjson - JSON config for the client, HTML-safe encoded
     * bundleurl - URL of the client module bundle
+    * logourl - URL of the Mooblox logo for the loading screen
+    * loading - loading screen text
+    * creditby - credit line for the author
+    * creditclaude - credit line for Claude
 
     Example context (json):
     {
         "configjson": "{\"wwwroot\":\"https://example.com\",\"courseid\":2,\"sesskey\":\"abc\",\"firstname\":\"Mia\",\"avatar\":\"\",\"rev\":1}",
-        "bundleurl": "https://example.com/local/mooblox/client/dist/mooblox.js?rev=1"
+        "bundleurl": "https://example.com/local/mooblox/client/dist/mooblox.js?rev=1",
+        "logourl": "https://example.com/theme/image.php/boost/local_mooblox/1/logo",
+        "loading": "Building your world...",
+        "creditby": "by Oscar Nadjar",
+        "creditclaude": "Made with Claude"
     }
 }}
 <div id="mooblox-root" class="local-mooblox-root"></div>
+<div class="local-mooblox-loading" role="status">
+    <div class="local-mooblox-loading-brand">
+        <img src="{{logourl}}" alt="Mooblox" width="552" height="128">
+        <p class="local-mooblox-loading-credits"><span>{{creditby}}</span><span>{{creditclaude}}</span></p>
+    </div>
+    <p class="local-mooblox-loading-text">{{loading}}</p>
+    <div class="local-mooblox-loading-bar"></div>
+</div>
 <script type="application/json" id="mooblox-config">{{{configjson}}}</script>
 <script type="module" src="{{bundleurl}}"></script>
