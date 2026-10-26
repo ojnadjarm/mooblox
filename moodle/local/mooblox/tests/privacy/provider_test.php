@@ -64,6 +64,28 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * The sound preference alone puts the user context in the list, is exported, then deleted for that user only.
+     */
+    public function test_export_and_delete_sound_preference(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        set_user_preference(provider::SOUND, 'off40', $user);
+        set_user_preference(provider::SOUND, 'on70', $other);
+
+        $contextlist = provider::get_contexts_for_userid($user->id);
+        $this->assertEquals([\context_user::instance($user->id)->id], array_values($contextlist->get_contextids()));
+
+        provider::export_user_preferences($user->id);
+        $prefs = writer::with_context(\context_system::instance())->get_user_preferences('local_mooblox');
+        $this->assertSame('off40', $prefs->{provider::SOUND}->value);
+
+        provider::delete_data_for_user(new approved_contextlist($user, 'local_mooblox', $contextlist->get_contextids()));
+        $this->assertNull(get_user_preferences(provider::SOUND, null, $user->id));
+        $this->assertSame('on70', get_user_preferences(provider::SOUND, null, $other->id));
+    }
+
+    /**
      * Gives a user XP, a ledger row, a day and a found gem in a course, plus an unlock and a look.
      *
      * @param \stdClass $course course

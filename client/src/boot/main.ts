@@ -17,6 +17,7 @@ import { courseUrl, fallbackStrings, showFallback } from '../ui/world-fallback';
 import { watchContext } from '../world/context-watch';
 import { liveHandle } from './live-handle';
 import { startRewards } from './rewards';
+import { startSound } from './sound';
 import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
 import { modelIds } from '../world/dressing';
 import { startLife } from '../world/life';
@@ -75,7 +76,8 @@ async function play(root: HTMLElement, config: PlayConfig, assets: string, prelo
   const picker = startAvatarPicker(view, player, dressed, look, keep, { ...DEFAULT_AVATAR_PICKER_STRINGS, ...strings });
   const rewards = await startRewards(view, interaction, { gateway, courseId: config.courseid, strings, assets, player, outfitter: dressed, picker });
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
-  Object.assign(window, { mooblox: liveHandle(view, { view, player, interaction, store, guide, picker, rewards }) });
+  const sound = startSound(view, player, { assets, stored: config.sound, gateway, strings, store, rewards: rewards.store, bubble: guide.bubble });
+  Object.assign(window, { mooblox: liveHandle(view, { view, player, interaction, store, guide, picker, rewards, sound }) });
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));

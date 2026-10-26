@@ -43,6 +43,7 @@ $config = [
     'sesskey' => sesskey(),
     'firstname' => $USER->firstname,
     'avatar' => (string) get_user_preferences('local_mooblox_avatar', ''),
+    'sound' => (string) get_user_preferences('local_mooblox_sound', ''),
     'rev' => (int) $rev,
     'strings' => [
         'guide' => get_string('guide', 'local_mooblox'),
@@ -58,6 +59,9 @@ $config = [
         'look_release' => get_string('look_release', 'local_mooblox', '{ctrl}'),
     ],
 ];
+foreach (['sound', 'sound_on', 'sound_off', 'sound_volume'] as $key) {
+    $config['strings'][$key] = get_string($key, 'local_mooblox');
+}
 foreach (['title', 'hair', 'face', 'skin', 'clothes', 'random', 'undo', 'save', 'cancel'] as $key) {
     $config['strings']['creator_' . $key] = get_string('creator_' . $key, 'local_mooblox');
 }

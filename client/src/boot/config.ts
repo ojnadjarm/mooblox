@@ -5,6 +5,8 @@ export interface PlayConfig {
   readonly sesskey: string;
   readonly firstname: string;
   readonly avatar: string;
+  /** The stored sound choice (`local_mooblox_sound`), '' when none. */
+  readonly sound: string;
   readonly rev: number;
   /** Lang strings for the client UI, by key. */
   readonly strings: Readonly<Record<string, string>>;
@@ -36,6 +38,7 @@ export function readConfig(json: string | null | undefined): PlayConfig {
     sesskey: str(o, 'sesskey'),
     firstname: str(o, 'firstname'),
     avatar: str(o, 'avatar'),
+    sound: o['sound'] === undefined ? '' : str(o, 'sound'),
     rev: int(o, 'rev'),
     strings: strings(o['strings']),
   };

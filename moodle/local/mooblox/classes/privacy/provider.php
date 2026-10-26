@@ -50,6 +50,9 @@ class provider implements
     /** Worn cosmetics preference name. */
     const LOOK = 'local_mooblox_look';
 
+    /** Sound on/off and volume preference name. */
+    const SOUND = 'local_mooblox_sound';
+
     /** Per-course user tables and their personal fields. */
     const COURSE_TABLES = [
         'local_mooblox_ledger' => ['courseid', 'userid', 'source', 'sourceid', 'kind', 'xp', 'timeearned'],
@@ -104,16 +107,17 @@ class provider implements
         ], 'privacy:metadata:local_mooblox_unlock');
         $collection->add_user_preference(self::AVATAR, 'privacy:metadata:preference:avatar');
         $collection->add_user_preference(self::LOOK, 'privacy:metadata:preference:look');
+        $collection->add_user_preference(self::SOUND, 'privacy:metadata:preference:sound');
         return $collection;
     }
 
     /**
-     * Exports the avatar and look preferences of a user.
+     * Exports the avatar, look and sound preferences of a user.
      *
      * @param int $userid user id
      */
     public static function export_user_preferences(int $userid) {
-        foreach ([self::AVATAR => 'avatar', self::LOOK => 'look'] as $name => $key) {
+        foreach ([self::AVATAR => 'avatar', self::LOOK => 'look', self::SOUND => 'sound'] as $name => $key) {
             $value = get_user_preferences($name, null, $userid);
             if ($value !== null) {
                 $description = get_string('privacy:metadata:preference:' . $key, 'local_mooblox');
@@ -275,7 +279,8 @@ class provider implements
         global $DB;
         return $DB->record_exists(self::UNLOCK, ['userid' => $userid])
             || get_user_preferences(self::AVATAR, null, $userid) !== null
-            || get_user_preferences(self::LOOK, null, $userid) !== null;
+            || get_user_preferences(self::LOOK, null, $userid) !== null
+            || get_user_preferences(self::SOUND, null, $userid) !== null;
     }
 
     /**
@@ -288,5 +293,6 @@ class provider implements
         $DB->delete_records(self::UNLOCK, ['userid' => $userid]);
         unset_user_preference(self::AVATAR, $userid);
         unset_user_preference(self::LOOK, $userid);
+        unset_user_preference(self::SOUND, $userid);
     }
 }

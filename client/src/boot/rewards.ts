@@ -64,7 +64,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
   let goal: ClassGoalRuntime | null = null;
   let worn: Look = NO_LOOK;
   let dressing: Promise<void> | null = null;
-  const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe') });
+  const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe'), chime: false });
   const pet = new PetFollower(
     () => ({ position: deps.player.avatar.root.position, yaw: deps.player.avatar.root.rotation.y }),
     (o) => view.stage.add(o),

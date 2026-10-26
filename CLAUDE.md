@@ -502,6 +502,20 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Checks: `node tools/mouselook.mjs <dir> [--pre]` 12/12 (look, Tab, panel, Book walk, walk speed <= 14 m/s, arrival, cancel; videos);
     `tools/guide.mjs` 5/5, `tools/book.mjs` waits for the walk; vitest +2 files. Perf demo vs HEAD in one lock: low 60 fps / 16.8 ms, draws 21 = 21, programs 11 = 11;
     same SwiftShader stress misses on both.
+- T1381, 2026-10-26, version 2026102605 (owner play-test flaw 5, sound; evidence `~/drop/T1381/index.html`):
+  - `client/src/audio/`: `sounds.ts` (SFX table, gains, `musicFor`), `engine.ts` (`AudioEngine`: master <- sfx + music buses,
+    context made on the first pointerdown/keydown/touchend, decoded SFX with pitch spread and rate limits, `log` ring of 200
+    events for headless checks), `music.ts` (two HTMLAudio decks, 3 s crossfade per island), `water.ts` (procedural fountain water,
+    PannerNode at the nearest fountain within 26 m), `cues.ts` (`Footfall` distance-paced steps and landings, completion/XP/level-up
+    cues, `mixGains`), `surface.ts` (bridges wood, plazas and paths stone, else grass), `settings.ts`. Wiring `boot/sound.ts`
+    (`startSound`), HUD `ui/sound-control.ts` (top-centre button + popover, M key); `window.mooblox.sound`.
+  - Mix: master = volume^2, 0 when off, video panel open or tab hidden; music x0.45 while another panel is open. Per-user
+    preference `local_mooblox_sound` (`on70` default, `off40`), via play.php config `sound`, privacy provider exports/deletes it.
+    LevelUpMoment's own chime is off (`chime: false`); the engine plays the level-up jingle.
+  - Assets: Kenney CC0 (impact, interface, RPG, music jingles) + OpenGameArt CC0 loops (cynicmusic song17, Kistol Bluebonnet/Catmint);
+    `node tools/intake-audio.mjs ../.research/assets-raw/audio` -> `public/assets/audio` 58 files Opus + AAC, 2.98 MB (test caps 3 MiB).
+  - Check `node tools/sound.mjs <dir> [--dev]` (muted headless: unlock, music, fountain, steps, jump/land, mute, panels, video,
+    crossfade, saved pref, OfflineAudioContext levels <= -12 dBFS, HUD control at 5 widths). Never play sound on this machine.
 - T1380, 2026-10-26, version 2026102604, living props (play-test flaw 8; audit + pre/post videos `~/drop/T1380/index.html`):
   - `world/water-motion.ts`: water codes in the scenery `sway` attribute past wind (0-1.5) and cloth (< 0): RIPPLE 2 + metres from
     where rings start, STREAM 8 + fraction along the flow, SPLASH 10 + crown height; `rippleCode`/`streamCode`/`splashCode`,

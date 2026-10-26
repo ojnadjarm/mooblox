@@ -24,6 +24,8 @@ import { DEFAULT_GUIDE_STRINGS } from '../tutor/guide';
 import { ScriptedTutor } from '../tutor/scripted-tutor';
 import { preloadAssets } from './asset-preload';
 import { BOOT_MODELS } from './boot-assets';
+import { liveHandle } from './live-handle';
+import { startSound } from './sound';
 import { conceptShot } from './dev-shots';
 import { bootTier, startActivities, startAvatarPicker, startGuide, startPlayer, startWorld, type WorldView } from './app';
 
@@ -86,7 +88,8 @@ async function boot(): Promise<void> {
     const guide = await startGuide(view, player, avatars, new ScriptedTutor(), course, DEFAULT_GUIDE_STRINGS);
     const keep = (l: typeof look) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
     const picker = startAvatarPicker(view, player, avatars, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
-    Object.assign(window, { mooblox: { ...view, probe, player, interaction, store, gateway, guide, picker } });
+    const sound = startSound(view, player, { assets: ASSETS, stored: params.get('sound') ?? '', gateway, strings: {}, store, rewards: null, bubble: guide.bubble });
+    Object.assign(window, { mooblox: liveHandle(view, { probe, player, interaction, store, gateway, guide, picker, sound }) });
     if (tour) {
       const grid = new WalkGrid(view.layout, view.dressing);
       const stops = tourGoals(view.layout, grid, view.dressing.start);

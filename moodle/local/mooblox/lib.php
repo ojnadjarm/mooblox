@@ -58,5 +58,11 @@ function local_mooblox_user_preferences(): array {
             'default' => '',
             'permissioncallback' => [core_user::class, 'is_current_user'],
         ],
+        'local_mooblox_sound' => [
+            'type' => PARAM_ALPHANUMEXT,
+            'null' => NULL_NOT_ALLOWED,
+            'default' => '',
+            'permissioncallback' => [core_user::class, 'is_current_user'],
+        ],
     ];
 }

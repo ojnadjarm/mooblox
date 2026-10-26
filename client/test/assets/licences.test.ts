@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 const root = join(__dirname, '../../public/assets');
 const FIRST_ZONE_BUDGET = 3 * 1024 * 1024;
 const XHIGH_BUDGET = 12 * 1024 * 1024;
+const AUDIO_BUDGET = 3 * 1024 * 1024;
 const xhighOnly = (f: string) => f.startsWith('kit-hd/') || f.startsWith('detail/');
+const audio = (f: string) => f.startsWith('audio/');
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -28,8 +30,14 @@ describe('shipped assets', () => {
 
   const size = (list: string[]) => list.reduce((sum, f) => sum + statSync(join(root, f)).size, 0);
 
-  it('fits the first-zone budget of 3 MB (xhigh-only assets aside)', () => {
-    expect(size(shipped.filter((f) => !xhighOnly(f)))).toBeLessThanOrEqual(FIRST_ZONE_BUDGET);
+  it('fits the first-zone budget of 3 MB (xhigh-only assets and sound aside)', () => {
+    expect(size(shipped.filter((f) => !xhighOnly(f) && !audio(f)))).toBeLessThanOrEqual(FIRST_ZONE_BUDGET);
+  });
+
+  it('keeps the sound files (both formats, fetched after the first tap) within 3 MB', () => {
+    const files = shipped.filter(audio);
+    expect(files.length).toBeGreaterThan(0);
+    expect(size(files)).toBeLessThanOrEqual(AUDIO_BUDGET);
   });
 
   it('keeps the xhigh-only assets (bevelled models, detail textures) within 12 MB', () => {
