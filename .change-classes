@@ -2,7 +2,7 @@
 moodle/local/mooblox/classes/privacy/* security
 moodle/local/mooblox/db/access.php security
 moodle/local/mooblox/db/* schema
-moodle/local/mooblox/version.php schema
+moodle/local/mooblox/version.php docs
 moodle/local/mooblox/lang/* docs
 moodle/local/mooblox/templates/* ui
 moodle/local/mooblox/client/dist/* content
@@ -20,7 +20,7 @@ client/src/*/post.ts engine
 client/src/*/stage.ts engine
 client/src/boot/main.ts engine
 client/vite.config.ts engine
-client/package.json engine
+client/package.json deps
 client/package-lock.json engine
 client/src/world/props/* content
 client/src/world/landmarks/* content
