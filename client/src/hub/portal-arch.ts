@@ -19,7 +19,7 @@ export interface ArchColours {
   readonly shade: number;
 }
 
-/** A portal arch in local space (front +z): stepped base, two columns with capitals, a half ring over the opening and a back panel. */
+/** A portal arch in local space (front +z): stepped base, two columns with capitals, a half ring over the opening, open from behind. */
 export function archParts(c: ArchColours): BufferGeometry[] {
   const parts: BufferGeometry[] = [box(ARCH.span * 2 + 1.4, BASE, 1.4, c.trimShade)];
   for (const side of [-1, 1]) {
@@ -28,17 +28,15 @@ export function archParts(c: ArchColours): BufferGeometry[] {
   }
   parts.push(facet(new TorusGeometry(ARCH.span, ARCH.tube, 8, 24, Math.PI), c.accent, 0, OPENING.spring, 0));
   parts.push(facet(new TorusGeometry(ARCH.span - 0.34, 0.1, 6, 24, Math.PI), c.shade, 0, OPENING.spring, 0.05));
-  // Back panel so the portal reads as a doorway from behind.
-  parts.push(box(ARCH.span * 2 - 0.2, ARCH.column - 0.2, 0.18, c.shade, 0, BASE, -0.55));
   return parts;
 }
 
 /** Capsule radius of the kid: their front touches the fluid when their centre is this far in front of it. */
 const REACH = 0.55;
 
-/** Whether a body at local (x, y, z) of an arch (front +z) has stepped into its fluid surface. */
+/** Whether a body at local (x, y, z) of an arch has stepped into its fluid surface, from the front or from behind. */
 export function inOpening(x: number, y: number, z: number): boolean {
-  return Math.abs(x) < OPENING.half - 0.3 && z < OPENING.z + REACH && z > OPENING.z - 1.2 && y < OPENING.spring;
+  return Math.abs(x) < OPENING.half - 0.3 && Math.abs(z - OPENING.z) < REACH && y < OPENING.spring;
 }
 
 /** A world point (x, y, z) in the local frame of an arch standing at (ax, az) facing yaw. */

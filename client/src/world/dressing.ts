@@ -17,6 +17,7 @@ import { SegmentIndex } from './segment-index';
 import { fadeBlob, lawnColour, softBlob } from './lawn-colour';
 import { seededRandom } from './random';
 import { recipe, WAYSIDE, type Recipe, type RecipeKind } from './recipes';
+import { centrepieces } from './centrepieces';
 import { pathPoints, SIGHT_IDS, wayStops } from './path-stops';
 import { boxSamples, inBox, makeStair, STAIR, stairBoxes, stairFlight, stairPier, type Stair, type StairBox, type StairColours } from './stair';
 import type { SmokeSource } from './smoke';
@@ -218,6 +219,8 @@ export interface Dressing {
   readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly y: number; readonly reach: number; readonly top: number }[];
   /** Every flight of steps, low walkable level to high. */
   readonly stairs: readonly Stair[];
+  /** Every raised lawn: centre, radius and top height. */
+  readonly lawns: readonly { readonly x: number; readonly z: number; readonly r: number; readonly h: number }[];
   /** Every kerb laid along a walk (ground plan). */
   readonly kerbs: readonly KerbPiece[];
   /** The hub landmark the spawn camera frames, or null. */
@@ -374,6 +377,7 @@ class Designer {
   /** Islands that got a broad shelf (they need fewer raised lawns). */
   private readonly shelves = new Set<Circle>();
   private readonly stairs: Stair[] = [];
+  private readonly lawns: { x: number; z: number; r: number; h: number }[] = [];
   /** Raised levels (shelves, terraces, raised lawns): their top height and whether a footprint circle lies wholly on them. */
   private readonly levels: { y: number; holds: (x: number, z: number, r: number) => boolean }[] = [];
   /** Upright props placed on the current island (reach circle, height span) and the stamp group that laid them out together (0: none). */
@@ -454,7 +458,7 @@ class Designer {
     const sails = this.sea(districts);
     return {
       districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges, spans: this.bridgeParts,
-      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks, stairs: this.stairs, kerbs: this.kerbPieces,
+      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks, stairs: this.stairs, lawns: this.lawns, kerbs: this.kerbPieces,
       start: this.start ?? { x: this.layout.spawn.x, z: this.layout.spawn.z, face: 0 },
       occupancy: this.occ,
       hall: this.hall,
@@ -1255,7 +1259,7 @@ class Designer {
       const ix = x + it.dx * cs + it.dz * sn;
       const iz = z - it.dx * sn + it.dz * cs;
       if (!it.sway && this.clashes(it.id, ix, y, iz, it.height, it)) continue;
-      if (it.solid && y < 1) {
+      if (it.solid && y < LEVEL_MIN) {
         const r = it.block ?? Math.min(0.5, this.reach(it.id, it.height));
         if (this.occ.hits(ix, iz, r)) continue;
         this.occ.add(ix, iz, r);
@@ -1283,10 +1287,28 @@ class Designer {
         const h = 0.9 + this.random() * 0.5;
         const face = this.raisedLawn(x, z, r, h, Math.atan2(c.x - x, c.z - z));
         if (face === null) continue;
-        const kinds = r >= 2.7 ? (['readingNook', 'gardenBed'] as const) : (['readingNook'] as const);
-        this.stamp(recipe(this.pick(kinds), this.random), x, h, z, face + Math.PI, false);
+        this.lawns.push({ x, z, r, h });
+        this.centrepiece(x, z, r, h, face);
         placed++;
       }
+    }
+  }
+
+  /**
+   * A seeded centrepiece on a raised lawn (`centrepieces.ts`), set back from the stair so its landing keeps KID_RADIUS clear, facing
+   * the stair: the first variant whose anchor would land (held by the lawn, clear of other props and the landing).
+   */
+  private centrepiece(x: number, z: number, r: number, h: number, face: number): void {
+    const room = r - STAIR.landing - KID_RADIUS + 0.98;
+    const back = r - room - 0.01;
+    const cx = x - Math.sin(face) * back;
+    const cz = z - Math.cos(face) * back;
+    for (const rec of centrepieces(this.random, room)) {
+      const it = rec.items[0]!;
+      if (!this.supported(it.id, cx, h, cz, it.height, it) || (!it.sway && this.clashes(it.id, cx, h, cz, it.height, it))) continue;
+      if (it.solid && this.blocksLanding(it.id, cx, h, cz, it.height, it)) continue;
+      this.stamp(rec, cx, h, cz, face, false);
+      return;
     }
   }
 
@@ -1383,11 +1405,7 @@ class Designer {
     const solid = o.solid === true;
     if (y > -0.5 && o.wall === undefined && !DECK.test(id) && !this.supported(id, x, y, z, height, o)) return false;
     if (!o.sway && o.wall === undefined && !DECK.test(id) && this.clashes(id, x, y, z, height, o)) return false;
-    if (solid && this.stairKeep.length) {
-      const f = FOOT[id]!;
-      const r = o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h);
-      if (this.keepIndex.hits(x, z, r + KID_RADIUS) && this.stairKeep.some((b) => y < b.y + 0.6 && inBox(b, x, z, r + KID_RADIUS))) return false;
-    }
+    if (solid && this.blocksLanding(id, x, y, z, height, o)) return false;
     if (solid && y < 1 && !o.ground) {
       const f = FOOT[id]!;
       const r = o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h);
@@ -1412,6 +1430,14 @@ class Designer {
       ...(o.bands ? { bands: o.bands } : {}),
     });
     return true;
+  }
+
+  /** Whether a solid model here would stand in a stair's flight or landing (grown by the kid's radius). */
+  private blocksLanding(id: string, x: number, y: number, z: number, height: number, o: ModelOptions): boolean {
+    if (!this.stairKeep.length) return false;
+    const f = FOOT[id]!;
+    const r = o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h);
+    return this.keepIndex.hits(x, z, r + KID_RADIUS) && this.stairKeep.some((b) => y < b.y + 0.6 && inBox(b, x, z, r + KID_RADIUS));
   }
 
   /**

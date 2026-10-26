@@ -63,7 +63,10 @@ export function startReturnPortal(view: WorldView, player: PlayerRig, deps: Retu
     const fluid = openingGeometry();
     paintOpening(fluid, 0, fluid.getAttribute('position').count, new Color(RETURN_COLOURS.fluid), true);
     if (still) bakeStillFluid(fluid, new Color(RETURN_COLOURS.fluid));
-    const surface = new Mesh(fluid, material);
+    // The glow program draws front faces only: a turned copy shows the still swirl from behind.
+    const sheet = still ? mergeGeometries([fluid, fluid.clone().rotateY(Math.PI)], false)! : fluid;
+    if (sheet !== fluid) fluid.dispose();
+    const surface = new Mesh(sheet, material);
     surface.name = 'return-portal-fluid';
     surface.renderOrder = 2;
     group.add(frame, surface);

@@ -660,3 +660,11 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     white-out (clamped at 0).
   - Checks `node tools/hub.mjs <dir> [--n 0,1,3,6,12,40] [--perf] [--video] [--live site --user u --password p]` (layout at 5 widths,
     paint < 3 s, floors, warp, lift, arrival, white-out clears). Live 5.2: kid4 40 + video 4, kid2 40; dev 247; 60 fps, heap 45 MB.
+- T1397, 2026-10-26, version 2026102617, hub round 4 (owner `HUB-FEEDBACK.md` round 4; pre/post `~/drop/T1397/index.html`):
+  - Portals open from behind: `portal-arch.ts` drops the back panel (hub arches and the return portal); `inOpening` is symmetric
+    (|z| < REACH), so walking through from behind also warps. Low-tier return fluid gets a turned copy (glow draws front faces only).
+  - Raised lawns: `world/centrepieces.ts` (art data, kit props only: tree, planter bed, obelisk, lamp, bench, bench pair, picnic crate +
+    stools, fountain, sign, rocks; `reachOf`, `centrepieces(random, room)` seeded order of the variants that fit). `dressing.ts`
+    `centrepiece()` sets it back from the stair so the landing keeps KID_RADIUS clear, first variant whose anchor lands; `blocksLanding`
+    shared with `model()`; `stamp` claims ground occupancy only below `LEVEL_MIN` (low lawns lost their solids). `Dressing.lawns`.
+    `centrepieces.test.ts`: every lawn dressed on demo, 3,0,5, 8x12, >= 4 kinds on 8x12; placement validator 0/0. Stills `tools/r4-shots.mjs`.

@@ -43,7 +43,7 @@ describe('hub layout', () => {
     });
   });
 
-  it('warps only once the kid touches a portal fluid, from its front', () => {
+  it('warps only once the kid touches a portal fluid, from its front or from behind', () => {
     archSpots().forEach((a, i) => {
       const at = (forward: number, side = 0) => {
         const fx = Math.sin(a.yaw);
@@ -55,6 +55,8 @@ describe('hub layout', () => {
       expect(at(0.5, 1.2)).toBe(i);
       expect(at(0.5, 2.05)).toBe(-1);
       expect(at(-2)).toBe(-1);
+      expect(at(-0.5)).toBe(i);
+      expect(at(-1.5)).toBe(-1);
     });
   });
 });
