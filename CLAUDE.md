@@ -632,3 +632,17 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     summary, `--video dir --label pre|post`; `perf.mjs` walks every GPU rig over the bridges and gates crossing frames <= 34 ms
     (one missed vsync at 60 Hz), pops 0 and inline builds 0. Gate vs HEAD in one lock: GPU rigs all PASS (20x30 low worst 33.2
     -> 16.8 ms), crossings 16.8 ms except 8x12 low 33.3; SwiftShader stress misses 7 at HEAD, 4 after.
+- T1393, 2026-10-26, version 2026102615, warp hub replaces the T1392 sea map (owner: "more like Crash Bandicoot 2 or 3 ... playable";
+  pre/post `~/drop/T1393/index.html`):
+  - `index.php` mode `hub` (`?from=<course>` lands the kid in front of that pad with a warp-in); template `hub.mustache`; play.php
+    `huburl` + "Hub" button (`ui/hub-button.ts`). `local_mooblox_get_courses` rows gain xp, level, gems, gemstotal, crystals, stars,
+    trophies via `classes/local/course_rewards.php` (found itemkey prefixes, catalog gem count, course badges issued).
+  - Client `hub/`: `hub-layout.ts` (5 pads a floor on the north arc, centre lift, south show-off), `warp.ts` (`Dwell` arms only
+    after the kid leaves the spot; warp-out 1.1 s / in 0.9 s poses), `hub-scene.ts`, `portals.ts` (instanced swirls, pad gems,
+    gold cups on finished arches, beam), `showcase.ts` (trophy hall + gem/crystal/star/level displays), `hub-signs.ts` (one canvas
+    atlas), `hub-hud.ts`; `boot/hub.ts` composes them with the kid's Player, mouse-look, touch, camera and sound (`warp`, `lift`
+    synth whooshes in `tools/intake-audio.mjs`). Pads ordered by last access; floors wrap on the lift or the HUD arrows.
+  - Pitfall: the first rAF timestamp can be earlier than `performance.now()` taken at setup; a negative `dt` froze the arrival
+    white-out (clamped at 0).
+  - Checks `node tools/hub.mjs <dir> [--n 0,1,3,6,12,40] [--perf] [--video] [--live site --user u --password p]` (layout at 5 widths,
+    paint < 3 s, floors, warp, lift, arrival, white-out clears). Live 5.2: kid4 40 + video 4, kid2 40; dev 247; 60 fps, heap 45 MB.

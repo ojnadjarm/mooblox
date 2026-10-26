@@ -10,10 +10,10 @@ export interface PlayConfig {
   /** The stored sound choice (`local_mooblox_sound`), '' when none. */
   readonly sound: string;
   readonly rev: number;
-  /** `map` on the course map page (index.php), else `play`. */
-  readonly mode: 'play' | 'map';
-  /** The course map page, '' when an older play.php leaves it out. */
-  readonly mapurl: string;
+  /** `hub` on the hub page (index.php, where `courseid` is the course the kid came back from), else `play`. */
+  readonly mode: 'play' | 'hub';
+  /** The hub page, '' when an older play.php leaves it out. */
+  readonly huburl: string;
   /** Lang strings for the client UI, by key. */
   readonly strings: Readonly<Record<string, string>>;
 }
@@ -47,8 +47,8 @@ export function readConfig(json: string | null | undefined): PlayConfig {
     avatar: str(o, 'avatar'),
     sound: o['sound'] === undefined ? '' : str(o, 'sound'),
     rev: int(o, 'rev'),
-    mode: o['mode'] === 'map' ? 'map' : 'play',
-    mapurl: o['mapurl'] === undefined ? '' : str(o, 'mapurl'),
+    mode: o['mode'] === 'hub' ? 'hub' : 'play',
+    huburl: o['huburl'] === undefined ? '' : str(o, 'huburl'),
     strings: strings(o['strings']),
   };
 }

@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Tests for the course map list.
+ * Tests for the hub course list.
  *
  * @package    local_mooblox
  * @copyright  2026 Oscar Nadjar <oscar.nadjar@gmail.com>
@@ -27,7 +27,7 @@ namespace local_mooblox\local;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
- * Tests for the course map list.
+ * Tests for the hub course list.
  *
  * @package    local_mooblox
  * @category   test
@@ -81,6 +81,8 @@ final class course_list_test extends \advanced_testcase {
         $this->assertSame(0, $rows[$done->id]['lastaccess']);
         $this->assertSame(-1, $rows[$free->id]['progress']);
         $this->assertFalse($rows[$free->id]['completed']);
+        $this->assertSame(2, $rows[$half->id]['gemstotal']);
+        $this->assertSame([], $rows[$half->id]['trophies']);
     }
 
     /**

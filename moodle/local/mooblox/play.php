@@ -46,7 +46,7 @@ $config = [
     'avatar' => (string) get_user_preferences('local_mooblox_avatar', ''),
     'sound' => (string) get_user_preferences('local_mooblox_sound', ''),
     'rev' => (int) $rev,
-    'mapurl' => (new moodle_url('/local/mooblox/index.php'))->out(false),
+    'huburl' => (new moodle_url('/local/mooblox/index.php', ['from' => $course->id]))->out(false),
     'strings' => [
         'guide' => get_string('guide', 'local_mooblox'),
         'greeting' => get_string('guide_greeting', 'local_mooblox', '{name}'),
@@ -61,7 +61,7 @@ $config = [
         'look_release' => get_string('look_release', 'local_mooblox', '{ctrl}'),
     ],
 ];
-foreach (['sound', 'sound_on', 'sound_off', 'sound_volume', 'map_back', 'map_back_label'] as $key) {
+foreach (['sound', 'sound_on', 'sound_off', 'sound_volume', 'hub_back', 'hub_back_label'] as $key) {
     $config['strings'][$key] = get_string($key, 'local_mooblox');
 }
 foreach (['title', 'hair', 'face', 'skin', 'clothes', 'random', 'undo', 'save', 'cancel'] as $key) {

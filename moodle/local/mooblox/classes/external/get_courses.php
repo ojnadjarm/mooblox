@@ -77,6 +77,18 @@ class get_courses extends external_api {
             'completed' => new external_value(PARAM_BOOL, 'Whether the course or all its tracked activities are done'),
             'lastaccess' => new external_value(PARAM_INT, 'Last visit to the course, 0 when never'),
             'url' => new external_value(PARAM_URL, 'URL of the course world'),
+            'xp' => new external_value(PARAM_INT, 'XP earned in the course'),
+            'level' => new external_value(PARAM_INT, 'Level reached in the course'),
+            'gems' => new external_value(PARAM_INT, 'Gems found in the course'),
+            'gemstotal' => new external_value(PARAM_INT, 'Gems the course holds'),
+            'crystals' => new external_value(PARAM_INT, 'Crystals found in the course'),
+            'stars' => new external_value(PARAM_INT, 'Stars found in the course'),
+            'trophies' => new external_multiple_structure(new external_single_structure([
+                'badgeid' => new external_value(PARAM_INT, 'Badge id'),
+                'name' => new external_value(PARAM_TEXT, 'Badge name'),
+                'image' => new external_value(PARAM_URL, 'Badge image URL'),
+                'timeissued' => new external_value(PARAM_INT, 'When the badge was issued'),
+            ]), 'Course badges the user holds, oldest first'),
         ]));
     }
 }

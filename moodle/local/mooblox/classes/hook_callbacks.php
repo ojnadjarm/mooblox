@@ -33,7 +33,7 @@ namespace local_mooblox;
  */
 class hook_callbacks {
     /**
-     * Adds the Mooblox course map to the primary navigation for logged-in users.
+     * Adds the Mooblox hub to the primary navigation for logged-in users.
      *
      * @param \core\hook\navigation\primary_extend $hook
      */

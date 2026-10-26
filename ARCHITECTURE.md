@@ -21,7 +21,7 @@ Moodle target: 5.0+ (`$plugin->requires`). Dev and test site: Moodle 5.2.
 | Need | Call |
 |---|---|
 | World + book data | `local_mooblox_get_world(courseid)` (ajax + mobile service) |
-| World map (the user's courses) | `local_mooblox_get_courses()`: id, name, short summary, image, progress %, completed, last access, play URL |
+| Warp hub (the user's courses) | `local_mooblox_get_courses()`: id, name, short summary, image, progress %, completed, last access, play URL, xp, level, gems, crystals, stars, trophies |
 | Mark viewed (native video) | `local_mooblox_view_activity(cmid)`: allow-list dispatch to the module's own view function |
 | Manual completion | `core_completion_update_activity_completion_status_manually` |
 | Due dates in the book | `core_calendar_get_action_events_by_course` |
@@ -60,11 +60,14 @@ only place that instantiates concrete classes. The 10 modules it wires:
 | 9 | `net/` | `Presence` interface · `NullPresence` v1 · later a room relay |
 | 10 | `perf/` | `QualityTier` (DPR clamp, shadow toggle) · `FrameGate` (render on demand; idle GPU while a panel is open) |
 
-Map mode (`index.php`, config `mode: 'map'`): `map/` (`courses.ts` DTO check + `CourseListGateway` · `map-layout.ts` pure
-ring layout, no overlap for any count · `map-camera.ts` overview fit, pan/zoom, eased flight · `map-scene.ts` one island per course
-through `IslandBuilder` + landmark + trophy · `island-labels.ts` / `course-card.ts` / `map-hud.ts` DOM) wired by `boot/map.ts`;
-it reuses `Stage`, `MaterialKit`, `IslandBuilder`, landmarks, trophies and the sound engine. In a course world `ui/map-button.ts`
-links back to the map.
+Hub mode (`index.php`, config `mode: 'hub'`), a Crash Bandicoot style warp room: `hub/` (`courses.ts` DTO check, last-access
+order, totals + `CourseListGateway` · `hub-layout.ts` pure spots: 5 pads per floor on the north arc, centre lift, south show-off ·
+`warp.ts` pure `Dwell` trigger + warp-out/in poses · `hub-scene.ts` plaza island through `IslandBuilder`, arches, pads, lift ·
+`portals.ts` instanced swirls, pad gems, finished-arch cups, beam · `showcase.ts` trophy hall + gem/crystal/star/level displays ·
+`hub-signs.ts` one canvas atlas · `hub-hud.ts` DOM) wired by `boot/hub.ts`; it reuses `Player`, `FollowCamera`, `MouseLook`,
+`TouchControls`, the avatar kit, the trophy hall and the sound engine. Walking onto a pad warps to play.php; in a course world
+`ui/hub-button.ts` returns to `index.php?from=<course>`, which lands the kid in front of that pad. SRP: layout and warp timing
+are pure and tested; scene, portals, showcase and HUD each own one part; `boot/hub.ts` only composes (DIP via `HubDeps`).
 
 Key interfaces:
 
@@ -82,7 +85,7 @@ interface Presence { join(ticket: string): Promise<void>; publish(s: AvatarState
 
 ## Plugin (`moodle/local/mooblox`)
 
-Entry points: `index.php` (the world map: require_login + site switch, the same bundle in map mode), `play.php` (require_login + capability + site switch, then the mustache shell with the
+Entry points: `index.php` (the warp hub: require_login + site switch, the same bundle in hub mode), `play.php` (require_login + capability + site switch, then the mustache shell with the
 client bundle and a JSON config), `db/access.php` (`local/mooblox:play`), `db/services.php`,
 `db/hooks.php`, `lib.php` (`local_mooblox_user_preferences()`).
 
@@ -94,16 +97,16 @@ The 8 classes:
 | 2 | `classes/external/view_activity.php` | Thin external function: allow-listed dispatch to the module's view function |
 | 3 | `classes/local/world_builder.php` | `get_fast_modinfo()` + completion details → world DTO |
 | 4 | `classes/local/embed_detector.php` | Pure: request headers + session flag → framed or not |
-| 5 | `classes/hook_callbacks.php` | `before_http_headers` (embedded layout) · `secondary_extend` (course tab) · `primary_extend` (map link) |
+| 5 | `classes/hook_callbacks.php` | `before_http_headers` (embedded layout) · `secondary_extend` (course tab) · `primary_extend` (hub link) |
 | 6 | `classes/privacy/provider.php` | Avatar user-preference export and delete |
-| 7 | `classes/local/course_list.php` | The user's enrolled courses where they may play → map course rows (progress, completion, last access) |
+| 7 | `classes/local/course_list.php` | The user's enrolled courses where they may play → hub course rows (progress, completion, last access) + `course_rewards` (xp, gems, crystals, stars, trophies) |
 | 8 | `classes/external/get_courses.php` | Thin external function: validate, return `course_list::for_user` |
 
 ## Data flow
 
 ```
-Student → "Mooblox" (primary navigation) → index.php → boot (map mode) → AjaxGateway.getCourses → mapLayout → map scene
-  → pick an island → camera flight → play.php?id=<course>; in the world the "Map" button returns to index.php
+Student → "Mooblox" (primary navigation) → index.php → boot (hub mode) → AjaxGateway.getCourses → byLastAccess → hub scene
+  → walk onto a pad → warp → play.php?id=<course>; in the world the "Hub" button returns to index.php?from=<course>
 Student in course → "MOOBLOX" tab → play.php (session, cap) → HTML shell + config {wwwroot, courseid, sesskey, firstname, avatar, rev}
   → boot → AjaxGateway.getWorld → CourseStore → IslandLayout → scene (props per activity) + Book
   → walk to a prop → Proximity → OpenerRegistry → FrameOpener → <iframe src=cm url> (embedded layout)

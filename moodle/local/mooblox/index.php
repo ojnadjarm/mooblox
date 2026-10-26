@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Mooblox course map: every course the user can play as an island on one sea.
+ * Mooblox hub: a room the kid walks around, with a warp portal to every course they can play.
  *
  * @package    local_mooblox
  * @copyright  2026 Oscar Nadjar <oscar.nadjar@gmail.com>
@@ -23,6 +23,8 @@
  */
 
 require('../../config.php');
+
+$from = optional_param('from', 0, PARAM_INT);
 
 require_login(null, false);
 if (!get_config('local_mooblox', 'enabled')) {
@@ -33,15 +35,15 @@ $context = context_system::instance();
 $PAGE->set_context($context);
 $PAGE->set_url(new moodle_url('/local/mooblox/index.php'));
 $PAGE->set_pagelayout('embedded');
-$PAGE->set_title(get_string('map_title', 'local_mooblox'));
+$PAGE->set_title(get_string('hub_title', 'local_mooblox'));
 $PAGE->add_body_class('local-mooblox-play');
 
 $rev = get_config('local_mooblox', 'version');
 $courses = \local_mooblox\local\course_list::for_user($USER->id);
 $config = [
-    'mode' => 'map',
+    'mode' => 'hub',
     'wwwroot' => $CFG->wwwroot,
-    'courseid' => 0,
+    'courseid' => $from,
     'userid' => (int) $USER->id,
     'sesskey' => sesskey(),
     'firstname' => $USER->firstname,
@@ -50,22 +52,28 @@ $config = [
     'rev' => (int) $rev,
     'strings' => [],
 ];
-$keys = ['back', 'close', 'done', 'empty_text', 'empty_title', 'free', 'hint', 'lastvisit', 'list', 'never', 'play', 'progress',
-    'title'];
+$keys = ['crystals', 'done', 'down', 'empty_text', 'empty_title', 'free', 'gems', 'hint', 'list', 'new', 'stars', 'title', 'trophies',
+    'up'];
 foreach ($keys as $key) {
-    $a = ['lastvisit' => '{when}', 'progress' => '{progress}'][$key] ?? null;
-    $config['strings']['map_' . $key] = get_string('map_' . $key, 'local_mooblox', $a);
+    $config['strings']['hub_' . $key] = get_string('hub_' . $key, 'local_mooblox');
 }
-$keys = ['sound', 'sound_on', 'sound_off', 'sound_volume', 'fallback_link', 'fallback_retry', 'fallback_text', 'fallback_title'];
+$placeholders = ['floor' => (object) ['floor' => '{floor}', 'floors' => '{floors}'], 'level' => '{level}', 'progress' => '{progress}',
+    'warping' => '{name}', 'xp' => '{xp}'];
+foreach ($placeholders as $key => $a) {
+    $config['strings']['hub_' . $key] = get_string('hub_' . $key, 'local_mooblox', $a);
+}
+$keys = ['sound', 'sound_on', 'sound_off', 'sound_volume', 'look_click', 'fallback_link', 'fallback_retry', 'fallback_text', 'fallback_title'];
 foreach ($keys as $key) {
     $config['strings'][$key] = get_string($key, 'local_mooblox');
 }
+$config['strings']['look_ctrl'] = get_string('look_ctrl', 'local_mooblox', '{ctrl}');
+$config['strings']['look_release'] = get_string('look_release', 'local_mooblox', '{ctrl}');
 
 echo $OUTPUT->header();
-echo $OUTPUT->render_from_template('local_mooblox/map', [
-    'title' => get_string('map_title', 'local_mooblox'),
+echo $OUTPUT->render_from_template('local_mooblox/hub', [
+    'title' => get_string('hub_title', 'local_mooblox'),
     'courses' => array_map(fn(array $c): array => ['fullname' => $c['fullname'], 'url' => $c['url']], $courses),
-    'empty' => get_string('map_empty_text', 'local_mooblox'),
+    'empty' => get_string('hub_empty_text', 'local_mooblox'),
     'configjson' => json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT),
     'bundleurl' => (new moodle_url('/local/mooblox/client/dist/mooblox.js', ['rev' => $rev]))->out(false),
 ]);

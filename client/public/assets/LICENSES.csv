@@ -338,3 +338,7 @@ file,pack,author,license,source,sha256_16
 "audio/bed-fire.m4a","Fireplace Sound loop","PagDev","CC0-1.0","https://opengameart.org/content/fireplace-sound-loop","f290152ed4780c99"
 "audio/fanfare.ogg","Kenney Music Jingles 1.0","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/music-jingles","c9c73dc27bf44993"
 "audio/fanfare.m4a","Kenney Music Jingles 1.0","Kenney (kenney.nl)","CC0-1.0","https://kenney.nl/assets/music-jingles","5a15130d0efa76d9"
+"audio/warp.ogg","MOOBLOX synthesised warp and lift whooshes (tools/intake-audio.mjs)","MOOBLOX contributors","CC0-1.0","https://github.com/ojnadjarm/mooblox","7fdc0ae18a2b50e3"
+"audio/warp.m4a","MOOBLOX synthesised warp and lift whooshes (tools/intake-audio.mjs)","MOOBLOX contributors","CC0-1.0","https://github.com/ojnadjarm/mooblox","f733034aecece321"
+"audio/lift.ogg","MOOBLOX synthesised warp and lift whooshes (tools/intake-audio.mjs)","MOOBLOX contributors","CC0-1.0","https://github.com/ojnadjarm/mooblox","6032a53adad36cb4"
+"audio/lift.m4a","MOOBLOX synthesised warp and lift whooshes (tools/intake-audio.mjs)","MOOBLOX contributors","CC0-1.0","https://github.com/ojnadjarm/mooblox","bd3ed17775aaabdf"

@@ -15,9 +15,9 @@
     along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 }}
 {{!
-    @template local_mooblox/map
+    @template local_mooblox/hub
 
-    Shell of the course map: the client mounts into the root; without scripts the course links show.
+    Shell of the hub: the client mounts into the root; without scripts the course links show.
 
     Context variables required for this template:
     * title - page heading
@@ -31,14 +31,14 @@
         "title": "Your worlds",
         "courses": [{"fullname": "Volcanoes", "url": "https://example.com/local/mooblox/play.php?id=2"}],
         "empty": "No worlds yet",
-        "configjson": "{\"mode\":\"map\",\"wwwroot\":\"https://example.com\",\"courseid\":0,\"sesskey\":\"abc\",\"firstname\":\"Mia\",\"avatar\":\"\",\"rev\":1}",
+        "configjson": "{\"mode\":\"hub\",\"wwwroot\":\"https://example.com\",\"courseid\":0,\"sesskey\":\"abc\",\"firstname\":\"Mia\",\"avatar\":\"\",\"rev\":1}",
         "bundleurl": "https://example.com/local/mooblox/client/dist/mooblox.js?rev=1"
     }
 }}
 <h1 class="sr-only">{{title}}</h1>
 <div id="mooblox-root" class="local-mooblox-root"></div>
 <noscript>
-    <ul class="local-mooblox-maplist">
+    <ul class="local-mooblox-hublist">
         {{#courses}}
         <li><a href="{{url}}">{{fullname}}</a></li>
         {{/courses}}

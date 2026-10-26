@@ -54,6 +54,7 @@ final class get_courses_test extends \advanced_testcase {
         $this->assertSame('Volcanoes', $result[0]['fullname']);
         $this->assertSame(-1, $result[0]['progress']);
         $this->assertStringContainsString('/local/mooblox/play.php?id=' . $course->id, $result[0]['url']);
+        $this->assertSame([0, 0, []], [$result[0]['xp'], $result[0]['gems'], $result[0]['trophies']]);
     }
 
     /**

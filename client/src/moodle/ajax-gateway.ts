@@ -4,7 +4,7 @@ import type { ClaimDto, LookDto } from '../domain/rewards-dto';
 import { assertRewardsDto, toLook, toLookDto, toRewards } from '../domain/rewards-mapper';
 import { toWorld } from '../domain/mapper';
 import type { WorldData } from '../domain/types';
-import { toMapCourses, type CourseListGateway, type MapCourse } from '../map/courses';
+import { toHubCourses, type CourseListGateway, type HubCourse } from '../hub/courses';
 import type { MoodleGateway } from './gateway';
 import { MoodleError } from './moodle-error';
 
@@ -60,10 +60,10 @@ export class AjaxGateway implements MoodleGateway, CourseListGateway {
     return toLook(await this.call<LookDto>('local_mooblox_set_look', { ...toLookDto(look) }));
   }
 
-  async getCourses(): Promise<MapCourse[]> {
+  async getCourses(): Promise<HubCourse[]> {
     const dto = await this.call<unknown>('local_mooblox_get_courses', {});
     try {
-      return toMapCourses(dto);
+      return toHubCourses(dto);
     } catch (e) {
       throw new MoodleError('protocol', `local_mooblox_get_courses: ${e instanceof Error ? e.message : String(e)}`);
     }

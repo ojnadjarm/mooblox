@@ -1,8 +1,8 @@
 @local @local_mooblox
-Feature: Students pick a course world on the Mooblox map
+Feature: Students pick a course world in the Mooblox hub
   In order to choose what to learn
   As a student
-  I need a site page with every course I can play
+  I need a hub with a portal to every course I can play
 
   Background:
     Given the following "users" exist:
@@ -17,7 +17,7 @@ Feature: Students pick a course world on the Mooblox map
       | student1 | C1     | student |
       | student1 | C2     | student |
 
-  Scenario: A student opens the map from the primary navigation
+  Scenario: A student opens the hub from the primary navigation
     Given the following "permission overrides" exist:
       | capability         | permission | role    | contextlevel | reference |
       | local/mooblox:play | Prohibit   | student | Course       | C2        |
@@ -27,7 +27,7 @@ Feature: Students pick a course world on the Mooblox map
     And "Course 1" "link" should exist
     And "Course 2" "link" should not exist
 
-  Scenario: The map link is gone when Mooblox is off
+  Scenario: The hub link is gone when Mooblox is off
     Given the following config values are set as admin:
       | enabled | 0 | local_mooblox |
     When I log in as "student1"

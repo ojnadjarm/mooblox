@@ -25,21 +25,22 @@
 namespace local_mooblox\local;
 
 /**
- * The courses a user can enter as Mooblox worlds, with progress for the course map.
+ * The courses a user can enter as Mooblox worlds, with progress and rewards for the hub.
  *
  * @package    local_mooblox
  * @copyright  2026 Oscar Nadjar <oscar.nadjar@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class course_list {
-    /** Longest course summary on the map card, in characters. */
+    /** Longest course summary, in characters. */
     const SUMMARY_LENGTH = 160;
 
     /**
      * Returns the user's active courses where they may play, in the site's course order.
      *
      * @param int $userid user id
-     * @return array[] rows of id, fullname, summary, image, progress (-1 = not tracked), completed, lastaccess, url
+     * @return array[] rows of id, fullname, summary, image, progress (-1 = not tracked), completed, lastaccess, url and the
+     *     course_rewards fields
      */
     public static function for_user(int $userid): array {
         global $DB;
@@ -73,7 +74,7 @@ class course_list {
                 'completed' => $progress === 100 || (new \completion_info($course))->is_course_complete($userid),
                 'lastaccess' => (int) ($lastaccess[$course->id] ?? 0),
                 'url' => (new \moodle_url('/local/mooblox/play.php', ['id' => $course->id]))->out(false),
-            ];
+            ] + course_rewards::for_course((int) $course->id, $userid);
         }
         return $rows;
     }

@@ -35,6 +35,10 @@ const NATURE = {
 /** Campfire crackle pops cut from the AntumDeluge recording (start, end s). */
 const CRACKLES = [[0, 0.7], [0.7, 1.4], [1.4, 2.1], [2.1, 2.87]];
 const MOOBLOX = { pack: 'MOOBLOX synthesised duck quack (tools/intake-audio.mjs)', author: 'MOOBLOX contributors', source: 'https://github.com/ojnadjarm/mooblox' };
+const WARP = { pack: 'MOOBLOX synthesised warp and lift whooshes (tools/intake-audio.mjs)', author: 'MOOBLOX contributors', source: 'https://github.com/ojnadjarm/mooblox' };
+/** A rising whoosh: a gliding tone from f0 to f1 Hz plus a shimmer an octave and a half up that flutters, swelling and fading over len s. */
+const whoosh = (f0, f1, len) =>
+  `aevalsrc='(0.55*sin(2*PI*(${f0}*t+(${f1}-${f0})*t*t/(2*${len})))+0.3*sin(2*PI*(${f0 * 2.8}*t+(${f1 * 2.8}-${f0 * 2.8})*t*t/(2*${len})))*(0.5+0.5*sin(2*PI*16*t)))*sin(PI*min(t/${len},1))^0.8':s=44100:d=${len},highpass=f=120,aecho=0.6:0.5:60:0.3`;
 /** A duck quack made from a gliding buzz through a nasal band: start and end pitch (Hz), length (s). */
 const quack = (f0, f1, len) =>
   `aevalsrc='0.8*(2*mod(${f0}*t+(${f1}-${f0})*t*t/(2*${len}),1)-1)*sin(PI*min(t/${len},1))^0.6':s=44100:d=${len},bandpass=f=1250:w=1100,equalizer=f=2600:t=q:w=2:g=6,lowpass=f=5000`;
@@ -89,6 +93,8 @@ const SFX = [
   ['quack-0', null, MOOBLOX, quack(560, 430, 0.16)],
   ['quack-1', null, MOOBLOX, quack(610, 470, 0.13)],
   ['quack-2', null, MOOBLOX, quack(520, 400, 0.19)],
+  ['warp', null, WARP, whoosh(180, 1500, 1.1)],
+  ['lift', null, WARP, whoosh(260, 760, 0.55)],
   ...CRACKLES.map(([a, b], i) => [`crackle-${i}`, 'oga-fire/fire-antum.wav', NATURE.crackle, `atrim=${a}:${b},asetpts=N/SR/TB,afade=t=in:d=0.02,afade=t=out:st=${(b - a - 0.06).toFixed(2)}:d=0.06`]),
 ];
 /** Nature sounds come at any level: peaks are set to -1 dBFS like the Kenney files. */
