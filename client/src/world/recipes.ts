@@ -22,11 +22,11 @@ export interface RecipeItem {
   readonly light?: boolean;
 }
 
-/** A cluster: its items, its ground reach and an optional grounding patch (a darker lawn disc under it). */
+/** A cluster: its items, its ground reach and an optional grounding patch (a darker lawn blob under it, fading into the ground). */
 export interface Recipe {
   readonly items: readonly RecipeItem[];
   readonly radius: number;
-  readonly patch?: { readonly r: number; readonly colour: number };
+  readonly patch?: { readonly r: number };
 }
 
 export type RecipeKind = 'treeClump' | 'gardenBed' | 'rockGroup' | 'readingNook' | WaysideKind;
@@ -63,7 +63,7 @@ export function recipe(kind: RecipeKind, random: () => number): Recipe {
       const a = random() * Math.PI * 2;
       items.push({ id: pick(['nature/grass_large', 'nature/grass_leafs', 'nature/plant_bushSmall']), dx: Math.cos(a) * 2.7, dz: Math.sin(a) * 2.7, height: 0.4, sway: true, detail: true, minor: true, tint: LEAF });
     }
-    return { items, radius: 2.9, patch: { r: 2.6, colour: 0x7fb85a } };
+    return { items, radius: 2.9, patch: { r: 2.6 } };
   }
   if (kind === 'gardenBed') {
     const [a, b] = pick(BEDS);
@@ -74,7 +74,7 @@ export function recipe(kind: RecipeKind, random: () => number): Recipe {
       items.push({ id: (i + (i < 3 ? 0 : 1)) % 2 ? a : b, dx: x, dz: z, height: 0.5 + random() * 0.15, sway: true, detail: true, ...(i % 2 ? { minor: true } : {}) });
     }
     items.push({ id: 'nature/plant_bushLarge', dx: 2.6, dz: 0, height: 0.9, sway: true, detail: true, tint: LEAF });
-    return { items, radius: 2.8, patch: { r: 2.6, colour: 0x8fc45a } };
+    return { items, radius: 2.8, patch: { r: 2.6 } };
   }
   if (kind === 'rockGroup') {
     return {
@@ -118,7 +118,7 @@ export function recipe(kind: RecipeKind, random: () => number): Recipe {
         { id: random() < 0.5 ? 'town/stall-red' : 'town/stall-green', dx: 0, dz: -0.4, height: 2.6, yaw: 0, solid: true, block: 1.05 },
         { id: 'pirate/barrel', dx: -1.9, dz: 0.2, yaw: random() * 6, height: 0.8, solid: true, detail: true },
         { id: 'pirate/crate', dx: 1.9, dz: 0.3, height: 0.65, yaw: random() * 0.6, solid: true, detail: true },
-        { id: random() < 0.5 ? 'town/banner-red' : 'town/banner-green', dx: -1.8, dz: -1.4, height: 2.2, yaw: 0, detail: true },
+        { id: random() < 0.5 ? 'town/banner-red' : 'town/banner-green', dx: -2.4, dz: -0.6, height: 2.2, yaw: 0, detail: true },
         { id: pick(BEDS)[1], dx: 1.6, dz: -1.3, yaw: random() * 6, height: 0.5, sway: true, detail: true, minor: true },
       ],
       radius: 2.5,

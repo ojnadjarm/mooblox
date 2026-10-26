@@ -1,5 +1,6 @@
 import type { BufferGeometry } from 'three';
 import type { LookPalette } from '../look';
+import { sealParts } from '../model-seal';
 import { alternate, bakeAo, bands, bowl, box, cone, disc, dome, gable, gore, hipRoof, lathe, prism, rock } from './shapes';
 
 /** A hand-made hero model in local space (front = +z, standing on y 0); parts are painted geometry, faceted or soft per part. */
@@ -8,8 +9,10 @@ export interface Landmark {
   /** Lit lantern or window geometry for the glow mesh. */
   readonly glow: readonly BufferGeometry[];
   readonly height: number;
-  /** Ground reach round the axis (metres). */
+  /** Layout radius round the axis (metres): its terrace keeps 0.5 m round it, so `reach` never runs more than REACH_SLACK past it. */
   readonly radius: number;
+  /** Ground reach round the axis (metres): the farthest point of any part or the flag's pole base within 0.3 m of the ground. */
+  readonly reach: number;
   /** Where a pennant (with its own pole, `h` high) flies, or null. */
   readonly flag: { readonly x: number; readonly y: number; readonly z: number; readonly h: number } | null;
 }
@@ -25,10 +28,33 @@ const RED = 0xe5484d;
 const GLASS = 0xcff0e8;
 const GLASS_B = 0xa6dcd4;
 
+/** Ground a flag's pole base takes round its foot. */
+const FLAG_BASE = 0.35;
+/** Gap between parts' faces that would share a plane: past the 4 mm that z-fights at the smallest scale a landmark is placed at (0.5). */
+const SEAL = 0.012;
+/** How far (m) a landmark's ground reach may run past its layout radius and still stand 0.2 m inside its terrace. */
+const REACH_SLACK = 0.3;
+
 const done = (parts: BufferGeometry[], glow: BufferGeometry[], height: number, radius: number, flag: Landmark['flag']): Landmark => {
+  sealParts(parts, SEAL);
   for (const g of parts) bakeAo(g, 0, 1.2, 0.28);
-  return { parts, glow, height, radius, flag };
+  let reach = flag && flag.y < 0.3 ? Math.hypot(flag.x, flag.z) + FLAG_BASE : 0;
+  for (const g of parts) {
+    const pos = g.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) if (pos.getY(i) < 0.3) reach = Math.max(reach, Math.hypot(pos.getX(i), pos.getZ(i)));
+  }
+  return { parts, glow, height, radius: Math.max(radius, reach - REACH_SLACK), reach, flag };
 };
+
+const built = new WeakMap<LandmarkBuilder, Map<string, Landmark>>();
+
+/** A landmark from `build` (sealed once per palette and accents, then cached): fresh geometry copies the caller may move. */
+export function buildLandmark(build: LandmarkBuilder, p: LookPalette, accent: number, accentShade: number): Landmark {
+  const own = built.get(build) ?? built.set(build, new Map()).get(build)!;
+  const key = `${JSON.stringify(p)}|${accent}|${accentShade}`;
+  const lm = own.get(key) ?? own.set(key, build(p, accent, accentShade)).get(key)!;
+  return { ...lm, parts: lm.parts.map((g) => g.clone()), glow: lm.glow.map((g) => g.clone()) };
+}
 
 /** An arched opening facing +z: a door slab with a half-round head and a trim surround (bottom on y, face at z). */
 const arch = (w: number, h: number, fill: number, rim: number, x: number, y: number, z: number): BufferGeometry[] => [

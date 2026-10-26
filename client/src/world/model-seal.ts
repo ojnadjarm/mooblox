@@ -42,6 +42,27 @@ export function sealModel(source: BufferGeometry, backs: boolean, step: number):
   return g;
 }
 
+/** Lifts faces of non-indexed `parts` (one shared space) that share a plane with another face `step` apart, smaller over larger, in place. */
+export function sealParts(parts: readonly BufferGeometry[], step = LIFT): void {
+  const counts = parts.map((g) => g.getAttribute('position').count);
+  const all = new Float32Array(counts.reduce((s, n) => s + n, 0) * 3);
+  let o = 0;
+  for (const g of parts) {
+    all.set(g.getAttribute('position').array as Float32Array, o);
+    o += g.getAttribute('position').count * 3;
+  }
+  const joined = new BufferGeometry();
+  joined.setAttribute('position', new BufferAttribute(all, 3));
+  const lifted = sealModel(joined, false, step).getAttribute('position').array as Float32Array;
+  o = 0;
+  for (const g of parts) {
+    const pos = g.getAttribute('position') as BufferAttribute;
+    (pos.array as Float32Array).set(lifted.subarray(o, o + pos.count * 3));
+    pos.needsUpdate = true;
+    o += pos.count * 3;
+  }
+}
+
 const cache = new WeakMap<BakedModel, Map<string, BufferGeometry>>();
 
 /** The sealed geometry a placement draws: back twins for props, none for swaying foliage cards and houses' closed shells. */

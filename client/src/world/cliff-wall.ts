@@ -66,7 +66,8 @@ export const TERRACE_CLIFF: CliffSize = {
   depth: 0.7,
   upper: [0.5, 0.95],
   upperShare: 0.7,
-  upperOut: [-0.04, 0.06],
+  /** Short of the terrace lip's 6 cm foot: a slab face there would share its side's plane. */
+  upperOut: [-0.04, 0.05],
   step: [0.08, 0.2],
   notch: 0.3,
   notchDrop: [0.08, 0.22],

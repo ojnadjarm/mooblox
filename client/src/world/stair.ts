@@ -6,6 +6,8 @@ import { bakeAo } from './landmarks/shapes';
  * level, landing depth kept clear at each end, and a landing pier's shortest length (the landing plus the kid's radius).
  */
 export const STAIR = { rise: 0.3, tread: 0.42, inset: 0.5, landing: 1.5, pier: 2 } as const;
+/** A landing pier's top stands this far over the level it reaches into: a shared plane would z-fight with the level's grass. */
+const PIER_LIFT = 0.012;
 
 /** One flight of steps from a low walkable level up to a high one (world space). */
 export interface Stair {
@@ -104,12 +106,14 @@ export function stairFlight(s: Stair, colours: StairColours): BufferGeometry {
 
 /**
  * A landing pier at the stair's high level (world space): a block `s.pier` deep behind the top edge plus `STAIR.inset`
- * into the raised level, 0.2 m wider than the flight each side, so a landmark on the raised level never stands at the stair head.
+ * into the raised level, 0.2 m wider than the flight each side, so a landmark on the raised level never stands at the stair head;
+ * its top `PIER_LIFT` over the level.
  */
 export function stairPier(s: Stair, colours: StairColours): BufferGeometry {
   const w = s.width / 2 + 0.2;
   const z0 = -s.pier - STAIR.inset;
-  const { low: y0, high: y1 } = s;
+  const y0 = s.low;
+  const y1 = s.high + PIER_LIFT;
   const { quad, geometry } = quads();
   quad([[-w, y1, z0], [-w, y1, 0], [w, y1, 0], [w, y1, z0]], [0, 1, 0], colours.tread);
   quad([[-w, y0, 0], [w, y0, 0], [w, y1, 0], [-w, y1, 0]], [0, 0, 1], colours.riser);

@@ -22,6 +22,7 @@ import type { Look, LookPalette } from './look';
 import type { Circle, WorldLayout } from './layout';
 import { paint, type MaterialKit } from './material-kit';
 import { Palette, PurposeColor } from './palette';
+import { fadeBlob, lawnColour, softBlob } from './lawn-colour';
 import { seededRandom } from './random';
 import { Surface, type SurfaceId } from './surfaces';
 import { bakedWaterGeometry, waterMaterial } from './water';
@@ -186,7 +187,9 @@ export class IslandBuilder {
       if (keepOut.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r) || placed.some((k) => Math.hypot(x - k.x, z - k.z) < (k.r + r) * 1.15)) continue;
       placed.push({ x, z, r });
       this.surface = kind.surface;
-      this.add(this.land, blobGeometry(r, random), kind.colour, x, DECAL_Y, z, random() * 6);
+      const g = softBlob(r, random);
+      this.add(this.land, g, kind.colour, x, DECAL_Y, z, random() * 6);
+      if (kind.surface === Surface.meadow) fadeBlob(g, x, z, 1, (px, pz, out) => lawnColour(this.p, px, pz, out));
     }
     this.surface = Surface.plain;
   }
@@ -196,14 +199,9 @@ export class IslandBuilder {
     const g = new RingGeometry(0, c.radius, seg, 2).rotateX(-Math.PI / 2).translate(c.x, 0, c.z);
     const pos = g.getAttribute('position');
     const colors = new Float32Array(pos.count * 3);
-    const lit = new Color(this.p.grass);
-    const cool = new Color(this.p.grassLight);
     const k = new Color();
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const t = 0.5 + 0.5 * Math.sin(x * 0.09 + z * 0.05) * Math.cos(z * 0.08 - x * 0.03);
-      k.copy(lit).lerp(cool, t * 0.85);
+      lawnColour(this.p, pos.getX(i), pos.getZ(i), k);
       colors.set([k.r, k.g, k.b], i * 3);
     }
     g.setAttribute('color', new BufferAttribute(colors, 3));
@@ -327,22 +325,3 @@ function roundedPad(size: number, height: number): BufferGeometry {
   return g;
 }
 
-/** A soft irregular flat blob (decal), facing up. */
-function blobGeometry(r: number, random: () => number): BufferGeometry {
-  const n = 9;
-  const pos: number[] = [];
-  const rim = Array.from({ length: n }, (_, i) => {
-    const a = (i / n) * Math.PI * 2;
-    const k = r * (0.75 + random() * 0.4);
-    return [Math.cos(a) * k, Math.sin(a) * k] as const;
-  });
-  for (let i = 0; i < n; i++) {
-    const [ax, az] = rim[i]!;
-    const [bx, bz] = rim[(i + 1) % n]!;
-    pos.push(0, 0, 0, bx, 0, bz, ax, 0, az);
-  }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
-  g.computeVertexNormals();
-  return g;
-}

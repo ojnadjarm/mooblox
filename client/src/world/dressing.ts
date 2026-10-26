@@ -1,12 +1,12 @@
 import { Box3, BoxGeometry, BufferAttribute, Color, CylinderGeometry, Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
-import type { Landmark } from './landmarks/landmarks';
+import { buildLandmark, type Landmark } from './landmarks/landmarks';
 import { FOUNTAIN_LIP, FOUNTAIN_STEP, tieredFountain } from './landmarks/fountain';
 import { gardenRoom, HEDGE_THICK, roomReach, ROOMS, type RoomSize } from './landmarks/garden-room';
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { dropUndersides, KERB, kerbArc, kerbRun, ringBand } from './landmarks/kerb';
 import { chimney } from './chimney';
-import { cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
-import { outlinePrism, shelfArcs, shelfCentre, shelfOutline, shelfSamples, shelfSite, type Shelf } from './shelf';
+import { CLIFF, cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
+import { outlinePrism, shelfArcs, shelfCentre, shelfOutline, shelfSamples, shelfSite, onShelf, type Shelf } from './shelf';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
 import { plotRings, segmentDistance } from './island-layout';
 import type { Circle, WorldLayout, Zone } from './layout';
@@ -14,6 +14,7 @@ import type { LookPalette } from './look';
 import FOOTPRINTS from './model-footprints.json';
 import { Occupancy, type GroundQuery } from './occupancy';
 import { SegmentIndex } from './segment-index';
+import { fadeBlob, lawnColour, softBlob } from './lawn-colour';
 import { seededRandom } from './random';
 import { recipe, WAYSIDE, type Recipe, type RecipeKind } from './recipes';
 import { pathPoints, SIGHT_IDS, wayStops } from './path-stops';
@@ -73,8 +74,27 @@ const FRAME: FrameRing = { r0: PLAZA + 0.1, r1: PLAZA + 1.25, h: 0.48 };
 const FRAME_OPEN = 2.5;
 const FRAME_RUN = 4.6;
 const FRAME_GAP = 1.8;
-/** A shelf's outer face over the island cliff: no toe rocks (they would hang over the water), shallow steps. */
-const SHELF_RIM: CliffSize = { ...TERRACE_CLIFF, toe: 0, step: [0.03, 0.08], level: 0.005 };
+/** A shelf's outer face over the island cliff: no toe rocks (they would hang over the water), shallow steps, block ridges under its grass lip. */
+const SHELF_RIM: CliffSize = { ...TERRACE_CLIFF, toe: 0, step: [0.03, 0.08], upperOut: [-0.2, -0.16], level: 0.005 };
+/** The island cliff's ledges sit 5 mm off the 1 cm grid the beach top (WATER_Y + 0.27) lies on. */
+const ISLAND_CLIFF: CliffSize = { ...CLIFF, level: 0.005 };
+/** Models standing higher than this (m) are on a raised level and must stand wholly on it. */
+const LEVEL_MIN = 0.3;
+/** Ground reach (m) a tree needs under it: its trunk, not its crown. */
+const TRUNK = 0.4;
+/** Widest ground reach (m) a district hero is laid out at before its scale; wider bases are scaled down to it. */
+const HERO_REACH = 4.6;
+/** Least top height (m) of a district hero: a little over twice a house. */
+const HERO_TOP = 8.4;
+/** Kit pieces laid as walkable ground (decks, bridges, planks): never dropped for a clash, though props keep off them. */
+const DECK = /dock|platform|bridge|plank/;
+/** Props that touch by design: rock clusters, tiled decks, bridges and walls, lily pads, crops in their rows, flush path stones. */
+export function attached(a: string, b: string): boolean {
+  if (/path_stone/.test(a + b) || (/rock/.test(a) && /rock/.test(b)) || (/lily/.test(a) && /lily/.test(b)) || (/crop/.test(a) && /crop/.test(b))) return true;
+  return a === b && (DECK.test(a) || /hedge|fence/.test(a));
+}
+/** Colour scale at the middle of a grounding patch; it fades to the ground's own colour at the rim. */
+const PATCH_SHADE = 0.86;
 /** Height step (m) between overlapping walk layers: ring strips, their joint discs, the entry walk, its end disc. */
 const WALK_STEP = 0.005;
 /** Clearance kept between a shelf and bridge lines, path centre lines and plot rims. */
@@ -192,7 +212,7 @@ export interface Dressing {
   readonly smoke: readonly SmokeSource[];
   readonly sails: readonly Sail[];
   /** Every placed hero landmark: its district theme, ground spot and top height. */
-  readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly top: number }[];
+  readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly y: number; readonly reach: number; readonly top: number }[];
   /** Every flight of steps, low walkable level to high. */
   readonly stairs: readonly Stair[];
   /** Every kerb laid along a walk (ground plan). */
@@ -342,10 +362,16 @@ class Designer {
   private frame: FrameArc[] = [];
   /** Waterline rocks of the current island's cliff, laid in `shore` once its bridges and dock are known. */
   private toes: CliffToe[] = [];
-  private readonly landmarks: { theme: string; x: number; z: number; top: number }[] = [];
+  private readonly landmarks: { theme: string; x: number; z: number; y: number; reach: number; top: number }[] = [];
   /** Islands that got a broad shelf (they need fewer raised lawns). */
   private readonly shelves = new Set<Circle>();
   private readonly stairs: Stair[] = [];
+  /** Raised levels (shelves, terraces, raised lawns): their top height and whether a footprint circle lies wholly on them. */
+  private readonly levels: { y: number; holds: (x: number, z: number, r: number) => boolean }[] = [];
+  /** Upright props placed on the current island (reach circle, height span) and the stamp group that laid them out together (0: none). */
+  private readonly props: { id: string; x: number; z: number; r: number; y0: number; y1: number; group: number }[] = [];
+  private group = 0;
+  private groups = 0;
   private readonly shelfStairs = new Map<Shelf, Stair>();
   /** Ground each stair's flight and landings keep free of later solids. */
   private readonly stairKeep: StairBox[] = [];
@@ -429,6 +455,7 @@ class Designer {
 
   private open(island: Circle): District {
     this.district = { island, placements: [], terrain: [], glow: [], blockers: [] };
+    this.props.length = 0;
     return this.district;
   }
 
@@ -466,7 +493,8 @@ class Designer {
       const yaw = Math.atan2(s.bx - s.ax, s.bz - s.az);
       // The entry walk crosses the ring bands: 1 cm over them, never coplanar (z-fighting), its joint disc 5 mm over the strip.
       const entry = this.entries.has(s) ? WALK_STEP * 2 : 0;
-      this.terrain(dropUndersides(new BoxGeometry(2.2, 0.06 + entry, len)), colour, (s.ax + s.bx) / 2, 0.03 + entry / 2, (s.az + s.bz) / 2, yaw, false, false);
+      // 2 cm past both kerb ends: their end caps would share the walk's end planes.
+      this.terrain(dropUndersides(new BoxGeometry(2.2, 0.06 + entry, len + 0.04)), colour, (s.ax + s.bx) / 2, 0.03 + entry / 2, (s.az + s.bz) / 2, yaw, false, false);
       this.terrain(dropUndersides(new CylinderGeometry(1.2, 1.2, 0.06 + entry + WALK_STEP, 12)), colour, s.bx, 0.03 + (entry + WALK_STEP) / 2, s.bz, 0, false, false);
       this.entryKerbs(s, rings.filter((r) => r.entry === s), entry);
       if (!this.entries.has(s)) return;
@@ -558,7 +586,7 @@ class Designer {
     const lx = Math.cos(back) * lr;
     const lz = Math.sin(back) * lr;
     const face = Math.atan2(-lx, -lz);
-    const lm = HUB_THEME.landmark(this.p, HUB_THEME.accent, HUB_THEME.accentShade);
+    const lm = buildLandmark(HUB_THEME.landmark, this.p, HUB_THEME.accent, HUB_THEME.accentShade);
     const above = landmarkSolid(lm, lx, 1.6, lz, face, 1);
     const shelf = this.shelf(hub, back, FRAME.r1 + 2.5, lr - 4, 1.6, above);
     if (!shelf) this.terrace(lx, lz, 3.8, 1.6, face, above);
@@ -690,9 +718,9 @@ class Designer {
   private zone(z: Zone, i: number): void {
     const out = z.angle;
     const entry = out + Math.PI;
-    const lm = this.theme.landmark(this.p, this.theme.accent, this.theme.accentShade);
-    // Big districts get a bigger hero so it stays the tallest thing in view.
-    const grow = Math.min(1.5, Math.max(1, z.radius / 18));
+    const lm = buildLandmark(this.theme.landmark, this.p, this.theme.accent, this.theme.accentShade);
+    // Big districts get a bigger hero so it stays the tallest thing in view; a wide base is scaled down to fit HERO_REACH.
+    const grow = Math.min(1.5, Math.max(1, z.radius / 18)) * Math.min(1, HERO_REACH / lm.radius);
     const tr = Math.max(3.4, lm.radius * grow + 0.5);
     const h = 1.8 + (i % 2) * 0.8;
     const d = z.radius - tr - 0.6;
@@ -705,14 +733,17 @@ class Designer {
       this.placeLandmark(lm, mx, h, mz, Math.atan2(z.x - mx, z.z - mz), grow);
       this.shelfTop(z, shelf, h, { x: mx - z.x, z: mz - z.z, r: tr });
     }
-    for (const r of shelf ? [] : [z.radius - tr - 0.6, z.radius - 4]) {
+    // Short of room, a small terrace by the rim with the hero scaled to it, raised (up to 2.6 m) to keep it HERO_TOP high.
+    for (const terraceR of shelf ? [] : [tr, 3.4]) {
+      const r = z.radius - terraceR - 0.6;
       const mx = z.x + Math.cos(out) * r;
       const mz = z.z + Math.sin(out) * r;
       const face = Math.atan2(z.x - mx, z.z - mz);
-      const terraceR = r === z.radius - 4 ? 3.4 : tr;
       if (!this.free(mx, mz, 2 * terraceR + 0.6, 0.5, true)) continue;
-      this.terrace(mx, mz, terraceR, h, face, landmarkSolid(lm, mx, h, mz, face, (grow * terraceR) / tr));
-      this.placeLandmark(lm, mx, h, mz, face, (grow * terraceR) / tr);
+      const scale = (grow * terraceR) / tr;
+      const hh = Math.max(h, Math.min(2.6, HERO_TOP - lm.height * scale));
+      this.terrace(mx, mz, terraceR, hh, face, landmarkSolid(lm, mx, hh, mz, face, scale));
+      this.placeLandmark(lm, mx, hh, mz, face, scale);
       break;
     }
     const step = 9 / (z.radius - 4);
@@ -769,6 +800,7 @@ class Designer {
     const turn = turns.find((t) => this.stairFits(flight(back + t), above));
     if (turn === undefined) return null;
     this.shelves.add(c);
+    this.levels.push({ y: h, holds: (x, z, r) => onShelf(s, x - c.x, z - c.z, r) });
     const bearing = back + turn;
     const st = flight(bearing);
     const top = (g: BufferGeometry) => this.district.terrain.push({ geometry: g.translate(c.x, 0, c.z), solid: true, detail: false });
@@ -894,6 +926,7 @@ class Designer {
    * stair `half` metres each side facing `face`; its foot rocks stay clear of the stair.
    */
   private terraceSides(x: number, z: number, r: number, h: number, face: number, half: number): void {
+    this.levels.push({ y: h, holds: (px, pz, pr) => Math.hypot(px - x, pz - z) <= r - pr });
     this.terrain(new CylinderGeometry(r - 0.1, r - 0.1, h - TERRACE_LIP, 24), this.p.grass, x, (h - TERRACE_LIP) / 2, z, 0, true, false);
     this.terrain(new CylinderGeometry(r + 0.12, r + 0.06, TERRACE_LIP, 28), this.p.grass, x, h - TERRACE_LIP / 2, z, 0, true, false);
     const at = Math.atan2(Math.cos(face), Math.sin(face));
@@ -919,7 +952,7 @@ class Designer {
 
   /** The island's designed cliff (`cliff-wall.ts`) under the grass lip, merged into the district; its toe rocks wait for `shore`. */
   private islandCliff(c: Circle): void {
-    const { wall, toes } = cliffWall(c.radius, WATER_Y - 0.4, RIM_TOP, WATER_Y, this.p, seededRandom(Math.round(c.x * 73 + c.z * 131) ^ 0x5c1f));
+    const { wall, toes } = cliffWall(c.radius, WATER_Y - 0.4, RIM_TOP, WATER_Y, this.p, seededRandom(Math.round(c.x * 73 + c.z * 131) ^ 0x5c1f), ISLAND_CLIFF);
     this.district.terrain.push({ geometry: wall.translate(c.x, 0, c.z), solid: false, detail: false });
     this.toes = toes;
   }
@@ -1108,8 +1141,9 @@ class Designer {
         for (const side of n % 2 ? [1, -1] : [-1, 1]) {
           const x = p.x + p.nx * side * (rec.radius + off);
           const z = p.z + p.nz * side * (rec.radius + off);
-          if (Math.hypot(x - c.x, z - c.z) > c.radius || !this.free(x, z, 2 * rec.radius - 1, 0.2)) continue;
-          this.stamp(rec, x, 0, z, Math.atan2(p.x - x, p.z - z), false);
+          const face = Math.atan2(p.x - x, p.z - z);
+          if (Math.hypot(x - c.x, z - c.z) > c.radius || !this.free(x, z, 2 * rec.radius - 1, 0.2) || !this.sightFits(rec, x, z, face)) continue;
+          this.stamp(rec, x, 0, z, face, false);
           return { x, z };
         }
       }
@@ -1146,21 +1180,36 @@ class Designer {
   }
 
   /** Stamps a recipe at (x, y, z) facing `face`: its grounding patch and items; the cluster claims one footprint, its solids trunk-sized obstacles. */
+  /** Whether a ground-level recipe's sights (its sign or stall) would be laid at (x, z): a stop without its sight is no stop. */
+  private sightFits(rec: Recipe, x: number, z: number, face: number): boolean {
+    return rec.items.every((it) => {
+      if (!SIGHT_IDS.has(it.id)) return true;
+      const ix = x + it.dx * Math.cos(face) + it.dz * Math.sin(face);
+      const iz = z - it.dx * Math.sin(face) + it.dz * Math.cos(face);
+      const r = it.block ?? Math.min(0.5, this.reach(it.id, it.height));
+      return !(it.solid && this.occ.hits(ix, iz, r)) && !this.clashes(it.id, ix, 0, iz, it.height, it) && this.supported(it.id, ix, 0, iz, it.height, it);
+    });
+  }
+
   private stamp(rec: Recipe, x: number, y: number, z: number, face: number, patch: boolean): void {
     const cs = Math.cos(face);
     const sn = Math.sin(face);
     // Patches share one height above their ground: one overlapping another would z-fight, so it is left out.
     if (patch && rec.patch && !this.patches.some((p) => p.y === y && Math.hypot(p.x - x, p.z - z) < (p.r + rec.patch!.r) * 1.25)) {
       this.patches.push({ x, y, z, r: rec.patch.r });
-      this.terrain(new CylinderGeometry(rec.patch.r, rec.patch.r, 0.02, 10).scale(1.25, 1, 1), rec.patch.colour, x, y + 0.006, z, face, false, true);
+      const g = paintPlace(softBlob(rec.patch.r / 1.15, seededRandom(Math.round(x * 97 + z * 7919) >>> 0)).scale(1.25, 1, 1), this.p.grass, x, y + 0.016, z, face);
+      const ground = (px: number, pz: number, out: Color): Color => (y < LEVEL_MIN ? lawnColour(this.p, px, pz, out) : out.set(this.p.grass));
+      this.district.terrain.push({ geometry: fadeBlob(g, x, z, PATCH_SHADE, ground), solid: false, detail: true });
       for (let i = 0; i < 5; i++) {
         const a = this.random() * 2 * Math.PI;
         this.model(this.pick(TUFTS), x + Math.cos(a) * rec.patch.r * 1.1, y, z + Math.sin(a) * rec.patch.r * 1.1, this.random() * 6, 0.35 + this.random() * 0.2, { sway: true, detail: true, rich: true, tint: LEAF_TINT });
       }
     }
+    this.group = ++this.groups;
     for (const it of rec.items) {
       const ix = x + it.dx * cs + it.dz * sn;
       const iz = z - it.dx * sn + it.dz * cs;
+      if (!it.sway && this.clashes(it.id, ix, y, iz, it.height, it)) continue;
       if (it.solid && y < 1) {
         const r = it.block ?? Math.min(0.5, this.reach(it.id, it.height));
         if (this.occ.hits(ix, iz, r)) continue;
@@ -1170,6 +1219,7 @@ class Designer {
       this.model(it.id, ix, y, iz, it.yaw === undefined ? this.random() * 6 : face + it.yaw, it.height, { ...it, ground: true });
       if (it.light) this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, ix, y + it.height * 0.875, iz, 0));
     }
+    this.group = 0;
     this.reserve(x, z, rec.radius);
   }
 
@@ -1201,7 +1251,7 @@ class Designer {
     if (!st) return null;
     this.reserve(x, z, r + 1.4);
     this.obstacles.push({ x, z, r: r + LAWN_FOOT });
-    this.terraceSides(x, z, r, h, st.face, st.width / 2);
+    this.terraceSides(x, z, r, h, st.face, st.width / 2 + PIER_SIDE);
     this.layStair(st, { tread: this.p.trim, riser: this.p.trimShade, side: this.p.trimShade });
     return st.face;
   }
@@ -1286,6 +1336,8 @@ class Designer {
    */
   private model(id: string, x: number, y: number, z: number, yaw: number, height: number, o: ModelOptions): boolean {
     const solid = o.solid === true;
+    if (y > -0.5 && o.wall === undefined && !DECK.test(id) && !this.supported(id, x, y, z, height, o)) return false;
+    if (!o.sway && o.wall === undefined && !DECK.test(id) && this.clashes(id, x, y, z, height, o)) return false;
     if (solid && this.stairKeep.length) {
       const f = FOOT[id]!;
       const r = o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h);
@@ -1303,6 +1355,7 @@ class Designer {
         this.district.blockers.push(wall);
       }
     }
+    if (!o.sway) this.props.push({ id, ...this.span(id, x, y, z, height, o), group: this.group });
     this.district.placements.push({
       id, x, y, z, yaw, height, solid, detail: o.detail === true,
       ...(o.width ? { width: o.width } : {}),
@@ -1316,8 +1369,32 @@ class Designer {
     return true;
   }
 
+  /**
+   * Whether a model stands wholly on ground of its height: a raised level (shelf, terrace, raised lawn) above LEVEL_MIN, else an
+   * island's lawn; trees by their trunk, the rest by their reach.
+   */
+  private supported(id: string, x: number, y: number, z: number, height: number, o: ModelOptions): boolean {
+    const reach = this.span(id, x, y, z, height, o).r;
+    const r = /tree/.test(id) ? Math.min(reach, TRUNK) : reach;
+    if (y > LEVEL_MIN) return this.levels.some((l) => Math.abs(l.y - y) < 0.05 && l.holds(x, z, r));
+    return this.circles.some((c) => Math.hypot(x - c.x, z - c.z) <= c.radius - r);
+  }
+
+  /** A model's reach circle and height span: together they enclose it, so two disjoint spans cannot cut into each other. */
+  private span(id: string, x: number, y: number, z: number, height: number, o: ModelOptions): { x: number; z: number; r: number; y0: number; y1: number } {
+    const f = FOOT[id]!;
+    const s = o.width ? o.width / f.w : height / f.h;
+    return { x, z, r: f.r * s, y0: y, y1: y + f.h * s };
+  }
+
+  /** Whether an upright model here would cut into a prop placed earlier outside the current stamp group. */
+  private clashes(id: string, x: number, y: number, z: number, height: number, o: ModelOptions): boolean {
+    const a = this.span(id, x, y, z, height, o);
+    return this.props.some((b) => (b.group === 0 || b.group !== this.group) && !attached(id, b.id) && b.y0 < a.y1 && a.y0 < b.y1 && Math.hypot(b.x - x, b.z - z) < a.r + b.r);
+  }
+
   private placeLandmark(lm: Landmark, x: number, y: number, z: number, face: number, scale: number): void {
-    this.landmarks.push({ theme: this.theme.id, x, z, top: y + lm.height * scale });
+    this.landmarks.push({ theme: this.theme.id, x, z, y, reach: lm.reach * scale, top: y + lm.height * scale });
     const m = new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), face), new Vector3(scale, scale, scale));
     for (const g of lm.parts) this.district.terrain.push({ geometry: g.applyMatrix4(m), solid: true, detail: false });
     for (const g of lm.glow) this.district.glow.push(g.applyMatrix4(m));
@@ -1436,8 +1513,9 @@ class Designer {
       return true;
     }
     const [tx, tz] = at(0, 0);
-    if (!this.item('nature/tent_smallOpen', tx, tz, face + Math.PI, 1.5, { solid: true, detail: true })) return false;
     const [fx, fz] = at(0, -2.3);
+    if (this.clashes('nature/campfire_stones', fx, 0, fz, 0.22, {})) return false;
+    if (!this.item('nature/tent_smallOpen', tx, tz, face + Math.PI, 1.5, { solid: true, detail: true })) return false;
     this.model('nature/campfire_stones', fx, 0, fz, 0, 0.22, { detail: true });
     this.reserve(fx, fz, 0.8);
     this.smoke.push({ x: fx, y: 0, z: fz, kind: 'campfire' });
@@ -1511,7 +1589,8 @@ class Designer {
   private cove(c: Circle, a: number): void {
     const half = 4 / c.radius;
     // CylinderGeometry measures theta from +z towards +x, so the arc round angle `a` (from +x) starts at pi/2 - a - half.
-    const sand = new CylinderGeometry(c.radius + 0.9, c.radius + 3, 0.3, 14, 1, false, Math.PI / 2 - a - half, 2 * half);
+    // Open: its top would share the island beach's plane under the cliff (z-fight).
+    const sand = new CylinderGeometry(c.radius + 0.9, c.radius + 3, 0.3, 14, 1, true, Math.PI / 2 - a - half, 2 * half);
     this.terrain(sand, this.p.sand, c.x, WATER_Y + 0.12, c.z, 0, false, false);
     for (let k = 0; k < 6; k++) {
       const aa = a + (k / 5 - 0.5) * half * 1.6;

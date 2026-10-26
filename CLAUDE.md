@@ -581,6 +581,22 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     layers (6 mm per scale band, smaller on top) and open sheets whose back shows from above ground get reversed twins
     (not houses or sway foliage; `userData.twins`). Tent see-through rays 209 -> 1 (`model-seal.test.ts`); `coplanar.test.ts`
     covers every placed prop. Perf: GPU 60 fps everywhere, SwiftShader stress misses as at HEAD.
+- T1389, 2026-10-26, version 2026102612, flicker, floating and overlapping props, patchy grass (play-test round 3 items 1, 1b, 3, 4, 5, 6; pre/post `~/drop/T1389/index.html`):
+  - `coplanar.test.ts` audits every terrain surface kind (lawn, paths, stairs and piers, cliffs, beaches, decals, landmark parts)
+    on demo, 3,0,5 and 8x12: fights 513 / 475 / 890 -> 0. Fixes: stair piers lift `PIER_LIFT` and raised lawn walls leave
+    `PIER_SIDE` round their pier, terrace cliffs and island cliffs sit on separate 5 mm levels, landmark parts are sealed
+    (`sealParts`), shelf rims and cove crescents no longer meet lawn at the same height.
+  - `placement.test.ts` (BVH rays and mesh-mesh tests on the built island): floating props, flags and landmark rims 11 -> 0,
+    prop-prop intersections 19 -> 0. `dressing.ts` `model()` rejects a non-deck prop unless the ground under its footprint holds
+    it (`supported`: island circles, or a shelf/terrace/raised lawn at its height via `levels`; trees need only `TRUNK`) and
+    unless its reach circle and height span clear every prop of another cluster (`clashes`, per island `props`); `attached()`
+    lists the designed contacts (path stones, rock+rock, lily+lily, crop+crop, same-kind decks, bridges, hedges, fences).
+    Wayside stops land only where their sight props fit (`sightFits`). Landmarks carry `reach` (true ground reach incl. flag
+    bases); `HERO_REACH`/`HERO_TOP` keep heroes on their terrace. Stall banner moved clear of the awning.
+  - `world/lawn-colour.ts`: `lawnColour` (the lawn gradient), `softBlob` (eased rim, no straight edges), `fadeBlob` (vertex
+    colour from the lawn at the rim to a shade at the centre). Meadow decals and cluster patches use them, so they blend into
+    the lawn in its own hue. Perf: draws and programs equal or fewer, tris +0.2-6 % (softer decal rims); 3 low A/B pairs:
+    GPU 58-60 fps both, SwiftShader stress misses as at HEAD.
 - T1390, 2026-10-26, version 2026102610, boats bow first, real trophies, earned moment (play-test round 3 items 2, 7; pre/post `~/drop/T1390/index.html`):
   - `world/sail-path.ts` `sailPose` (pure: position + yaw on the circle, bow = local +z along the velocity); `life.ts` ships use it
     (they sailed stern first). `sail-path.test.ts` checks heading vs finite-difference velocity both ways; `node tools/ships.mjs <dir>`.

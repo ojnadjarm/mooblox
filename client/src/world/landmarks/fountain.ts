@@ -52,7 +52,7 @@ export function tieredFountain(p: LookPalette, accent: number): Landmark {
     parts.push(splash(SMALL_FALL, a + 0.14, 1.73));
   }
   for (const g of parts) bakeAo(g, 0.2, 0.5, 0.22);
-  return { parts, glow: [], height: 2.92, radius: FOUNTAIN_STEP, flag: null };
+  return { parts, glow: [], height: 2.92, radius: FOUNTAIN_STEP, reach: FOUNTAIN_STEP, flag: null };
 }
 
 /** Flat water of radius r at height y: a fan to the ring where the streams land and a band outside it, coded to ripple out from that ring. */
