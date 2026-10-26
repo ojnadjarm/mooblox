@@ -43,7 +43,7 @@ try {
     await page.fill('#password', 'Testdata1!');
     await Promise.all([page.waitForNavigation(), page.click('#loginbtn')]);
     userid = Number(sql('SELECT id FROM {user} WHERE username = ?', username));
-    execFileSync(mdb, ['--env', '5.2', "DELETE FROM {user_preferences} WHERE name = 'local_mooblox_sound' AND userid = ?", String(userid)]);
+    execFileSync(mdb, ['--env', '5.2', '--write', "DELETE FROM {user_preferences} WHERE name = 'local_mooblox_sound' AND userid = ?", String(userid)]);
     await page.goto(`${site}/local/mooblox/play.php?id=${course}`);
   }
   await page.waitForFunction(() => window.mooblox?.sound && window.mooblox.streaming.pending === 0, null, { timeout: 90000 });
@@ -121,6 +121,8 @@ try {
   const m = (await since(page, t)).filter((e) => e.kind === 'music');
   check('a district island crossfades to its own loop', m.some((e) => e.id !== 'music-hub'), m.map((e) => e.id).join(','));
 
+  await page.evaluate(() => document.exitPointerLock());
+  await sleep(200);
   await page.click('.mooblox-sound-button');
   await page.waitForSelector('.mooblox-sound-pop:not([hidden])');
   await page.fill('.mooblox-sound-pop input', '40');
