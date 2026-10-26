@@ -32,6 +32,17 @@ describe('hudView', () => {
     expect(hudView({ ...demo(), levelStart: 50, levelNext: 50 }, null)!.fraction).toBe(1);
   });
 
+  it('shows no HUD when nothing can be earned (free browsing, no XP yet)', () => {
+    expect(hudView({ ...demo(), quests: [], xp: 0 }, null)).toBeNull();
+  });
+
+  it('keeps earned XP but no quest line when a course has no quests', () => {
+    const v = hudView({ ...demo(), quests: [], xp: 15 }, null)!;
+    expect(v.xpLabel).toBe('15 / 50 XP');
+    expect(v.quest).toBe('');
+    expect(v.progress).toBe('');
+  });
+
   it('cheers when every quest is done', () => {
     const v = hudView({ ...demo(), quests: [quest('a', 2, 2)] }, null)!;
     expect(v.quest).toBe('Every quest done!');

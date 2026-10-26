@@ -12,7 +12,8 @@ const GRAVITY = 3.5;
 function sparkTexture(): CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 32;
-  const ctx = canvas.getContext('2d')!;
+  // A CPU canvas keeps its pixels when the GPU process resets (a GPU canvas comes back blank).
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
   g.addColorStop(0, '#fff');
   g.addColorStop(0.35, 'rgba(255,255,255,.85)');

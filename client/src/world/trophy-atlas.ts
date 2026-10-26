@@ -41,7 +41,8 @@ export class TrophyAtlas {
     const canvas = document.createElement('canvas');
     canvas.width = SIZE;
     canvas.height = SIZE;
-    this.ctx = canvas.getContext('2d')!;
+    // A CPU canvas keeps its pixels when the GPU process resets (a GPU canvas comes back blank).
+    this.ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     this.texture = new CanvasTexture(canvas);
     this.texture.colorSpace = SRGBColorSpace;
     this.texture.anisotropy = 4;

@@ -27,4 +27,11 @@ describe('ScriptedTutor', () => {
     const done = world((d) => d.sections.forEach((s) => s.modules.forEach((m) => (m.state = 1))));
     expect(tutor.nextStep({ world: done })).toEqual({ text: 'You did everything here. Amazing work!', activityId: null });
   });
+
+  it('skips a failed graded activity Moodle counts as complete, keeps one that needs a pass', () => {
+    const graded = world((d) => Object.assign(d.sections[1]!.modules[0]!, { state: 3, done: true }));
+    expect(tutor.nextStep({ world: graded }).activityId).toBe(42);
+    const mustPass = world((d) => Object.assign(d.sections[1]!.modules[0]!, { state: 3, done: false }));
+    expect(tutor.nextStep({ world: mustPass }).activityId).toBe(41);
+  });
 });

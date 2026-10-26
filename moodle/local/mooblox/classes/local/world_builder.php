@@ -65,8 +65,30 @@ class world_builder {
             $modules = [];
             foreach ($section->uservisible ? $modinfo->sections[$section->section] ?? [] : [] as $cmid) {
                 $cm = $modinfo->get_cm($cmid);
-                if ($cm->is_visible_on_course_page()) {
-                    $modules[] = self::module($cm, $completioninfo, $course, $user->id);
+                if (!$cm->is_visible_on_course_page()) {
+                    continue;
+                }
+                $module = self::module($cm, $completioninfo, $course, $user->id);
+                $delegated = $cm->get_delegated_section_info();
+                if (!$delegated) {
+                    $modules[] = $module;
+                    continue;
+                }
+                if (!$format->is_section_visible($delegated)) {
+                    continue;
+                }
+                if (!$delegated->uservisible) {
+                    $module['available'] = false;
+                    $module['lock'] = lock_reason::text($modinfo, $delegated->availability, $delegated->availableinfo, $user->id);
+                    $modules[] = $module;
+                    continue;
+                }
+                $modules[] = $module;
+                foreach ($modinfo->sections[$delegated->section] ?? [] as $innerid) {
+                    $inner = $modinfo->get_cm($innerid);
+                    if ($inner->is_visible_on_course_page()) {
+                        $modules[] = self::module($inner, $completioninfo, $course, $user->id);
+                    }
                 }
             }
             $sections[] = [
@@ -131,6 +153,7 @@ class world_builder {
             'completion' => (int) $tracking,
             'state' => $details ? $details->get_overall_completion() : COMPLETION_INCOMPLETE,
             'isautomatic' => $details ? $details->is_automatic() : false,
+            'done' => $details ? $details->is_overall_complete() : false,
             'dates' => $dates,
             'media' => $cm->uservisible ? self::media($cm) : self::NO_MEDIA,
         ];

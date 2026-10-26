@@ -95,6 +95,7 @@ class get_world extends external_api {
             'completion' => new external_value(PARAM_INT, 'Completion tracking: 0 none, 1 manual, 2 automatic'),
             'state' => new external_value(PARAM_INT, 'Overall completion state'),
             'isautomatic' => new external_value(PARAM_BOOL, 'Whether completion is automatic'),
+            'done' => new external_value(PARAM_BOOL, 'Whether Moodle counts the activity as complete'),
             'dates' => $dates,
             'media' => new external_single_structure([
                 'type' => new external_value(PARAM_ALPHA, 'Media kind: file, link or empty'),

@@ -75,6 +75,10 @@ class hook_callbacks {
         if (local\embed_detector::is_embedded($_SERVER, !empty($SESSION->local_mooblox_play))) {
             $PAGE->set_pagelayout('embedded');
             $PAGE->add_body_class('local-mooblox-framed');
+            if ($PAGE->cm && $PAGE->cm->completion == COMPLETION_TRACKING_MANUAL) {
+                // The panel bar has the tick; Moodle's needs the page heading the embedded layout lacks.
+                $PAGE->activityheader->set_hidecompletion(true);
+            }
         }
     }
 

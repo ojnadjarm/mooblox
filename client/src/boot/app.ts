@@ -7,6 +7,7 @@ import type { CourseStore } from '../state/course-store';
 import { AccessClock } from '../state/access-clock';
 import { CourseSync } from '../state/course-sync';
 import { completionToggle } from '../ui/completion-toggle';
+import { watchContext } from '../world/context-watch';
 import { FrameGate } from '../perf/frame-gate';
 import { gpuName } from '../perf/gpu';
 import { GpuTimer } from '../perf/gpu-timer';
@@ -486,6 +487,13 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       listener(before, layout);
     }
   };
+  // A lost context drops every upload, and the scenery's vertex arrays are gone once uploaded: build the world again.
+  watchContext(stage.renderer.domElement, {
+    restored: () => {
+      rebuild(current);
+      gate.invalidate();
+    },
+  });
   return {
     get world() {
       return current;

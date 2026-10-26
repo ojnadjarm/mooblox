@@ -25,6 +25,7 @@ const CSS = `
 .mooblox-hud-pet[hidden] { display: none; }
 .mooblox-hud-pet svg { width: 14px; height: 14px; }
 .mooblox-hud-quest { grid-area: quest; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; }
+.mooblox-hud-quest[hidden] { display: none; }
 .mooblox-hud-quest svg { width: 20px; height: 20px; flex: none; color: #e0844f; }
 .mooblox-hud-quest span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mooblox-hud-quest b { margin-left: auto; padding-left: 6px; color: #2f7fe0; white-space: nowrap; }
@@ -89,6 +90,7 @@ export class HudRewards {
     this.leaf.querySelector('span')!.textContent = view.weeks ? String(view.weekCount) : '';
     this.leaf.title = view.weeks ?? '';
     this.leaf.setAttribute('aria-label', view.weeks ?? '');
+    this.quest.parentElement!.hidden = !view.quest;
     this.quest.textContent = view.quest;
     this.progress.textContent = view.progress;
   }

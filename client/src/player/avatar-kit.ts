@@ -53,7 +53,8 @@ export class AvatarKit implements AvatarFactory {
     const gltf = await loader.loadAsync(`${assetBase}kenney-blocky.glb`);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = ATLAS_SIZE;
-    paintAtlas(canvas.getContext('2d')!);
+    // A CPU canvas keeps its pixels when the GPU process resets (a GPU canvas comes back blank).
+    paintAtlas(canvas.getContext('2d', { willReadFrequently: true })!);
     const atlas = new CanvasTexture(canvas);
     atlas.colorSpace = SRGBColorSpace;
     atlas.minFilter = LinearMipmapLinearFilter;

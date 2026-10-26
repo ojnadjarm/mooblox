@@ -55,7 +55,7 @@ function toActivity(dto: ModuleDto, sectionId: number): Activity {
     available: dto.available,
     availableInfo: dto.availableinfo,
     lock: dto.lock ?? '',
-    completion: { tracking: dto.completion, state: dto.state, automatic: dto.isautomatic },
+    completion: { tracking: dto.completion, state: dto.state, automatic: dto.isautomatic, done: dto.done ?? false },
     dates: dto.dates.map((d) => ({ label: d.label, timestamp: d.timestamp })),
     media: toMedia(dto.media),
   };
@@ -82,6 +82,7 @@ function toModuleDto(a: Activity): ModuleDto {
     completion: a.completion.tracking,
     state: a.completion.state,
     isautomatic: a.completion.automatic,
+    done: a.completion.done ?? false,
     dates: a.dates.map((d) => ({ label: d.label, timestamp: d.timestamp })),
     media: a.media ? { ...a.media } : { type: '', mimetype: '', src: '' },
   };

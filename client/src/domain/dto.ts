@@ -24,6 +24,8 @@ export interface ModuleDto {
   completion: number;
   state: number;
   isautomatic: boolean;
+  /** Whether Moodle counts it complete (a failed grade counts unless a pass is needed). */
+  done?: boolean;
   dates: DateDto[];
   media: MediaDto;
 }

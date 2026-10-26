@@ -157,7 +157,8 @@ function blank(canvas: HTMLCanvasElement): void {
 function whiteIcon(img: HTMLImageElement, size: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = c.height = size;
-  const ctx = c.getContext('2d')!;
+  // Cached for every sign: a CPU canvas keeps its pixels when the GPU process resets.
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(img, 0, 0, size, size);
   ctx.globalCompositeOperation = 'source-in';
   ctx.fillStyle = '#ffffff';

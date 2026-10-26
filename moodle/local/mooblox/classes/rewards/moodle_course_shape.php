@@ -52,7 +52,7 @@ final class moodle_course_shape {
                 if ($cm->completion == COMPLETION_TRACKING_NONE || !$cm->visible || $cm->deletioninprogress) {
                     continue;
                 }
-                $cms[(int) $cmid] = ['kind' => self::kind($cm, $videos), 'passgrade' => isset($passgrades[$cmid])];
+                $cms[(int) $cmid] = ['kind' => self::kind($cm, $videos), 'passgrade' => isset($passgrades[$cmid]) && $cm->completionpassgrade];
             }
             $sections[(int) $section->id] = ['name' => get_section_name($courseid, $section), 'cms' => $cms];
         }
@@ -106,7 +106,7 @@ final class moodle_course_shape {
     }
 
     /**
-     * Quizzes whose grade item has a pass grade.
+     * Quizzes whose grade item has a pass grade (pass quizzes when their completion also needs it).
      *
      * @param int $courseid course id
      * @return int[] cmids

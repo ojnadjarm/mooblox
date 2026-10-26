@@ -17,6 +17,8 @@ export interface Completion {
   readonly tracking: CompletionTracking;
   readonly state: CompletionState;
   readonly automatic: boolean;
+  /** Moodle's overall completion; decides whether a failed attempt (`CompleteFail`) counts. */
+  readonly done?: boolean;
 }
 
 export interface ActivityDate {
@@ -70,5 +72,5 @@ export interface WorldData {
 
 /** Whether an activity counts as done for the book and the tutor. */
 export function isDone(c: Completion): boolean {
-  return c.state === CompletionState.Complete || c.state === CompletionState.CompletePass;
+  return c.state === CompletionState.Complete || c.state === CompletionState.CompletePass || (c.state === CompletionState.CompleteFail && c.done === true);
 }

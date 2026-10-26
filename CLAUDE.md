@@ -471,3 +471,19 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   bake (535 flagged parts -> 0); house E runaway vertex fixed. Draws/programs unchanged (demo low 21/11), low 60 fps. Notes: districts merge in
   8192-tri chunks (CHUNK_VERTICES; check per-district chunk counts before adding tris); detail-kit.py output is not byte-deterministic.
   Open: terrain parts untagged (26.2k tris on the colour guess, lane A).
+- T1377, 2026-10-26, version 2026102600 (T1376 e2e bugs 1-7; matrix `~/agent-work/research/2026-10-26/T1377/matrix.csv`, pre/post `~/drop/T1377/`):
+  - Subsections: `world_builder` sends a delegated section's cms right after its subsection cm in the parent zone; a restricted
+    one is a locked cm with its reason and no contents; a hidden one is left out. Tests `tests/local/world_builder_subsection_test.php`.
+  - Completion: get_world `done` = `cm_completion_details::is_overall_complete()`; client `isDone` counts state 3 only with `done`
+    (a failed attempt on a grade-only quiz). "Pass every quiz" counts only `completionpassgrade` quizzes (`moodle_course_shape`).
+  - WebGL: `ui/world-fallback.ts` card (kid text, course link target _top, Try again) when boot fails or the context stays lost 5 s
+    (`world/context-watch.ts`); on restore `startWorld` rebuilds the scenery (chunks drop CPU arrays after upload). One-time 2D
+    atlases (face, trophy, spark, sign icons) use `willReadFrequently` CPU canvases so a GPU reset does not wipe them.
+  - YouTube context loss (bug 3) is Chrome hardware video decode resetting the GPU process (Iris Xe headless, ANGLE Vulkan and GL;
+    0 losses with `--disable-accelerated-video-decode`); not stoppable from the page, so the world recovers or shows the card.
+  - HUD hides with no quests and no XP (free-browse); quest row hides when empty. `window.mooblox` is a live view (`boot/live-handle.ts`),
+    not a spread, so `props` follows rebuilds. Framed manual-completion pages hide Moodle's header tick (`hook_callbacks`): the
+    embedded layout has no page heading for its reactive init. Runner: `client/tools/e2e-{build.sh,courses.mjs,report.mjs}`;
+    the S3/M1 quiz confirm-dialog click timeout is a runner flake, also on c0a5174.
+  - Perf gate vs c0a5174 in one lock: same 6 SwiftShader-stress misses on both (host state; demo 26 vs 28 fps), GPU rigs equal (low/medium
+    60 fps, worst 16.8 ms, draws/programs unchanged); PHPUnit 88 ok, mci full 15 ok 0 red, vitest 521 ok.

@@ -28,6 +28,7 @@ export interface HudView {
   /** Share of the way from this level to the next, 0..1. */
   readonly fraction: number;
   readonly xpLabel: string;
+  /** Next quest, the all-done cheer, or empty when the course has no quests. */
   readonly quest: string;
   /** Quest progress (`2/3`), empty when every quest is done. */
   readonly progress: string;
@@ -36,9 +37,9 @@ export interface HudView {
   readonly weekCount: number;
 }
 
-/** The HUD view of `rewards`, or null when rewards are off (no HUD at all). */
+/** The HUD view of `rewards`, or null when rewards are off or nothing can be earned (no HUD at all). */
 export function hudView(rewards: Rewards, weeks: number | null, s: HudStrings = DEFAULT_HUD_STRINGS): HudView | null {
-  if (!rewards.enabled) {
+  if (!rewards.enabled || (rewards.quests.length === 0 && rewards.xp === 0)) {
     return null;
   }
   const span = rewards.levelNext - rewards.levelStart;
@@ -49,7 +50,7 @@ export function hudView(rewards: Rewards, weeks: number | null, s: HudStrings = 
     levelLabel: fill(s.hud_level, { level: rewards.level }),
     fraction,
     xpLabel: fill(s.hud_xp, { xp: rewards.xp, next: rewards.levelNext }),
-    quest: quest ? quest.text : s.hud_alldone,
+    quest: quest ? quest.text : rewards.quests.length ? s.hud_alldone : '',
     progress: quest ? fill(s.hud_progress, { done: quest.done, total: quest.total }) : '',
     weeks: weeks && weeks > 0 ? (weeks === 1 && rewards.weeks.welcomeBack ? s.hud_welcome : fill(weeks === 1 ? s.hud_week : s.hud_weeks, { weeks })) : null,
     weekCount: weeks && weeks > 0 ? weeks : 0,

@@ -24,6 +24,7 @@
      "completion": 0,
      "state": 0,
      "isautomatic": false,
+     "done": false,
      "dates": [],
      "media": {
       "type": "",
@@ -54,6 +55,7 @@
      "completion": 2,
      "state": 0,
      "isautomatic": true,
+     "done": false,
      "dates": [],
      "media": {
       "type": "",
@@ -84,6 +86,7 @@
      "completion": 2,
      "state": 0,
      "isautomatic": true,
+     "done": false,
      "dates": [],
      "media": {
       "type": "file",
@@ -104,6 +107,7 @@
      "completion": 2,
      "state": 0,
      "isautomatic": true,
+     "done": false,
      "dates": [],
      "media": {
       "type": "link",
@@ -134,6 +138,7 @@
      "completion": 2,
      "state": 0,
      "isautomatic": true,
+     "done": false,
      "dates": [],
      "media": {
       "type": "",
