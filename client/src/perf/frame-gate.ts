@@ -12,6 +12,7 @@ export class FrameGate {
   private dirty = false;
   private last: number | null = null;
   private count = 0;
+  private readonly pauseListeners: ((paused: boolean) => void)[] = [];
 
   constructor(
     private readonly frame: FrameFn,
@@ -43,13 +44,20 @@ export class FrameGate {
 
   /** Stops continuous rendering; `invalidate()` still draws single frames. */
   pause(): void {
+    if (!this.paused) for (const fn of this.pauseListeners) fn(true);
     this.paused = true;
   }
 
   resume(): void {
+    if (this.paused) for (const fn of this.pauseListeners) fn(false);
     this.paused = false;
     this.last = null;
     this.schedule();
+  }
+
+  /** Calls `fn` whenever the loop pauses (a panel opens) or resumes. */
+  onPause(fn: (paused: boolean) => void): void {
+    this.pauseListeners.push(fn);
   }
 
   /** Requests one frame, also while paused. */

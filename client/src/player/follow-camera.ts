@@ -7,6 +7,11 @@ const HEIGHT = 3.8;
 const LOOK_HEIGHT = 2.1;
 const FOLLOW = 8;
 const DRAG_SPEED = 0.008;
+/** Radians per pixel of locked mouse travel. */
+const LOOK_SPEED = 0.0032;
+/** How fast (1/s) the camera swings behind a guided walk, and the seconds a mouse turn holds that off. */
+const BEHIND_RATE = 2.5;
+const BEHIND_HOLD = 1.5;
 /** Camera height per metre of distance, between looking up at landmarks and looking down on the map. */
 const PITCH_MIN = 0.12;
 const PITCH_MAX = 0.85;
@@ -32,9 +37,16 @@ const PROBE_EVERY = 0.1;
 /** Seconds ahead along the run the sight line is probed from, so a pull-in glide starts before the wall cuts in. */
 const LEAD = 0.15;
 
-/** Third-person camera behind the player: drag turns and tilts it, the wheel zooms, it looks ahead and stays out of walls. */
+/** Third-person camera behind the player: drag (or locked mouse travel) turns and tilts it, the wheel zooms, it looks ahead and stays out of walls. */
 export class FollowCamera {
   yaw = 0;
+  /** Whether a mouse drag turns it (off under PC mouse-look: clicks are for actions); touch drags always do. */
+  mouseDrags = true;
+  /** Whether mouse-look steers it, which ends the narrow-view swing. */
+  manual = false;
+  /** Whether it swings round behind the player's run (a guided walk). */
+  behind = false;
+  private sinceTurn = Infinity;
   private distance = DISTANCE;
   private pitch = HEIGHT / DISTANCE;
   /** Distance after collision, eased: pulled in fast, let out slowly. */
@@ -73,6 +85,7 @@ export class FollowCamera {
     let lastX: number | null = null;
     let lastY = 0;
     canvas.addEventListener('pointerdown', (e) => {
+      if (!this.mouseDrags && e.pointerType === 'mouse') return;
       lastX = e.clientX;
       lastY = e.clientY;
       this.dragging = true;
@@ -102,6 +115,13 @@ export class FollowCamera {
     );
   }
 
+  /** Turns and tilts by locked mouse travel (px). */
+  turn(dx: number, dy: number): void {
+    this.yaw -= dx * LOOK_SPEED;
+    this.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.pitch + dy * LOOK_SPEED * 0.5));
+    this.sinceTurn = 0;
+  }
+
   /** Moves towards the spot behind `target`, looking ahead along `velocity` (a narrow view also turns with it); `snap` jumps there at once. */
   follow(target: Vector3, dt: number, snap = false, velocity?: { readonly x: number; readonly z: number }): void {
     const k = snap ? 1 : 1 - Math.exp(-LOOK_AHEAD_RATE * dt);
@@ -109,7 +129,11 @@ export class FollowCamera {
     this.aheadZ += ((velocity ? velocity.z * Feel.lookAhead : 0) - this.aheadZ) * k;
     const wide = Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect;
     const swing = 1 - wide / WIDE;
-    if (velocity && !snap && !this.dragging && swing > 0) {
+    this.sinceTurn += dt;
+    if (this.behind && velocity && !snap && !this.dragging && this.sinceTurn > BEHIND_HOLD && velocity.x * velocity.x + velocity.z * velocity.z > 1) {
+      const want = Math.atan2(-velocity.x, -velocity.z);
+      this.yaw += Math.atan2(Math.sin(want - this.yaw), Math.cos(want - this.yaw)) * (1 - Math.exp(-BEHIND_RATE * dt));
+    } else if (velocity && !snap && !this.dragging && !this.manual && swing > 0) {
       // A leash on a narrow view: it turns by part of the angle a sideways run sweeps round it.
       this.yaw -= (swing * (velocity.x * Math.cos(this.yaw) - velocity.z * Math.sin(this.yaw)) * dt) / this.distance;
     }

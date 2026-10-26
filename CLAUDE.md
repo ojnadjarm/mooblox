@@ -487,3 +487,18 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     the S3/M1 quiz confirm-dialog click timeout is a runner flake, also on c0a5174.
   - Perf gate vs c0a5174 in one lock: same 6 SwiftShader-stress misses on both (host state; demo 26 vs 28 fps), GPU rigs equal (low/medium
     60 fps, worst 16.8 ms, draws/programs unchanged); PHPUnit 88 ok, mci full 15 ok 0 red, vitest 521 ok.
+- T1379, 2026-10-26, version 2026102601 (owner play-test flaws 3, 6, 6b; evidence `~/drop/T1379/index.html`):
+  - PC mouse-look: `player/look-mode.ts` (`LookModel`, pure: off / locked / free = Ctrl held / held = panel open) + `player/mouse-look.ts`
+    (Pointer Lock adapter: a mouse click on the canvas locks, `movementX/Y` -> `FollowCamera.turn`, moves over 250 px dropped as
+    glitches, refusal/Esc/blur -> off, Ctrl down unlocks, Ctrl up relocks) + `ui/look-tip.ts` (corner tip, centred under the prompt
+    below 1000 px; lang `look_click|look_ctrl|look_release`). Only with `(any-pointer: fine)`; mouse drags no longer turn the camera
+    there (`FollowCamera.mouseDrags`), touch drags still do; locked mouse-look ends the narrow-view swing (`manual`).
+    `FrameGate.onPause` tells it a panel opened (cursor free) or closed (relocks inside the close click).
+  - Guide "Show me" walks: `world/plot-route.ts` (`plotRoute` = `walkPath` over `WalkGrid` to 1.6 m in front of the prop, then a
+    step towards it; null -> teleport fallback) + `player/guided-walk.ts` (`GuidedWalk` decorates the combined input: steers the
+    route camera-relative, sidesteps when stuck, gives up after 8 s, any stick input cancels; `FollowCamera.behind` swings the
+    camera behind the run, held off 1.5 s after a mouse turn). `startPlayer` returns `PlayerRig` (`guided`, `mouseLook`);
+    `walkToPlot` in app.ts. Book "Go there" still teleports.
+  - Checks: `node tools/mouselook.mjs <dir> [--pre]` 11/11 (look, Ctrl, panel, walk speed <= 14 m/s, arrival, cancel; videos);
+    `tools/guide.mjs` 5/5; vitest +2 files. Perf demo vs HEAD in one lock: low 60 fps / 16.8 ms, draws 21 = 21, programs 11 = 11;
+    same SwiftShader stress misses on both. Open: Ctrl+W in Chrome closes the tab (browser-reserved; cannot be blocked).

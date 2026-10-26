@@ -18,7 +18,9 @@ import { BvhCollider } from '../player/collider';
 import { FencedCollider } from '../player/fenced-collider';
 import { Dust } from '../player/dust';
 import { FollowCamera } from '../player/follow-camera';
+import { GuidedWalk } from '../player/guided-walk';
 import { CombinedInput, KeyboardInput, type InputSource } from '../player/input';
+import { MouseLook } from '../player/mouse-look';
 import { Player } from '../player/player';
 import { AccessFence, closedSections } from '../world/access-fence';
 import { GateLayer, type GateStrings } from '../world/gates/gate-layer';
@@ -53,6 +55,9 @@ import { Palette } from '../world/palette';
 import { AvatarPicker, type AvatarPickerStrings } from '../ui/avatar-picker';
 import { BookController } from '../ui/book-controller';
 import { TouchControls } from '../ui/touch-controls';
+import { DEFAULT_LOOK_TIP_STRINGS, LookTip, type LookTipStrings } from '../ui/look-tip';
+import { plotRoute, STAND_OFF } from '../world/plot-route';
+import { WalkGrid } from '../world/walk-grid';
 import { Stage } from '../world/stage';
 
 /** Runs after a structural rebuild with the old and the new layout. */
@@ -620,13 +625,17 @@ function part(collider: BvhCollider, meshes: readonly Object3D[]): ColliderPart 
 const SPAWN_HEIGHT = 2;
 const SHADOW_RADIUS = 30;
 
-/** Loads the avatar and starts the local player at the spawn, driven by the keyboard plus `inputs`. */
+/** The local player plus its guided walk and, on PC, its mouse-look. */
+export type PlayerRig = Player & { readonly guided: GuidedWalk; readonly mouseLook: MouseLook | null };
+
+/** Loads the avatar and starts the local player at the spawn, driven by the keyboard plus `inputs`; a mouse gets pointer-lock look. */
 export async function startPlayer(
   view: WorldView,
   avatars: AvatarFactory,
   look: AvatarLook,
   inputs: readonly InputSource[] = [],
-): Promise<Player> {
+  lookStrings: LookTipStrings = DEFAULT_LOOK_TIP_STRINGS,
+): Promise<PlayerRig> {
   const avatar = await avatars.create(look);
   view.stage.add(avatar.root);
   const collider = new FencedCollider(view.collider, view.fence);
@@ -636,7 +645,11 @@ export async function startPlayer(
   view.stopOverview();
   const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   const touch = new TouchControls(view.stage.canvasHost, coarse || new URLSearchParams(location.search).has('touch'));
-  const player = new Player(avatar, collider, spawn, new CombinedInput([new KeyboardInput(), touch, ...inputs]), camera);
+  let at: { x: number; z: number } = spawn;
+  const guided = new GuidedWalk(new CombinedInput([new KeyboardInput(), touch, ...inputs]), () => at, camera);
+  const player = new Player(avatar, collider, spawn, guided, camera);
+  at = player.body.position;
+  const mouseLook = startMouseLook(view, camera, lookStrings);
   view.follow(player.body.position);
   // The first view frames the fountain and the hub landmark beyond it.
   player.teleport(spawn.x, spawn.z, start.face);
@@ -656,7 +669,21 @@ export async function startPlayer(
     dust?.update(dt);
     view.stage.focusShadow(player.body.position.x, player.body.position.z, SHADOW_RADIUS);
   });
-  return player;
+  return Object.assign(player, { guided, mouseLook });
+}
+
+/** PC mouse-look with its corner tip, when the device has a mouse: the panels free the cursor while open. */
+function startMouseLook(view: WorldView, camera: FollowCamera, strings: LookTipStrings): MouseLook | null {
+  if (!window.matchMedia('(any-pointer: fine)').matches) return null;
+  const look = new MouseLook(view.stage.renderer.domElement, camera);
+  camera.mouseDrags = false;
+  const tip = new LookTip(view.stage.canvasHost, strings);
+  look.onChange((mode) => {
+    camera.manual = mode === 'locked';
+    tip.show(mode);
+  });
+  view.gate.onPause((paused) => look.panel(paused));
+  return look;
 }
 
 /** The course the world shows and the gateway that changes it. */
@@ -709,7 +736,7 @@ const PLAZA_TOP = 0.02;
 /** The Guide NPC by the spawn: greets, then names the next step whenever the course changes. */
 export async function startGuide(
   view: WorldView,
-  player: Player,
+  player: PlayerRig,
   avatars: AvatarFactory,
   tutor: Tutor,
   course: Course,
@@ -723,7 +750,7 @@ export async function startGuide(
   const shadow = view.quality.tier === 'high' || view.quality.tier === 'xhigh';
   avatar.root.traverse((o) => (o.castShadow = shadow));
   view.stage.add(avatar.root);
-  const guide = new Guide(avatar, view.stage.camera, view.stage.canvasHost, strings, (id) => goToPlot(view, player, id));
+  const guide = new Guide(avatar, view.stage.camera, view.stage.canvasHost, strings, (id) => walkToPlot(view, player, id));
   guide.say(tutor.greet({ world: course.store.world ?? view.world }));
   course.store.subscribe((world) => guide.say(tutor.nextStep({ world })));
   view.onFrame((dt) => guide.update(dt, player.avatar.root.position));
@@ -760,8 +787,6 @@ export function startAvatarPicker(
   });
 }
 
-const STAND_OFF = 1.6;
-
 /** Puts the player in front of an open activity's prop, facing it; refuses locked ones and closed zones. */
 export function goToPlot(view: WorldView, player: Player, activityId: number): boolean {
   const plot = view.layout.zones.flatMap((z) => z.plots).find((p) => p.activityId === activityId);
@@ -770,6 +795,22 @@ export function goToPlot(view: WorldView, player: Player, activityId: number): b
     return false;
   }
   player.teleport(plot.x + Math.sin(plot.facing) * STAND_OFF, plot.z + Math.cos(plot.facing) * STAND_OFF, plot.facing + Math.PI);
+  return true;
+}
+
+let walkGrid: { layout: WorldLayout; grid: WalkGrid } | null = null;
+
+/** Walks the player over paths and bridges to an open activity's prop (teleports when no walk gets there); refuses locked ones and closed zones. */
+export function walkToPlot(view: WorldView, player: PlayerRig, activityId: number): boolean {
+  const plot = view.layout.zones.flatMap((z) => z.plots).find((p) => p.activityId === activityId);
+  const activity = view.world.sections.flatMap((s) => s.activities).find((a) => a.id === activityId);
+  if (!plot || !activity?.available || view.fence.isClosed(plot.sectionId)) {
+    return false;
+  }
+  if (walkGrid?.layout !== view.layout) walkGrid = { layout: view.layout, grid: new WalkGrid(view.layout, view.dressing) };
+  const route = plotRoute(walkGrid.grid, player.body.position, plot);
+  if (!route) return goToPlot(view, player, activityId);
+  player.guided.start(route);
   return true;
 }
 

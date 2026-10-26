@@ -1,4 +1,4 @@
-// Guide e2e on the dev page: node tools/guide.mjs [outdir] -> the bubble greets Mia, names the next step, "Show me" goes there
+// Guide e2e on the dev page: node tools/guide.mjs [outdir] -> the bubble greets Mia, names the next step, "Show me" walks there
 import { mkdirSync } from 'node:fs';
 import { createServer } from 'vite';
 import { loadChromium } from './playwright.mjs';
@@ -33,7 +33,7 @@ try {
     }
     if (w === 1366) {
       await bubble.getByRole('button').click();
-      await page.waitForTimeout(1000);
+      await page.waitForFunction(() => document.querySelector('.mooblox-prompt')?.textContent?.includes('How volcanoes work'), null, { timeout: 20000 }).catch(() => {});
       const prompt = await page.locator('.mooblox-prompt').innerText();
       check('Show me takes the player to the next step', prompt.includes('How volcanoes work'), prompt.replace(/\s+/g, ' '));
     }

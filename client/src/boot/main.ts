@@ -1,4 +1,5 @@
 import { AjaxGateway } from '../moodle/ajax-gateway';
+import { DEFAULT_LOOK_TIP_STRINGS } from '../ui/look-tip';
 import { keepSessionAlive } from '../moodle/session-keeper';
 import { CourseStore } from '../state/course-store';
 import { createOpenerRegistry } from '../interaction/catalog';
@@ -66,7 +67,7 @@ async function play(root: HTMLElement, config: PlayConfig, assets: string, prelo
   await startLife(view, models, view.quality.tier === 'low' ? null : avatars);
   const look = decodeLook(config.avatar, avatars.bodies.map((b) => b.id));
   const dressed = new Outfitter(avatars);
-  const player = await startPlayer(view, dressed, look);
+  const player = await startPlayer(view, dressed, look, [], { ...DEFAULT_LOOK_TIP_STRINGS, ...config.strings });
   const course = { store, gateway };
   const interaction = startActivities(view, player, createOpenerRegistry(gateway), course);
   const strings = config.strings;

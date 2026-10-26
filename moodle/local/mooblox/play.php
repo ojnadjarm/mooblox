@@ -53,6 +53,9 @@ $config = [
         'gate_open' => get_string('gate_open', 'local_mooblox'),
         'lock_notyet' => get_string('lock_notyet', 'local_mooblox'),
         'avatar' => get_string('avatar', 'local_mooblox'),
+        'look_click' => get_string('look_click', 'local_mooblox'),
+        'look_ctrl' => get_string('look_ctrl', 'local_mooblox', '{ctrl}'),
+        'look_release' => get_string('look_release', 'local_mooblox', '{ctrl}'),
     ],
 ];
 foreach (['title', 'hair', 'face', 'skin', 'clothes', 'random', 'undo', 'save', 'cancel'] as $key) {
