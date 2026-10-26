@@ -502,3 +502,14 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Checks: `node tools/mouselook.mjs <dir> [--pre]` 12/12 (look, Tab, panel, Book walk, walk speed <= 14 m/s, arrival, cancel; videos);
     `tools/guide.mjs` 5/5, `tools/book.mjs` waits for the walk; vitest +2 files. Perf demo vs HEAD in one lock: low 60 fps / 16.8 ms, draws 21 = 21, programs 11 = 11;
     same SwiftShader stress misses on both.
+- T1380, 2026-10-26, version 2026102604, living props (play-test flaw 8; audit + pre/post videos `~/drop/T1380/index.html`):
+  - `world/water-motion.ts`: water codes in the scenery `sway` attribute past wind (0-1.5) and cloth (< 0): RIPPLE 2 + metres from
+    where rings start, STREAM 8 + fraction along the flow, SPLASH 10 + crown height; `rippleCode`/`streamCode`/`splashCode`,
+    `aimRipples` (re-centres a placed model's pools), `kitPools` (kit fountain water rebuilt as radial fans at bake), and the
+    `WATER_VERTEX`/`WATER_FRAGMENT` GLSL. `swayMaterial` adds it on every tier but low (key `mooblox-sway-water`; wind clamps
+    `sway < 1.75`); foam adds a little emissive. No new draw or program; districts off the current island are hidden anyway.
+  - `withSway` keeps a builder's own `sway` codes. Spawn fountain (`landmarks/fountain.ts`): pools = fan + ring at the stream
+    landing radius, coded streams and jet, 14 foam mounds; its water is not solid (`dressing.ts`). Kit fountains ripple
+    (`model-library.ts`), banners swing (`flag-cloth.ts` `hangingCloth`, wind weights by depth below the cloth top).
+  - Not done (audit): stall awnings, playground swings/seesaw, lily pads, ember/lantern flicker. Gate A/B vs HEAD (other lanes'
+    perf runs in parallel): low/medium GPU 60 = 60 fps, draws/programs equal; same SwiftShader stress worst-frame misses.

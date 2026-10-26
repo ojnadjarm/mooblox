@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { FAMILIES, familyOf } from './kit-materials';
 import { grainAxis, grainTops } from './surfaces';
+import { kitPools } from './water-motion';
 
 /** One CC0 model baked to a single vertex-coloured, non-indexed geometry standing on y = 0. */
 export interface BakedModel {
@@ -29,7 +30,7 @@ export class ModelLibrary {
         node.removeFromParent();
         const { model, materials } = lib.bake(node);
         tagModel(model.geometry, id, materials);
-        lib.models.set(id, model);
+        lib.models.set(id, /fountain/.test(id) ? { ...model, geometry: kitPools(model.geometry, (i) => materials[i] === 'Water') } : model);
       }),
     );
     return lib;

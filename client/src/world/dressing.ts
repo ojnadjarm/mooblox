@@ -498,12 +498,12 @@ class Designer {
   }
 
   /**
-   * The spawn plaza's tiered fountain (hub concept) at its centre: solid, ringed by a collision wall above any jump so nothing
+   * The spawn plaza's tiered fountain (hub concept) at its centre: solid stone (its moving water is not), ringed by a collision wall above any jump so nothing
    * passes into the basin; the player starts in front of it on the side away from the landmark, facing both.
    */
   private fountain(hub: Circle): void {
     const lm = tieredFountain(this.p, HUB_THEME.accent);
-    for (const g of lm.parts) this.district.terrain.push({ geometry: g.translate(hub.x, FOUNTAIN_Y, hub.z), solid: true, detail: false });
+    for (const g of lm.parts) this.district.terrain.push({ geometry: g.translate(hub.x, FOUNTAIN_Y, hub.z), solid: !g.getAttribute('sway'), detail: false });
     this.district.blockers.push(new CylinderGeometry(FOUNTAIN_LIP, FOUNTAIN_LIP, FOUNTAIN_WALL, 24, 1, true).translate(hub.x, FOUNTAIN_WALL / 2, hub.z));
     this.reserve(hub.x, hub.z, FOUNTAIN_STEP + 0.2);
     this.obstacles.push({ x: hub.x, z: hub.z, r: FOUNTAIN_LIP });

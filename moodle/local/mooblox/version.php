@@ -26,6 +26,6 @@ defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_mooblox';
 $plugin->release = '0.1.0';
-$plugin->version = 2026102603;
+$plugin->version = 2026102604;
 $plugin->requires = 2025041400;
 $plugin->maturity = MATURITY_ALPHA;

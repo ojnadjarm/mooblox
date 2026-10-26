@@ -18,6 +18,7 @@ import {
 } from 'three';
 import { surfaceAtlas } from './surface-atlas';
 import { ATLAS_LAYERS, GRAIN, LAWN_TONE, Surface } from './surfaces';
+import { WATER_CODE, WATER_FRAGMENT, WATER_VERTEX } from './water-motion';
 
 /** Rendering tier the kit builds its materials for; `rich` adds world-space detail textures (xhigh). */
 export type MaterialTier = 'standard' | 'low' | 'rich';
@@ -115,19 +116,25 @@ objectNormal = normalize(objectNormal);`;
 
 function swayMaterial(tier: MaterialTier, time: { value: number }): Material {
   const m = tier === 'low' ? new MeshLambertMaterial({ vertexColors: true }) : new MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0 });
+  const water = tier !== 'low';
   m.onBeforeCompile = (shader) => {
     shader.uniforms['uTime'] = time;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float sway;\nuniform float uTime;')
+      .replace('#include <common>', `#include <common>\nattribute float sway;\nuniform float uTime;${water ? '\nvarying vec2 vWater;' : ''}`)
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
 ${CLOTH_GLSL}`)
       .replace('#include <normal_vertex>', '#include <normal_vertex>\nobjectNormal = clothN;')
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvec4 wp = modelMatrix * vec4(position, 1.0);\nfloat sw = max(sway, 0.0);\nfloat ph = uTime * 1.7 + wp.x * 0.35 + wp.z * 0.27;\ntransformed.x += sin(ph) * sw * 0.12;\ntransformed.z += cos(ph * 0.8) * sw * 0.08 + clothZ;\ntransformed.y += cloth * 0.02 * sin(clothP * 0.5 + 0.8);',
+        `#include <begin_vertex>\nvec4 wp = modelMatrix * vec4(position, 1.0);\nfloat sw = sway < ${WATER_CODE.toFixed(2)} ? max(sway, 0.0) : 0.0;\nfloat ph = uTime * 1.7 + wp.x * 0.35 + wp.z * 0.27;\ntransformed.x += sin(ph) * sw * 0.12;\ntransformed.z += cos(ph * 0.8) * sw * 0.08 + clothZ;\ntransformed.y += cloth * 0.02 * sin(clothP * 0.5 + 0.8);` + (water ? `\n${WATER_VERTEX}` : ''),
       );
+    if (water) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec2 vWater;')
+        .replace('#include <color_fragment>', `#include <color_fragment>\n${WATER_FRAGMENT}`);
+    }
   };
-  m.customProgramCacheKey = () => 'mooblox-sway';
+  m.customProgramCacheKey = () => (water ? 'mooblox-sway-water' : 'mooblox-sway');
   return m;
 }
 

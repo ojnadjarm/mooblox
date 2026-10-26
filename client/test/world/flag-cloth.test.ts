@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry } from 'three';
 import { describe, expect, it } from 'vitest';
-import { clothWeights } from '../../src/world/flag-cloth';
+import { clothWeights, hangingCloth } from '../../src/world/flag-cloth';
 
 /** A 2 m pole at x 0 with a 1 m cloth from x 0.1 to 1.1 between y 1.4 and 1.9. */
 function flag(): BufferGeometry {
@@ -26,5 +26,18 @@ describe('clothWeights', () => {
     const g = flag();
     (g.getAttribute('position') as BufferAttribute).setX(0, 0.3);
     expect(clothWeights(g).getAttribute('sway').getX(0)).toBe(0);
+  });
+});
+
+describe('hangingCloth', () => {
+  it('swings the red cloth from still at its top to most at its foot and keeps the brown pole still', () => {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0, 2.2, 0, 0.3, 2, 0, 0.3, 1.5, 0, 0.3, 1, 0]), 3));
+    g.setAttribute('color', new BufferAttribute(new Float32Array([0.5, 0.33, 0.2, 0.5, 0.33, 0.2, 0.8, 0.1, 0.1, 0.8, 0.1, 0.1, 0.8, 0.1, 0.1]), 3));
+    g.setAttribute('sway', new BufferAttribute(new Float32Array(5), 1));
+    const w = Array.from(hangingCloth(g).getAttribute('sway').array as Float32Array);
+    expect(w.slice(0, 3)).toEqual([0, 0, 0]);
+    expect(w[3]).toBeCloseTo(0.35, 5);
+    expect(w[4]).toBeCloseTo(0.7, 5);
   });
 });

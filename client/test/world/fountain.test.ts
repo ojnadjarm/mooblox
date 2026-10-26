@@ -9,6 +9,7 @@ import { designWorld } from '../../src/world/dressing';
 import { IslandLayout } from '../../src/world/island-layout';
 import { FOUNTAIN_LIP, FOUNTAIN_STEP, tieredFountain } from '../../src/world/landmarks/fountain';
 import { CAMPUS } from '../../src/world/look';
+import { RIPPLE, SPLASH, STREAM } from '../../src/world/water-motion';
 
 const tris = (g: { getAttribute(n: string): { count: number } }) => g.getAttribute('position').count / 3;
 
@@ -24,6 +25,14 @@ describe('tiered fountain', () => {
       g.computeBoundingBox();
       expect(Math.max(-g.boundingBox!.min.x, g.boundingBox!.max.x, -g.boundingBox!.min.z, g.boundingBox!.max.z)).toBeLessThanOrEqual(FOUNTAIN_STEP + 1e-6);
     }
+  });
+
+  it('codes its water to move: ripples in every pool, streams and the jet flowing, splashes where the streams land', () => {
+    const codes = lm.parts.flatMap((g) => Array.from((g.getAttribute('sway')?.array as Float32Array | undefined) ?? []));
+    expect(codes.filter((c) => c >= RIPPLE && c < STREAM).length).toBeGreaterThan(0);
+    expect(codes.filter((c) => c >= STREAM && c < SPLASH).length).toBeGreaterThan(0);
+    expect(codes.filter((c) => c >= SPLASH).length).toBeGreaterThan(0);
+    expect(lm.parts.filter((g) => g.getAttribute('sway') && Math.min(...(g.getAttribute('sway').array as Float32Array)) >= STREAM && Math.max(...(g.getAttribute('sway').array as Float32Array)) < SPLASH).length).toBe(8 + 6 + 1);
   });
 
   for (const [name, w] of [['demo', toWorld(fixture)], ['8x12', shapeWorld(812, parseShape('8x12'))]] as const) {

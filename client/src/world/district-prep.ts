@@ -1,7 +1,9 @@
 import { BufferAttribute, Color, Matrix4, Quaternion, Vector3, type BufferGeometry, type InterleavedBufferAttribute } from 'three';
 import type { Placement, TerrainPart } from './dressing';
 import type { BakedModel } from './model-library';
+import { hangingCloth } from './flag-cloth';
 import { bakeAo } from './landmarks/shapes';
+import { aimRipples } from './water-motion';
 import { tagSurface } from './surfaces';
 import { MeshMerge, SolidsMerge, solidsTree, transferables, type MeshArrays, type PartArrays, type SolidsTree } from './district-merge';
 import { weldChunks, type WeldedMesh } from './chunk-weld';
@@ -117,11 +119,12 @@ export function preppedTransferables(p: Prepped): ArrayBuffer[] {
   return [...out];
 }
 
-/** Keeps position, normal, colour and a builder's surface ids only, plus a `sway` weight that grows with height above the base. */
+/** Keeps position, normal, colour and a builder's surface ids only, plus a `sway` weight that grows with height above the base (else a builder's own `sway` codes, `water-motion.ts`). */
 export function withSway(g: BufferGeometry, sway: boolean, height: number, baseY = 0): BufferGeometry {
   const flat = g.index ? g.toNonIndexed() : g;
+  const own = !sway && flat.getAttribute('sway');
   for (const name of Object.keys(flat.attributes)) {
-    if (name !== 'position' && name !== 'normal' && name !== 'color' && name !== 'surface') flat.deleteAttribute(name);
+    if (name !== 'position' && name !== 'normal' && name !== 'color' && name !== 'surface' && !(own && name === 'sway')) flat.deleteAttribute(name);
   }
   if (!flat.getAttribute('normal')) flat.computeVertexNormals();
   const nrm = flat.getAttribute('normal');
@@ -133,6 +136,7 @@ export function withSway(g: BufferGeometry, sway: boolean, height: number, baseY
   if (!flat.getAttribute('color')) {
     flat.setAttribute('color', new BufferAttribute(new Float32Array(pos.count * 3).fill(1), 3));
   }
+  if (own) return flat;
   const w = new Float32Array(pos.count);
   if (sway) {
     for (let i = 0; i < pos.count; i++) {
@@ -176,6 +180,8 @@ function placeModel(p: Placement, lib: ModelSource): BufferGeometry {
   g.applyMatrix4(new Matrix4().compose(new Vector3(p.x, p.y, p.z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), p.yaw), new Vector3(s, s, s)));
   if (p.bands) repaintBands(g, p.bands);
   const out = withSway(g, p.sway === true, p.height, p.y);
+  if (/fountain/.test(p.id)) aimRipples(out, p.x, p.z, 1);
+  else if (/banner/.test(p.id)) hangingCloth(out);
   return p.solid && p.y > -1 ? bakeAo(out, p.y, p.height > 0 ? Math.min(1.2, Math.max(0.3, p.height * 0.5)) : 0.6, 0.24) : out;
 }
 
