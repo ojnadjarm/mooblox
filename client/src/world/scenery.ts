@@ -111,11 +111,13 @@ export class DistrictBuild<C = unknown> {
       // A failed worker or a `finish` meanwhile prepares it here.
       let failed = false;
       const job = ++this.job;
-      this.waiting = true;
       const settle = () => {
         if (this.job === job) this.waiting = false;
       };
-      this.worker.prep(input, this.lib).then(
+      const sent = yield* this.worker.prepParts(input, this.lib);
+      // Sent: the slices only wait for the reply from here on (unless a `finish` took the build over meanwhile).
+      if (this.job === job) this.waiting = true;
+      sent.then(
         (r) => {
           if (this.job !== job) return;
           prepped = r;

@@ -27,6 +27,8 @@ export interface CliffSize {
   readonly bush: number;
   /** Block levels below the top sit on a 1 cm grid offset by this (metres): walls with offsets 5 mm apart never z-fight where they meet. */
   readonly level: number;
+  /** False: no grass tongues (a wall under a separate grass lip, whose slanted face they would share); the seeds stay the same. */
+  readonly tongues?: boolean;
 }
 
 /** Sizes of the designed island cliff (art bible §3: banded, not a straight wall; concepts: stacked stone, moss, rocky toe). */
@@ -181,7 +183,11 @@ export function cliffWall(
       parts.push(surfaced(s.upper ? bakeAo(g, s.y0, 0.35, 0.2) : bakeAo(g, waterY - 0.2, 0.5, 0.25), Surface.rock));
     }
     const upper = col.slabs[0]!;
-    if (col.moss) parts.push(surfaced(tongue(a0, a1, radius, radius + upper.out, upper, col.moss.w, col.moss.len, p.grassLight, random), Surface.plain));
+    if (col.moss) {
+      const g = tongue(a0, a1, radius, radius + upper.out, upper, col.moss.w, col.moss.len, p.grassLight, random);
+      if (size.tongues === false) g.dispose();
+      else parts.push(surfaced(g, Surface.plain));
+    }
     if (col.toe) {
       const mid = (a0 + a1) / 2;
       const lowest = col.slabs[col.slabs.length - 1]!;

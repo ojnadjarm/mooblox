@@ -28,6 +28,9 @@ export const DECK_Y = 0.08;
 export const DECK_HALF = 1.35;
 const DECK_W = 3.2;
 const RAIL_H = 1;
+/** Metres between bridge rail lanterns, and their height over the rail. */
+const BRIDGE_LAMP_STEP = 9;
+const BRIDGE_LAMP_H = 1.3;
 const PLAZA = 7;
 const SMALL_PLAZA = 6;
 /** Top of the island cliff: just under the grass lip, which overhangs it. */
@@ -75,7 +78,7 @@ const FRAME_OPEN = 2.5;
 const FRAME_RUN = 4.6;
 const FRAME_GAP = 1.8;
 /** A shelf's outer face over the island cliff: no toe rocks (they would hang over the water), shallow steps, block ridges under its grass lip. */
-const SHELF_RIM: CliffSize = { ...TERRACE_CLIFF, toe: 0, step: [0.03, 0.08], upperOut: [-0.2, -0.16], level: 0.005 };
+const SHELF_RIM: CliffSize = { ...TERRACE_CLIFF, toe: 0, step: [0.03, 0.08], upperOut: [-0.2, -0.16], tongues: false, level: 0.005 };
 /** The island cliff's ledges sit 5 mm off the 1 cm grid the beach top (WATER_Y + 0.27) lies on. */
 const ISLAND_CLIFF: CliffSize = { ...CLIFF, level: 0.005 };
 /** Models standing higher than this (m) are on a raised level and must stand wholly on it. */
@@ -992,6 +995,15 @@ class Designer {
         this.terrain(new BoxGeometry(0.2, RAIL_H, 0.2), this.p.wood, from.x + dx * t + ox, DECK_Y + RAIL_H / 2, from.z + dz * t + oz, yaw, true, false);
         this.terrain(new CylinderGeometry(0.18, 0.22, -WATER_Y - 0.6, 7), this.p.woodDark, from.x + dx * t + ox, WATER_Y / 2 - 0.5, from.z + dz * t + oz, 0, false, false);
       }
+    }
+    // Lanterns on the rail posts every BRIDGE_LAMP_STEP m, sides alternating: the long walk across has a rhythm.
+    const lamps = Math.floor((rb - ra) / BRIDGE_LAMP_STEP);
+    for (let k = 1; k <= lamps; k++) {
+      const t = ra + ((rb - ra) * k) / (lamps + 1);
+      const side = k % 2 ? 1 : -1;
+      const x = from.x + dx * t + dz * side * (DECK_HALF + 0.15);
+      const z = from.z + dz * t - dx * side * (DECK_HALF + 0.15);
+      this.district.placements.push({ id: 'town/lantern', x, y: DECK_Y + RAIL_H + 0.05, z, yaw, height: BRIDGE_LAMP_H, solid: false, detail: false });
     }
     this.district = owner;
   }

@@ -60,6 +60,7 @@ import { DEFAULT_LOOK_TIP_STRINGS, LookTip, type LookTipStrings } from '../ui/lo
 import { plotRoute, STAND_OFF } from '../world/plot-route';
 import { WalkGrid } from '../world/walk-grid';
 import { Stage } from '../world/stage';
+import { HAZE_BAND, HallwayLog } from '../world/hallway';
 
 /** Runs after a structural rebuild with the old and the new layout. */
 export type RebuildListener = (before: WorldLayout, after: WorldLayout) => void;
@@ -100,6 +101,8 @@ export interface WorldView {
   onFrame(step: (dt: number) => void): () => void;
   /** A burst of gold sparkles at a point (pick-ups, completions). */
   sparkle(x: number, y: number, z: number): void;
+  /** Island-change log: background build times, safety-net builds, how hazed each island was when it switched on. */
+  readonly hallway: HallwayLog;
 }
 
 let pickedTier: QualityTier | null = null;
@@ -185,6 +188,9 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   // One measured slice per frame for every background job: GPU pre-uploads, district builds, impostor captures.
   const budget = new FrameBudget({ target: FRAME_MS, min: 1, max: STREAM[tier].sliceMs, fill: 0.7 });
   const warmup = new GpuWarmup(stage.renderer);
+  const hallway = new HallwayLog();
+  /** True while the deck safety net runs: a build it finishes is logged as inline. */
+  let safetyNet = false;
   // Every model goes to the build worker now, at boot: no district job pays for posting them mid-play.
   sharedPrep()?.share(models.ids, models);
   const dress = (w: WorldData, l: WorldLayout) => {
@@ -207,7 +213,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     const landMeshes = group.children.filter((o) => o.name === 'land' || o.name === 'tops');
     const islandsPart = part(BvhCollider.fromMeshes(landMeshes), landMeshes);
     const landParts = group.getObjectByName('island-land')!.children;
-    const units = builds.map((b) => ({
+    const units = builds.map((b, i) => ({
       x: b.district.island.x,
       z: b.district.island.z,
       // Bridges and docks reach past the island rim: stream by the whole district, not the island circle.
@@ -219,13 +225,19 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
         return b.busy;
       },
       step: () => {
+        hallway.step(i, performance.now());
         const done = b.step();
-        if (done) warmup.add(b.group);
+        if (done) {
+          warmup.add(b.group);
+          hallway.ready(i, performance.now());
+        }
         return done;
       },
       finish: () => {
+        const t0 = performance.now();
         b.finish();
         warmup.add(b.group);
+        if (safetyNet) hallway.inline(i, performance.now(), performance.now() - t0);
       },
       unload: () => b.unload(),
     }));
@@ -304,7 +316,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       parts.push(...spans.parts());
       collider.set(parts);
     };
-    return { group, dressing: d, water, districts: builds.map((b) => b.group), builds, spans, streamer, solids, islands: islandStream, farView, alpha: new Float32Array(builds.length), landMeshes, landParts, farGround, propIsland: propIslands(l), glows: glow.children };
+    return { group, dressing: d, water, districts: builds.map((b) => b.group), builds, units, spans, streamer, solids, islands: islandStream, farView, alpha: new Float32Array(builds.length), shown: new Uint8Array(builds.length), landMeshes, landParts, farGround, propIsland: propIslands(l), glows: glow.children };
   };
   let current = world;
   let layout = policy.layout(world);
@@ -327,6 +339,8 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
   const haze = new Haze(stage.scene.fog as Fog, BAND[far]);
   let propList = props.all;
   let wasOverview = true;
+  /** Set on a frame the island snapped into place (first frame, teleport): what shows then is not a crossing. */
+  let snapped = false;
   const fades: { x: number; z: number; radius: number; alpha: number }[] = [];
   const ring: number[] = [];
   let lastX = 0;
@@ -355,8 +369,14 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     const f = focus ?? eye;
     if (islandFrame(f.x, f.z, dt)) gate.invalidate();
     let solid = built.streamer.pump(f.x, f.z, overview);
-    // Safety net: a deck the player steps on is solid even when the background build fell behind (one long frame, no fall).
-    if (!overview && built.streamer.finishWanted(f.x, f.z, ON_DECK)) solid = true;
+    // Safety net: the island the kid reached is solid even when its background build fell behind (one long frame, no fall).
+    const reached = built.units[built.islands.current]!;
+    if (!overview && !reached.isBuilt) {
+      safetyNet = true;
+      reached.finish();
+      safetyNet = false;
+      solid = true;
+    }
     const span = built.spans.step(f.x, f.z, (job) => budget.run(job));
     const near = overview ? [] : built.spans.finishNear(f.x, f.z, ON_DECK);
     for (const b of span ? [span, ...near] : near) {
@@ -400,6 +420,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       for (const b of built.spans.finishNear(on.x, on.z, on.radius + 1)) warmup.add(b.group);
       built.solids();
       built.alpha.fill(0);
+      snapped = true;
       built.alpha[s.current] = 1;
     }
     haze.band = BAND[far];
@@ -407,7 +428,8 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     const cross = s.crossing(x, z);
     if (cross) {
       const there = s.islands[cross.across]!;
-      const t = cross.t;
+      // The haze keeps the far end hidden until the island across is built: it switches on unseen, then comes out of the mist.
+      const t = built.builds[cross.across]!.isBuilt ? cross.t : 0;
       haze.target(here.x + (there.x - here.x) * t, here.z + (there.z - here.z) * t, here.radius + (there.radius - here.radius) * t, jumped);
     } else {
       haze.target(here.x, here.z, here.radius, jumped);
@@ -438,15 +460,16 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
     if (overview) {
       for (const g of built.landParts) g.visible = false;
       for (const g of built.glows) g.visible = true;
+      built.shown.fill(0);
       setFades(fades);
       return;
     }
     const s = built.islands;
-    for (let i = 0; i < built.landParts.length; i++) built.landParts[i]!.visible = s.live(i);
-    for (let i = 0; i < built.glows.length; i++) built.glows[i]!.visible = s.live(i);
+    for (let i = 0; i < built.landParts.length; i++) built.landParts[i]!.visible = shows(i);
+    for (let i = 0; i < built.glows.length; i++) built.glows[i]!.visible = shows(i);
     for (let i = 0; i < built.districts.length; i++) {
       const d = built.districts[i]!;
-      const live = s.live(i) && built.builds[i]!.isBuilt;
+      const live = shows(i);
       built.alpha[i] = live ? Math.min(1, built.alpha[i]! + dt / FADE_SECONDS) : 0;
       d.visible = live;
       if (live && fades.length < FADE_SLOTS) {
@@ -454,14 +477,23 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
         fades.push({ x: c.x, z: c.z, radius: c.radius + FADE_MARGIN, alpha: built.alpha[i]! });
       }
       if (live && built.alpha[i]! < 1) gate.invalidate();
+      const on = d.visible || built.landParts[i]!.visible ? 1 : 0;
+      if (on && !built.shown[i] && !snapped) {
+        const c = s.islands[i]!;
+        hallway.show(i, performance.now(), haze.fogAt(c.x, c.z, c.radius));
+      }
+      built.shown[i] = on;
     }
+    snapped = false;
     setFades(fades);
   };
-  /** Props stand on their island: drawn only while it is live (the fakes carry no props). */
+  /** An island's real content (land, district, glow, props) draws only while it is live and built: one switch, made in the haze. */
+  const shows = (i: number): boolean => built.islands.live(i) && built.builds[i]!.isBuilt;
+  /** Props stand on their island: drawn only while it shows (the fakes carry no props). */
   const cullToHaze = (): void => {
     for (const prop of propList) {
       const island = built.propIsland.get(prop.activityId);
-      if (island !== undefined && !built.islands.live(island)) prop.root.visible = false;
+      if (island !== undefined && !shows(island)) prop.root.visible = false;
     }
   };
   const gate = new FrameGate((dt) => {
@@ -594,6 +626,7 @@ export function startWorld(root: HTMLElement, world: WorldData, models: ModelLib
       steps.add(step);
       return () => steps.delete(step);
     },
+    hallway,
     sparkle: (x, y, z) => {
       sparkles.kick(x, y, z, 18, 1);
       gate.invalidate();
@@ -611,14 +644,14 @@ const RIM_DETAIL = { low: 1.5, medium: 2.5, high: 4, xhigh: 4 } as const;
 const ISLAND = { show: 2.5, shore: 2 } as const;
 /** Stream metric (m) up to which a wanted island is built and kept: every finite one (the current island and its neighbours). */
 const RESIDENT = 1e6;
-/** Bridge distance (m) at which the island across must be built: the player is on its deck. */
+/** Distance (m) from a bridge at which its span must be built: the player is on its deck. */
 const ON_DECK = 1;
 /** Metres past the spawn island's rim within which bridges are built before the first frame. */
 const SPAWN_SPANS = 2;
 /** A focus move longer than this (m) in one frame is a teleport. */
 const TELEPORT = 6;
 /** Haze band past the bubble edge per far view: tight when nothing stands in, wide enough to see the fakes otherwise. */
-const BAND: Record<FarMode, HazeBand> = { fog: { near: 1, far: 9 }, full: { near: 10, far: 48 }, silhouette: { near: 10, far: 48 }, impostor: { near: 10, far: 48 }, real: { near: 10, far: 48 } };
+const BAND: Record<FarMode, HazeBand> = { fog: { near: 1, far: 9 }, full: HAZE_BAND, silhouette: HAZE_BAND, impostor: HAZE_BAND, real: HAZE_BAND };
 /** Seconds an island takes to dither in from its fake; metres its fade circle reaches past the rim. */
 const FADE_SECONDS = 0.5;
 const FADE_MARGIN = 0.5;

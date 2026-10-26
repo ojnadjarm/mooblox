@@ -1,6 +1,7 @@
 import type { Section, WorldData } from '../domain/types';
 import type { Circle, HubLink, LayoutPolicy, Plot, WorldLayout, Zone } from './layout';
 import { seededRandom } from './random';
+import { HALLWAY } from './hallway';
 
 const HUB_RADIUS = 22;
 const PLAZA_RADIUS = 13;
@@ -13,7 +14,8 @@ const RING_STEP = 7;
 /** Half width kept free through the rings along the entry walk. */
 const ENTRY_CLEAR = 4;
 const MIN_ZONE_RADIUS = 12;
-const MIN_BRIDGE = 6;
+/** Shortest bridge: the hallway the island across builds and comes out of the haze in (`hallway.ts`). */
+const MIN_BRIDGE = HALLWAY;
 /** Water between two islands (both beaches plus the fence shore). */
 const ISLAND_GAP = 9;
 /** Distance a bridge keeps from any other island's edge. */
@@ -22,9 +24,13 @@ const BRIDGE_CLEAR = 6;
 const BRIDGE_APART = 6;
 /** Width each bridge takes up on its hub's rim. */
 const BRIDGE_SLOT = 7;
+/** Least angle (rad) between two bridges of one hub: their walks' kerbs stay apart at the plaza edge (long bridges pack zones closer round the hub). */
+const BRIDGE_ANGLE = 0.5;
 /** How much longer than the shortest a zone bridge may be before a new plaza is opened. */
 const ZONE_REACH = 24;
 const EXIT_LENGTH = 400;
+/** Plazas opened in a row looking for room for one zone before giving up. */
+const PLAZA_TRIES = 4;
 const EXIT_TURNS = [1.1, 0.8, 0.5, 0.2, 0];
 const BEARINGS = 120;
 const DIST_STEP = 1;
@@ -101,17 +107,20 @@ class Packer {
       const spot = this.find(h, radius, ZONE_REACH);
       if (spot) return this.commit(h, radius, spot);
     }
-    const h = this.hubs.length - 1;
-    const plaza = this.alongExit(h);
-    const index = this.hubs.length;
-    this.exits[h] = null;
-    this.commit(h, PLAZA_RADIUS, plaza, index);
-    const hub = { x: plaza.x, z: plaza.z, radius: PLAZA_RADIUS };
-    this.addHub(hub, this.exitFor(hub, plaza.angle), [plaza.angle + Math.PI]);
-    this.links.push({ from: h, to: index });
-    const spot = this.find(index, radius, EXIT_LENGTH);
-    if (!spot) throw new Error('mooblox: no room for a zone');
-    return this.commit(index, radius, spot);
+    // A new plaza out along the last hub's exit; one boxed in by long bridges opens the next plaza further on.
+    for (let tries = 0; tries < PLAZA_TRIES; tries++) {
+      const h = this.hubs.length - 1;
+      const plaza = this.alongExit(h);
+      const index = this.hubs.length;
+      this.exits[h] = null;
+      this.commit(h, PLAZA_RADIUS, plaza, index);
+      const hub = { x: plaza.x, z: plaza.z, radius: PLAZA_RADIUS };
+      this.addHub(hub, this.exitFor(hub, plaza.angle), [plaza.angle + Math.PI]);
+      this.links.push({ from: h, to: index });
+      const spot = this.find(index, radius, EXIT_LENGTH);
+      if (spot) return this.commit(index, radius, spot);
+    }
+    throw new Error('mooblox: no room for a zone');
   }
 
   /** Each hub keeps one bearing free all the way out (its exit), where the next plaza opens when it fills up. */
@@ -160,7 +169,7 @@ class Packer {
     const first = hub.radius + MIN_BRIDGE + radius;
     for (let k = 0; k < BEARINGS; k++) {
       const angle = this.start + (k / BEARINGS) * 2 * Math.PI;
-      if (this.bearings[h]!.some((b) => Math.abs(wrap(angle - b)) * hub.radius < BRIDGE_SLOT)) continue;
+      if (this.bearings[h]!.some((b) => Math.abs(wrap(angle - b)) < Math.max(BRIDGE_SLOT / hub.radius, BRIDGE_ANGLE))) continue;
       const dx = Math.cos(angle);
       const dz = Math.sin(angle);
       const limit = Math.min(best ? best.d : Infinity, first + reach);

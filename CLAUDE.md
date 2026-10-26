@@ -609,3 +609,26 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `fanfare` (Kenney Music Jingles SAX07, CC0) via `BadgeMoment.onShow`; on page load the card waits for the first key or tap.
     play.php config gains `userid` and string `badge_earned`. Checks `node tools/rewards.mjs earn [dir]` (5 widths, fanfare, first
     visit, reload), hall `rewards.mjs hall` (close-up still). Dev `rewards.html?earn` (badge arrives after 2.5 s), `?fresh`.
+- T1394, 2026-10-26, version 2026102614, hallway bridges: islands build during the walk and switch on in the haze (FLAWS3 item 8;
+  pre/post crossing videos `~/drop/T1394/index.html`):
+  - Step 0: the T1389 20x30 low worst-frame regression (33 -> 67 ms) did not reproduce: 3 alternating A/B pairs, median 33.2 (0d6f41c)
+    vs 33.3 (3e13a08). Island-change spikes came from `WorkerPrep` posting a whole district (structured clone: 756 of 818 ms of
+    `pump` in a 20x30 low CPU profile).
+  - `world/hallway.ts`: `HallwayLog` (background build times, inline safety-net builds, fog at each island's switch-on; pops =
+    inline + switch-ons under `POP_FOG` 0.8), `hallwayLength` (run speed x (worst low build `LOW_BUILD_S` 1.9 s + 1 s)),
+    `hiddenLength` (bridge that puts the island across at fog 0.8 in `HAZE_BAND`), `HALLWAY` = 38 m = `island-layout`
+    `MIN_BRIDGE` (was 6). Layout: `PLAZA_TRIES` (zones open a new plaza further along when one is full), hub bridges at least
+    `BRIDGE_ANGLE` 0.5 rad apart. Bridges carry lanterns every 9 m (`dressing.ts`); `SHELF_RIM` cliffs drop their tongues
+    (`CliffSize.tongues`, seeds kept) that fought the shelf lip on the longer layouts. No curve: streamer, haze and walk grid use
+    straight decks.
+  - `app.ts`: an island's real content (land, district, glow, props) switches on only when live and built (`shows`); the haze holds
+    the far end until the island across is built; the safety net finishes only the island the kid stands on (was: at the deck).
+    `WorldView.hallway` is the log; `haze.ts` `fogAt`.
+  - Build worker: `DistrictPrepper.prepParts` posts a district in 128 KB / 200-placement `part` messages, one per slice
+    (`build.worker.ts` reassembles; stale parts dropped). Low `pump` peak 36.3 -> 7.6 ms (budget 4 ms; one indivisible step).
+  - Low rig (Iris Xe 400x800 4x CPU) pre -> post, demo / 3,0,5 / 8x12 / 20x30: pops 1/3/5/5 -> 0/0/0/0, inline builds 0 -> 0,
+    worst frame 33.3/16.8/49.9/50 -> 33.4/16.8/33.4/33.4, frames over 20 ms in 20x30 17 -> 5.
+  - Tools: `tools/hallway.mjs` (walk recorder, crossing windows, video frame-time strip); `crossing.mjs` prints the hallway
+    summary, `--video dir --label pre|post`; `perf.mjs` walks every GPU rig over the bridges and gates crossing frames <= 34 ms
+    (one missed vsync at 60 Hz), pops 0 and inline builds 0. Gate vs HEAD in one lock: GPU rigs all PASS (20x30 low worst 33.2
+    -> 16.8 ms), crossings 16.8 ms except 8x12 low 33.3; SwiftShader stress misses 7 at HEAD, 4 after.

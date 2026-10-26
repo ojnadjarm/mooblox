@@ -6,10 +6,12 @@
 // a fresh SwiftShader GPU process stalls once, T1373 R11); memory = heap + GPU estimate <= 800 MB per page;
 // the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
 // --browser gpu|soft and --throttle N override the rig (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
+// Each GPU rig also walks over the bridges (CROSSING: no crossing frame over 33 ms, no pops, no inline builds).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build, preview } from 'vite';
+import { crossingStats, walkFor, walkFrames, WINDOW_MS } from './hallway.mjs';
 import { loadChromium } from './playwright.mjs';
 
 // Low programs 11: the impostor card (the default far view since T1369) is the one program the silhouettes did not need.
@@ -22,6 +24,12 @@ const ALL = { loadMb: 3, loadS: 3, memoryMb: 800, frameMs: 50, bigCourse: 1.5 };
 /** The realistic low-end proxy (Iris Xe DPR 1, 4x CPU) walks over a bridge without a dropped frame. */
 const LOW_FRAME_MS = 20;
 /** Software GL (SwiftShader) under 6x CPU, a floor; each page waits `coolMs` idle first (back-to-back runs hit the host's power limit: 200 ms stalls); worst frame gates on the median of `runs` (one random 83-200 ms SwiftShader frame per run, T1373 R13). */
+/**
+ * Bridge crossings on the GPU rigs (T1394): an autopilot walk over the bridges keeps every frame within WINDOW_MS of an island change
+ * at or under `frameMs` (33 ms at 60 Hz: at most one missed vsync, 33.3 ms measured, rounding slack), builds every island in the
+ * background (no safety-net build inline) and switches no island's content on in view (pops).
+ */
+const CROSSING = { frameMs: 34, maxWalkMs: 70000 };
 const STRESS = { fps: 30, frameMs: 100, coolMs: 45000, runs: 3 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
 
@@ -207,6 +215,17 @@ try {
       if (row.loadS !== undefined) {
         check(row.loadS <= ALL.loadS, `${id}: first playable ${row.loadS} s <= ${ALL.loadS} on Fast 4G`);
         check(row.loadMb <= ALL.loadMb, `${id}: transferred ${row.loadMb} MB <= ${ALL.loadMb}`);
+      }
+      if (rig.browser === 'gpu') {
+        const w = await open(rig, query(shape, tier, `walk=${walkFor(shape)}`));
+        const walk = await w.page.evaluate(walkFrames, CROSSING.maxWalkMs);
+        await w.page.close();
+        const { crossings, crossingWorst } = crossingStats(walk.frames);
+        const crow = { shape, tier, rig: 'crossing', reached: walk.reached, crossings: crossings.length, crossingWorst, ...walk.hallway };
+        results.push(crow);
+        console.log(JSON.stringify(crow));
+        check(crossings.length > 0 && crossingWorst <= CROSSING.frameMs, `${id}: ${crossings.length} bridge crossings, worst frame within ${WINDOW_MS / 1000} s of one ${crossingWorst} ms <= ${CROSSING.frameMs}`);
+        check(walk.hallway.inline === 0 && walk.hallway.pops === 0, `${id}: crossing pops ${walk.hallway.pops}, inline builds ${walk.hallway.inline} = 0`);
       }
       if (flag('stills') && out) {
         for (const [w, h] of [[1366, 768], [400, 800]]) {

@@ -1,4 +1,4 @@
-// Frame times of one autopilot walk over the bridges: node tools/crossing.mjs <out.json> [--shapes demo,8x12] [--rigs low,stress,medium,high] [--query k=v] [--walk far|tour|bridge|<cmid>] [--profile dir]
+// Frame times of one autopilot walk over the bridges: node tools/crossing.mjs <out.json> [--shapes demo,8x12,3-0-5 (dashes for commas)] [--rigs low,stress,medium,high] [--query k=v] [--walk far|tour|bridge|<cmid>] [--profile dir] [--video dir --label pre|post]
 // Per shape x rig (the perf gate's rigs: low = Iris Xe 400x800 4x CPU, stress = SwiftShader 6x, medium/high = Iris Xe 1366) the
 // player walks from the spawn to the farthest plot (demo, 1x2) or on a tour over 5-6 bridges (bigger shapes, `?walk=tour`: two
 // near districts and back, then the farthest within ~150 m; `bridge` = the plot just across the spawn hub's straightest bridge); every frame's time, island and time in pump/render/resize/player/collider/whole frame/off-screen renders are kept. A crossing window is 2 s either side of
@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { build, preview } from 'vite';
+import { crossingStats, frameOverlay, walkFor } from './hallway.mjs';
 import { loadChromium } from './playwright.mjs';
 
 const args = process.argv.slice(2);
@@ -23,7 +24,7 @@ const shapes = opt('shapes', 'demo,1x2,8x12,20x30').split(',');
 const rigs = opt('rigs', 'low,stress,medium,high').split(',');
 const more = opt('query', '');
 const profile = opt('profile', null);
-const WINDOW_MS = 2000;
+const video = opt('video', null);
 const MAX_WALK_MS = 70000;
 const RIG = {
   low: { tier: 'low', browser: 'gpu', w: 400, h: 800, throttle: 4, touch: true },
@@ -31,7 +32,7 @@ const RIG = {
   medium: { tier: 'medium', browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
   high: { tier: 'high', browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
 };
-const query = (shape, tier, walk = 'far') => `${shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}&`}quality=${tier}&walk=${walk}${more ? `&${more}` : ''}`;
+const query = (shape, tier, walk = 'far') => `${shape === 'demo' ? '' : `shape=${shape.replaceAll('-', ',')}&course=${shape.length * 97 + 11}&`}quality=${tier}&walk=${walk}${more ? `&${more}` : ''}`;
 
 /** The plot just across the spawn hub's straightest bridge: the autopilot's beeline from the spawn then runs along the deck. */
 async function bridgePlot(browser, shape, tier) {
@@ -77,10 +78,11 @@ try {
       const rig = RIG[name];
       // SwiftShader after back-to-back runs hits the host's power limit (200 ms stalls): the stress rig starts after 45 s idle, as in the perf gate.
       if (rig.browser === 'soft') await new Promise((r) => setTimeout(r, 45000));
-      const page = await browsers[rig.browser].newPage({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch });
+      const context = await browsers[rig.browser].newContext({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch, ...(video ? { recordVideo: { dir: join(video, 'tmp'), size: { width: rig.w, height: rig.h } } } : {}) });
+      const page = await context.newPage();
       page.on('pageerror', (e) => console.error('pageerror:', e.message));
       const cdp = await page.context().newCDPSession(page);
-      const asked = opt('walk', null) ?? (shape === 'demo' || shape === '1x2' ? 'far' : 'tour');
+      const asked = opt('walk', null) ?? walkFor(shape);
       const walk = asked === 'bridge' ? await bridgePlot(browsers.gpu, shape, rig.tier) : asked;
       await page.goto(`${url}?${query(shape, rig.tier, walk)}`);
       await page.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 180000, polling: 50 });
@@ -90,7 +92,8 @@ try {
         await cdp.send('Profiler.setSamplingInterval', { interval: 200 });
         await cdp.send('Profiler.start');
       }
-      const { out: frames, tasks, reached } = await page.evaluate(
+      if (video) await page.evaluate(frameOverlay, `${shape} ${name} ${opt('label', '')}`);
+      const { out: frames, tasks, reached, hallway } = await page.evaluate(
         (max) =>
           new Promise((resolve) => {
             const v = window.mooblox;
@@ -167,7 +170,7 @@ try {
               for (const k in spent) spent[k] = 0;
               gpu.links = gpu.bufMb = gpu.tex = gpu.captures = gpu.pipes = 0;
               last = t;
-              if (v.probe.reached || t - t0 > max) return resolve({ out, tasks, reached: v.probe.reached === true });
+              if (v.probe.reached || t - t0 > max) return resolve({ out, tasks, reached: v.probe.reached === true, hallway: { ...v.hallway.summary(), events: v.hallway.events.map((e) => ({ ...e, t: +(e.t - t0).toFixed(1) })) } });
               requestAnimationFrame(tick);
             };
             requestAnimationFrame(tick);
@@ -180,22 +183,21 @@ try {
         writeFileSync(join(profile, `${shape}-${name}.cpuprofile`), JSON.stringify(p));
       }
       await page.close();
-      const crossings = [];
-      for (let i = 1; i < frames.length; i++) if (frames[i][2] !== frames[i - 1][2]) crossings.push(frames[i][0]);
-      const near = (t) => crossings.some((c) => Math.abs(c - t) <= WINDOW_MS);
+      if (video) await page.video().saveAs(join(video, `${opt('label', 'walk')}-${shape}-${name}.webm`));
+      await context.close();
+      const { crossings, crossingWorst } = crossingStats(frames);
       const worst = Math.max(...frames.map((f) => f[1]));
-      const inWindow = frames.filter((f) => near(f[0]));
-      const crossingWorst = inWindow.length ? Math.max(...inWindow.map((f) => f[1])) : null;
       const over = (ms) => frames.filter((f) => f[1] > ms).length;
-      const row = { shape, rig: name, tier: rig.tier, walk, reached, frames, tasks, crossings, worst, crossingWorst, over20: over(20), over50: over(50), seconds: frames.length ? frames.at(-1)[0] / 1000 : 0 };
+      const row = { shape, rig: name, tier: rig.tier, walk, reached, hallway, frames, tasks, crossings, worst, crossingWorst, over20: over(20), over50: over(50), seconds: frames.length ? frames.at(-1)[0] / 1000 : 0 };
       rows.push(row);
-      console.log(JSON.stringify({ ...row, frames: frames.length }));
+      console.log(JSON.stringify({ ...row, frames: frames.length, tasks: tasks.length, hallway: { ...hallway, events: undefined } }));
     }
   }
 } finally {
   await Promise.all(Object.values(browsers).map((b) => b.close()));
   await new Promise((res) => server.httpServer.close(res));
   rmSync(dist, { recursive: true, force: true });
+  if (video) rmSync(join(video, 'tmp'), { recursive: true, force: true });
 }
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, `${JSON.stringify({ query: more, rows })}\n`);

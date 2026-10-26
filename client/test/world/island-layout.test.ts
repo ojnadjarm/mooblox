@@ -63,7 +63,8 @@ describe('IslandLayout', () => {
           expect(inside(z, { x: 0, z: 0, radius: layout.extent })).toBe(true);
           for (const p of z.plots) expect(inside(p, z)).toBe(true);
         }
-        expect(layout.extent).toBeLessThanOrEqual(200);
+        // Bridges are hallways (HALLWAY m, `hallway.ts`): twelve sections still stay within 280 m.
+        expect(layout.extent).toBeLessThanOrEqual(280);
       }
     });
   }

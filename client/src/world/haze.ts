@@ -128,6 +128,15 @@ export class Haze {
     return moving;
   }
 
+  /** Fog factor (0 clear, 1 hazed) at the nearest rim point of the circle at (x, z) of radius r, as the shader computes it. */
+  fogAt(x: number, z: number, r: number): number {
+    const near = this.radius + this.band.near;
+    const far = this.radius + this.band.far;
+    const d = Math.hypot(x - this.x, z - this.z) - r;
+    const k = Math.min(1, Math.max(0, (d - near) / (far - near)));
+    return k * k * (3 - 2 * k);
+  }
+
   /** Edge distance of a circle from the bubble's centre past which it is fully hazed. */
   get hidden(): number {
     return this.radius + this.band.far;

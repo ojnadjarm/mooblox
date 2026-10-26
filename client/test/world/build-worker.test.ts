@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BoxGeometry } from 'three';
-import { WorkerPrep, sharedPrep, type WorkerRequest } from '../../src/world/build-worker';
+import { PART_PLACEMENTS, WorkerPrep, sharedPrep, type WorkerRequest } from '../../src/world/build-worker';
 import { prepDistrict, runPrep, type ModelSource, type PrepInput } from '../../src/world/district-prep';
 import { unpackGeometry } from '../../src/world/geometry-pack';
 import type { Placement } from '../../src/world/dressing';
@@ -45,6 +45,20 @@ afterEach(() => vi.unstubAllGlobals());
 describe('build worker', () => {
   it('has no shared prepper where workers do not exist (districts prepare inline)', () => {
     expect(sharedPrep()).toBeNull();
+  });
+
+  it('posts a big district in parts, one per slice, and the parts plus the job hold the whole input', () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const m = new WorkerPrep();
+    const big = input(PART_PLACEMENTS * 2 + 50);
+    const parts = m.prepParts(big, lib);
+    let slices = 0;
+    while (parts.next().done !== true) slices++;
+    const posted = FakeWorker.last!.posted.filter((p) => p.kind !== 'models');
+    expect(slices).toBe(2);
+    expect(posted.map((p) => p.kind)).toEqual(['part', 'part', 'prep']);
+    const sent = posted.flatMap((p) => (p.kind === 'part' ? p.part.placements : p.kind === 'prep' ? p.input.placements : []));
+    expect(sent).toEqual(big.placements);
   });
 
   it('sends each model once and settles each job with its own district, whatever order replies come in', async () => {

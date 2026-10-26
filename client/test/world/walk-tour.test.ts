@@ -47,6 +47,6 @@ describe('autopilot tour over several bridges', () => {
       expect(path.at(-1)).toBe(goals[2]);
       const changes = islandChanges([...layout.hubs, ...layout.zones], [dressing.start, ...path]);
       expect(changes).toBeGreaterThanOrEqual(5);
-    });
+    }, 30_000);
   }
 });

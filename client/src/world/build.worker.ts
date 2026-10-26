@@ -1,4 +1,4 @@
-import type { WorkerRequest } from './build-worker';
+import type { PackedPart, WorkerRequest } from './build-worker';
 import { prepDistrict, preppedTransferables, runPrep, type ModelSource, type Prepped } from './district-prep';
 import type { BakedModel } from './model-library';
 import { unpackGeometry } from './geometry-pack';
@@ -20,13 +20,28 @@ function trimmed(p: Prepped): Prepped {
   return { ...p, meshes, tree: p.tree && { ...p.tree, position: fit(p.tree.position) } };
 }
 
+/** Parts of jobs still being sent, by job id; a job this many ids behind the newest is dropped. */
+const STALE_JOBS = 64;
+/** Parts of jobs still being sent, by job id. */
+const parts = new Map<number, PackedPart[]>();
+
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const m = e.data;
   if (m.kind === 'models') {
     for (const k of m.models) models.set(k.id, { geometry: unpackGeometry(k.geometry), width: k.width, height: k.height });
     return;
   }
-  const i = m.input;
+  if (m.kind === 'part') {
+    const list = parts.get(m.id) ?? [];
+    list.push(m.part);
+    parts.set(m.id, list);
+    return;
+  }
+  const sent = [...(parts.get(m.id) ?? []), m.input];
+  parts.delete(m.id);
+  // Jobs are numbered in order: parts of one far older than this were abandoned mid-send (the district was freed).
+  for (const id of parts.keys()) if (id < m.id - STALE_JOBS) parts.delete(id);
+  const i = { ...m.input, terrain: sent.flatMap((p) => p.terrain), placements: sent.flatMap((p) => p.placements), blockers: sent.flatMap((p) => p.blockers) };
   const prepped = runPrep(
     prepDistrict(
       {
