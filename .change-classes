@@ -1,0 +1,53 @@
+# change-class rules (T1399): <glob> <class>, first match wins per file; unmatched files are class full; highest class wins.
+moodle/local/mooblox/classes/privacy/* security
+moodle/local/mooblox/db/access.php security
+moodle/local/mooblox/db/* schema
+moodle/local/mooblox/version.php schema
+moodle/local/mooblox/lang/* docs
+moodle/local/mooblox/templates/* ui
+moodle/local/mooblox/client/dist/* content
+moodle/local/mooblox/* logic
+client/src/perf/* engine
+client/tools/perf.mjs engine
+client/src/world/*stream* engine
+*build*.worker* engine
+*/far-* engine
+*island-builder* engine
+*island-fade* engine
+*geometry-pack* engine
+*material-kit* engine
+client/src/*/post.ts engine
+client/src/*/stage.ts engine
+client/src/boot/main.ts engine
+client/vite.config.ts engine
+client/package.json engine
+client/package-lock.json engine
+client/src/world/props/* content
+client/src/world/landmarks/* content
+*/layout.ts content
+*/recipes.ts content
+*/palette.ts content
+client/public/* content
+*.json content
+client/src/ui/* ui
+client/src/hub/* ui
+client/src/map/* ui
+*.css ui
+*.html ui
+*.md docs
+.gitignore docs
+LICENSE docs
+.change-classes docs
+client/src/* logic
+client/test/* logic
+client/tools/* logic
+client/kit-src/* content
+checks none nothing changed
+checks docs tsc (npm run typecheck)
+checks ui tsc + npx vitest related <files> --run; screenshots at 400, 768, 1366, 1920, 2560
+checks content tsc + npx vitest related <files> --run; npm test once at the end
+checks logic npx vitest related <files> --run while iterating; npm run test:changed or npm test once at the end; Moodle side: mci auto
+checks schema mci auto in moodle/local/mooblox (full PHPUnit, savepoints, privacy) + npm test
+checks engine npm test + perf gate: flock /tmp/mooblox-perf.lock timeout 900 npm run test:perf
+checks security mci full in moodle/local/mooblox + npm test
+checks full npm run test:all + mci full (class unknown)
