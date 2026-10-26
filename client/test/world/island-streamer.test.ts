@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DistrictStreamer, type StreamUnit } from '../../src/world/district-streamer';
 import { islandGraph, IslandStreamer } from '../../src/world/island-streamer';
 import { Haze } from '../../src/world/haze';
-import { deckGeometry, farMode } from '../../src/world/far-view';
+import { farMode } from '../../src/world/far-view';
 import { IslandLayout } from '../../src/world/island-layout';
 import { parseShape, shapeWorld } from '../../src/domain/course-shape';
 
@@ -135,16 +135,14 @@ describe('Haze', () => {
   });
 });
 
-describe('deckGeometry', () => {
-  it('builds one deck and two rails per bridge without bottom faces', () => {
-    const g = deckGeometry([{ ax: 0, az: 0, bx: 10, bz: 0 }], 0xb97a4a, 0x7a4a2a, 0.08)!;
-    expect(g.getAttribute('position').count / 3).toBe(30);
-  });
-});
-
 describe('farMode', () => {
-  it('defaults to cards, to silhouettes on software GL, and lets ?far= win', () => {
+  it('defaults to real builds on high and xhigh, cards below, silhouettes on software GL, and lets ?far= win', () => {
     expect(farMode(null)).toBe('impostor');
+    expect(farMode(null, false, 'low')).toBe('impostor');
+    expect(farMode(null, false, 'high')).toBe('real');
+    expect(farMode(null, false, 'xhigh')).toBe('real');
+    expect(farMode(null, true, 'xhigh')).toBe('silhouette');
+    expect(farMode('real', false, 'low')).toBe('real');
     expect(farMode(null, true)).toBe('silhouette');
     expect(farMode('impostor', true)).toBe('impostor');
     expect(farMode('bogus')).toBe('impostor');

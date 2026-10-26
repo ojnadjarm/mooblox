@@ -42,6 +42,8 @@ type Mover = (t: number, dt: number) => void;
 const KID_COUNT: Readonly<Record<string, number>> = { low: 0, medium: 2, high: 3, xhigh: 8 };
 /** Two kids share a sit spot side by side, this far (m) either side of it. */
 const SIT_SIDE = 0.8;
+/** Metres past the current island's rim a kid still counts as on it (beach, shore fence). */
+const KID_SHORE = 2;
 /** Kids further than this from the camera are not drawn. */
 const KID_DRAW = 60;
 /** Walker pace (m/s, base + per-kid spread: the walk clip's stride fits 3.3-6) and turn rate (1/s) towards the next heading. */
@@ -535,6 +537,13 @@ function petals(view: WorldView, teardown: (() => void)[]): Mover {
 const SKINS = ['a', 'c', 'b', 'd', 'e', 'f', 'g', 'h', 'i'];
 const SHIRTS = [0xe5484d, 0x2f7fe0, 0xff9a3c, 0x8e5ad8, 0x2fa39a, 0xf07aa8, 0xf6c445, 0x5ed8d2, 0x5db761];
 
+/** Whether (x, z) is on the island the player stands on (its circle plus the shore): kids show only there. */
+function onIsland(view: WorldView, x: number, z: number): boolean {
+  const hubs = view.layout.hubs;
+  const c = view.island < hubs.length ? hubs[view.island] : view.layout.zones[view.island - hubs.length];
+  return c !== undefined && Math.hypot(x - c.x, z - c.z) <= c.radius + KID_SHORE;
+}
+
 /** NPC kids by `ROLES`: sitting or playing at the hangouts nearest the spawn, strolling from the plaza fountain, walking the paths. */
 async function kids(view: WorldView, avatars: AvatarFactory, count: number, shadows: boolean): Promise<Mover[]> {
   const out: Mover[] = [];
@@ -557,9 +566,10 @@ async function kids(view: WorldView, avatars: AvatarFactory, count: number, shad
     const hang = role === 'sit' ? seat : role === 'play' ? play : undefined;
     const draw = (move: Mover): Mover => (t, dt) => {
       const eye = view.stage.camera.position;
-      const kx = eye.x - avatar.root.position.x;
-      const kz = eye.z - avatar.root.position.z;
-      avatar.root.visible = kx * kx + kz * kz < KID_DRAW * KID_DRAW;
+      const at = avatar.root.position;
+      const kx = eye.x - at.x;
+      const kz = eye.z - at.z;
+      avatar.root.visible = kx * kx + kz * kz < KID_DRAW * KID_DRAW && onIsland(view, at.x, at.z);
       if (avatar.root.visible) move(t, dt);
     };
     const speed = WALK_PACE + hash01(i, 21) * WALK_SPREAD;

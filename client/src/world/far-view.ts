@@ -26,21 +26,28 @@ import type { Circle } from './layout';
 import type { ModelLibrary } from './model-library';
 import { withFade } from './island-fade';
 
-/** How the islands past the live one look: haze only, real neighbours, ultra-low-poly silhouettes or pre-rendered cards. */
-export type FarMode = 'fog' | 'full' | 'silhouette' | 'impostor';
+/**
+ * How the islands past the live one look: haze only, real neighbours, ultra-low-poly silhouettes, pre-rendered cards or
+ * real light builds (HLOD, `far-real.ts`).
+ */
+export type FarMode = 'fog' | 'full' | 'silhouette' | 'impostor' | 'real';
 
-/** The default on every tier and shape: pre-rendered cards (T1369; options in `~/drop/T1368/options.html`). */
+/** The default on low and medium: pre-rendered cards (T1369; options in `~/drop/T1368/options.html`). */
 export const DEFAULT_FAR: FarMode = 'impostor';
 
-/** `?far=` or the default; software GL defaults to silhouettes (each card capture is a long CPU render there). */
-export function farMode(query: string | null, software = false): FarMode {
-  if (query === 'fog' || query === 'full' || query === 'silhouette' || query === 'impostor') return query;
-  return software ? 'silhouette' : DEFAULT_FAR;
+/**
+ * `?far=` or the default: real light builds on high and xhigh (cards blur at 1920 px and up, T1382), cards below, and
+ * silhouettes on software GL (each card capture is a long CPU render there).
+ */
+export function farMode(query: string | null, software = false, tier = 'medium'): FarMode {
+  if (query === 'fog' || query === 'full' || query === 'silhouette' || query === 'impostor' || query === 'real') return query;
+  if (software) return 'silhouette';
+  return tier === 'high' || tier === 'xhigh' ? 'real' : DEFAULT_FAR;
 }
 
-/** A cheap stand-in for the islands in the haze ring: one draw for the whole ring. */
+/** A cheap stand-in for the islands in the haze ring. */
 export interface FarView {
-  readonly mesh: Mesh;
+  readonly mesh: Object3D;
   /** Shows the islands `ring` (indices into the island list); rebuilds only when the set changed. */
   setRing(ring: readonly number[]): void;
   /** Background work, once per frame (impostor captures); returns true when the picture changed. */
@@ -99,34 +106,6 @@ export function silhouetteGeometry(district: District, lib: ModelLibrary, landma
   const merged = mergeGeometries(parts, false);
   for (const g of parts) g.dispose();
   return atIsland(merged, district.island);
-}
-
-/** Plank decks with low rails for every bridge, one geometry: the way on stays visible while the island across is a fake. */
-export function deckGeometry(bridges: readonly { ax: number; az: number; bx: number; bz: number }[], deck: number, rail: number, top: number): BufferGeometry | null {
-  const parts: BufferGeometry[] = [];
-  for (const b of bridges) {
-    const len = Math.hypot(b.bx - b.ax, b.bz - b.az) + 1.6;
-    const yaw = Math.atan2(b.bx - b.ax, b.bz - b.az);
-    const mx = (b.ax + b.bx) / 2;
-    const mz = (b.az + b.bz) / 2;
-    // Just under and inside the real deck, so the real one covers it wherever both draw.
-    const g = new BoxGeometry(2.9, 0.3, len);
-    place(g, mx, top - 0.27, mz, yaw);
-    parts.push(painted(stripBottom(g), new Color(deck)));
-    for (const side of [-1.35, 1.35]) {
-      const r = new BoxGeometry(0.14, 0.12, len - 0.8);
-      place(r, mx + Math.cos(yaw) * side, top + 0.9, mz - Math.sin(yaw) * side, yaw);
-      parts.push(painted(stripBottom(r), new Color(rail)));
-    }
-  }
-  if (!parts.length) return null;
-  const merged = mergeGeometries(parts, false);
-  for (const g of parts) g.dispose();
-  const pos = merged.getAttribute('position');
-  const spot = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) spot.set([pos.getX(i), pos.getZ(i), 0], i * 3);
-  merged.setAttribute('island', new BufferAttribute(spot, 3));
-  return merged;
 }
 
 /** Sides of a fake island's ground. */

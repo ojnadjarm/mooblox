@@ -53,6 +53,8 @@ const FRAME_RUN = 4.6;
 const FRAME_GAP = 1.8;
 /** A shelf's outer face over the island cliff: no toe rocks (they would hang over the water), shallow steps. */
 const SHELF_RIM: CliffSize = { ...TERRACE_CLIFF, toe: 0, step: [0.03, 0.08] };
+/** Height step (m) between overlapping walk layers: ring strips, their joint discs, the entry walk, its end disc. */
+const WALK_STEP = 0.005;
 /** Clearance kept between a shelf and bridge lines, path centre lines and plot rims. */
 const SHELF_CLEAR = { bridge: 2.2, path: 1.7, plot: 0.8 } as const;
 
@@ -155,6 +157,8 @@ export interface Dressing {
   readonly obstacles: readonly Obstacle[];
   /** Walkable bridge decks, rim to rim. */
   readonly bridges: readonly Segment[];
+  /** Each bridge's planks, rails, posts and piers (one span per bridge, in `bridges` order). */
+  readonly spans: readonly District[];
   readonly critters: readonly Critter[];
   readonly hangouts: readonly Hangout[];
   /** Chimney and campfire smoke sources. */
@@ -285,6 +289,9 @@ class Designer {
   private readonly obstacles: Obstacle[] = [];
   private readonly bridges: Segment[] = [];
   private readonly spans: Segment[] = [];
+  private readonly bridgeParts: District[] = [];
+  /** Grounding patches stamped so far (centre, ground height, radius). */
+  private readonly patches: { x: number; y: number; z: number; r: number }[] = [];
   /** Plaza walks: from each hub's centre out to every bridge landing on it. */
   private readonly walks: Segment[] = [];
   private readonly occ = new Occupancy();
@@ -371,7 +378,7 @@ class Designer {
     });
     const sails = this.sea(districts);
     return {
-      districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges,
+      districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges, spans: this.bridgeParts,
       critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks,
       start: this.start ?? { x: this.layout.spawn.x, z: this.layout.spawn.z, face: 0 },
       occupancy: this.occ,
@@ -396,7 +403,8 @@ class Designer {
     this.entries.add(walk);
     for (const ring of plotRings(count)) {
       if (ring.radius === 0) continue;
-      const n = Math.max(16, Math.round((2 * Math.PI * ring.radius) / 3));
+      // Even, so neighbouring segments' kerbs alternate heights all the way round (see `paintPaths`).
+      const n = Math.max(16, 2 * Math.round((Math.PI * ring.radius) / 3));
       for (let i = 0; i < n; i++) {
         const a = (i / n) * 2 * Math.PI;
         const b = ((i + 1) / n) * 2 * Math.PI;
@@ -408,13 +416,16 @@ class Designer {
   /** Brick walks of a zone (flat strips with round joints) and stepping stones on the entry walk. */
   private paintPaths(z: Zone): void {
     const colour = this.p.path[0] ?? 0xc9765a;
-    this.paths.forEach((s) => {
+    this.paths.forEach((s, k) => {
       if (Math.hypot((s.ax + s.bx) / 2 - z.x, (s.az + s.bz) / 2 - z.z) > z.radius) return;
       const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
       const yaw = Math.atan2(s.bx - s.ax, s.bz - s.az);
-      this.terrain(dropUndersides(new BoxGeometry(2.2, 0.06, len)), colour, (s.ax + s.bx) / 2, 0.03, (s.az + s.bz) / 2, yaw, false, false);
-      this.terrain(dropUndersides(new CylinderGeometry(1.1, 1.1, 0.06, 10)), colour, s.bx, 0.031, s.bz, 0, false, false);
-      this.kerbs((s.ax + s.bx) / 2, (s.az + s.bz) / 2, yaw, len, 1.1);
+      // Ring strips overlap at their joints and the entry walk crosses them: each layer 5 mm over the one below, never coplanar
+      // (z-fighting), and the joint disc reaches past the strips' overlapping corners (12-gon apothem 1.16 m).
+      const entry = this.entries.has(s) ? WALK_STEP * 2 : 0;
+      this.terrain(dropUndersides(new BoxGeometry(2.2, 0.06 + entry, len)), colour, (s.ax + s.bx) / 2, 0.03 + entry / 2, (s.az + s.bz) / 2, yaw, false, false);
+      this.terrain(dropUndersides(new CylinderGeometry(1.2, 1.2, 0.06 + entry + WALK_STEP, 12)), colour, s.bx, 0.03 + (entry + WALK_STEP) / 2, s.bz, 0, false, false);
+      this.kerbs((s.ax + s.bx) / 2, (s.az + s.bz) / 2, yaw, len, 1.1, entry ? WALK_STEP * 2 : (k % 2) * WALK_STEP);
       if (!this.entries.has(s)) return;
       for (let t = 1.2; t < len - 0.8; t += 2.4) {
         const x = s.ax + ((s.bx - s.ax) * t) / len;
@@ -442,14 +453,17 @@ class Designer {
     this.kerbs(hub.x + ux * mid, hub.z + uz * mid, yaw, to - from, width / 2);
   }
 
-  /** Chunky cream kerb runs (detail dressing) either side of a walk `len` long centred on (x, z) along `yaw`, inner faces `half` - 0.08 m off its axis. */
-  private kerbs(x: number, z: number, yaw: number, len: number, half: number): void {
+  /**
+   * Chunky cream kerb runs (detail dressing) either side of a walk `len` long centred on (x, z) along `yaw`, inner faces `half` - 0.08 m
+   * off its axis, `lift` m up (runs that overlap at a joint or crossing differ in height: coplanar tops z-fight).
+   */
+  private kerbs(x: number, z: number, yaw: number, len: number, half: number, lift = 0): void {
     const off = half + KERB.w / 2 - 0.08;
     for (const side of [-1, 1]) {
       const kx = x + Math.cos(yaw) * side * off;
       const kz = z - Math.sin(yaw) * side * off;
       const seed = (Math.round(kx * 10) * 73856093) ^ (Math.round(kz * 10) * 19349663);
-      this.district.terrain.push({ geometry: kerbRun(len, this.p.trim, seed).rotateY(yaw).translate(kx, 0, kz), solid: false, detail: true });
+      this.district.terrain.push({ geometry: kerbRun(len, this.p.trim, seed).rotateY(yaw).translate(kx, lift, kz), solid: false, detail: true });
     }
   }
 
@@ -767,6 +781,11 @@ class Designer {
     const thick = (foot.h * DECK_W) / foot.w;
     const pieces = Math.ceil((b - a) / (DECK_W - 0.2));
     const pitch = (b - a) / pieces;
+    // The bridge is its own span (always built and drawn at full detail), not part of either island's district.
+    const owner = this.district;
+    const centre = (a + b) / 2;
+    this.district = { island: { x: from.x + dx * centre, z: from.z + dz * centre, radius: (b - a) / 2 + 1 }, placements: [], terrain: [], glow: [], blockers: [] };
+    this.bridgeParts.push(this.district);
     for (let k = 0; k < pieces; k++) {
       const t = a + pitch * (k + 0.5);
       this.model('nature/bridge_center_wood', from.x + dx * t, DECK_Y - thick, from.z + dz * t, yaw, 0, { width: DECK_W, solid: true, ground: true });
@@ -783,9 +802,10 @@ class Designer {
       for (let k = 0; k < posts; k++) {
         const t = ra + ((rb - ra) * k) / (posts - 1);
         this.terrain(new BoxGeometry(0.2, RAIL_H, 0.2), this.p.wood, from.x + dx * t + ox, DECK_Y + RAIL_H / 2, from.z + dz * t + oz, yaw, true, false);
-        this.terrain(new CylinderGeometry(0.18, 0.22, -WATER_Y - 0.6, 7), this.p.woodDark, from.x + dx * t + ox, WATER_Y / 2 - 0.5, from.z + dz * t + oz, 0, false, true);
+        this.terrain(new CylinderGeometry(0.18, 0.22, -WATER_Y - 0.6, 7), this.p.woodDark, from.x + dx * t + ox, WATER_Y / 2 - 0.5, from.z + dz * t + oz, 0, false, false);
       }
     }
+    this.district = owner;
   }
 
   private dock(c: Circle, big: boolean): void {
@@ -974,7 +994,9 @@ class Designer {
   private stamp(rec: Recipe, x: number, y: number, z: number, face: number, patch: boolean): void {
     const cs = Math.cos(face);
     const sn = Math.sin(face);
-    if (patch && rec.patch) {
+    // Patches share one height above their ground: one overlapping another would z-fight, so it is left out.
+    if (patch && rec.patch && !this.patches.some((p) => p.y === y && Math.hypot(p.x - x, p.z - z) < (p.r + rec.patch!.r) * 1.25)) {
+      this.patches.push({ x, y, z, r: rec.patch.r });
       this.terrain(new CylinderGeometry(rec.patch.r, rec.patch.r, 0.02, 10).scale(1.25, 1, 1), rec.patch.colour, x, y + 0.006, z, face, false, true);
       for (let i = 0; i < 5; i++) {
         const a = this.random() * 2 * Math.PI;

@@ -136,7 +136,8 @@ export class IslandBuilder {
   /** The spawn plaza: radial terracotta paving in a cream trim ring (the designer puts the fountain in the middle). */
   private plaza(): void {
     this.surface = Surface.paving;
-    this.add(this.land, new CylinderGeometry(PLAZA + 0.5, PLAZA + 0.6, 0.12, 48), this.p.trimShade, 0, 0.06, 0);
+    // Paving, trim and shade step 1 cm apart: coplanar tops z-fight as the camera moves.
+    this.add(this.land, new CylinderGeometry(PLAZA + 0.5, PLAZA + 0.6, 0.11, 48), this.p.trimShade, 0, 0.055, 0);
     this.add(this.land, new CylinderGeometry(PLAZA + 0.3, PLAZA + 0.3, 0.04, 48), this.p.trim, 0, 0.1, 0);
     this.surface = Surface.brick;
     const wedges = 16;
@@ -172,6 +173,7 @@ export class IslandBuilder {
       { surface: Surface.ground, colour: this.p.dirt, r: [0.9, 1.7], share: 0.3 },
       { surface: Surface.metal, colour: 0x8fb6cf, r: [0.45, 0.85], share: 0.15 },
     ] as const;
+    const placed: { x: number; z: number; r: number }[] = [];
     for (let i = 0; i < count; i++) {
       const a = random() * Math.PI * 2;
       const d = Math.sqrt(random()) * (c.radius - 3);
@@ -180,7 +182,9 @@ export class IslandBuilder {
       const roll = random();
       const kind = roll < kinds[0].share ? kinds[0] : roll < kinds[0].share + kinds[1].share ? kinds[1] : kinds[2];
       const r = kind.r[0] + random() * (kind.r[1] - kind.r[0]);
-      if (keepOut.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r)) continue;
+      // Decals share one height: one overlapping another would z-fight.
+      if (keepOut.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r) || placed.some((k) => Math.hypot(x - k.x, z - k.z) < (k.r + r) * 1.15)) continue;
+      placed.push({ x, z, r });
       this.surface = kind.surface;
       this.add(this.land, blobGeometry(r, random), kind.colour, x, DECAL_Y, z, random() * 6);
     }
