@@ -14,9 +14,14 @@ const CSS = `
 .mooblox-hub-floor button { width: 38px; height: 38px; border-radius: 50%; border: 0; background: #ffc21a; color: #2b2f3a; font: 900 18px ${UI_FONT};
   cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .mooblox-hub-floor button:focus-visible, .mooblox-hub-list a:focus-visible { outline: 3px solid #ffc21a; outline-offset: 2px; }
-.mooblox-hub-hint { position: absolute; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
+.mooblox-hub-hint { position: absolute; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 124px);
   max-width: calc(100% - 24px); box-sizing: border-box; padding: 10px 18px; border-radius: 999px; background: rgba(43, 47, 58, .82); color: #fff;
   font: 800 17px ${UI_FONT}; text-align: center; pointer-events: none; transition: opacity .4s; }
+@media (pointer: coarse) {
+  .mooblox-hub-hint { --pad: max(clamp(16px, 4vmin, 40px), env(safe-area-inset-left), env(safe-area-inset-right)); --size: clamp(110px, 26vmin, 180px);
+    max-width: calc(100% - 2 * (var(--pad) + var(--size) + 8px)); bottom: calc(var(--pad) + env(safe-area-inset-bottom) + var(--size) / 2);
+    transform: translate(-50%, 50%); padding: 8px 10px; border-radius: 18px; }
+}
 .mooblox-hub-hint[hidden] { display: block; opacity: 0; }
 .mooblox-hub-empty { position: absolute; z-index: 11; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100% - 32px));
   box-sizing: border-box; padding: 24px 26px; border-radius: 28px; border: 5px solid #fff; background: #f6ead3; color: #2b2f3a; text-align: center;
@@ -34,7 +39,7 @@ const CSS = `
   .mooblox-hub-title { display: none; }
   .mooblox-hub-floor { height: 48px; font-size: 15px; }
   .mooblox-hub-floor .mooblox-hub-floor-long { display: none; }
-  .mooblox-hub-hint { font-size: 15px; bottom: auto; top: calc(max(12px, env(safe-area-inset-top)) + 62px); border-radius: 18px; }
+  .mooblox-hub-hint { font-size: 15px; border-radius: 18px; }
 }
 @media (min-width: 601px) { .mooblox-hub-floor .mooblox-hub-floor-short { display: none; } }
 `;
