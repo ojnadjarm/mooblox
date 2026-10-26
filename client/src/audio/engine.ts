@@ -4,7 +4,7 @@ import { MUSIC_GAIN, SFX, type SfxId } from './sounds';
 /** One logged sound decision (the test tools read these instead of listening). */
 export interface SoundEvent {
   readonly t: number;
-  readonly kind: 'unlock' | 'sfx' | 'music' | 'water' | 'mix';
+  readonly kind: 'unlock' | 'sfx' | 'music' | 'water' | 'mix' | 'call' | 'bed';
   readonly id: string;
   /** Linear gain the sound was sent at (before the master), or the master level for `mix`. */
   readonly gain: number;
@@ -114,23 +114,52 @@ export class AudioEngine {
 
   /** Plays one effect (a random variant, slightly varied pitch) at `gain` x its own level; rate-limited per sound. */
   play(id: SfxId, gain = 1): void {
+    const source = this.voice(id, gain, 'sfx');
+    if (source) source.out.connect(this.sfx!);
+  }
+
+  /** Plays one effect from a point in the world, fading with distance (heard up to `hear` m). */
+  playAt(id: SfxId, at: Point, hear: number, gain = 1): void {
+    const source = this.voice(id, gain, 'call', `@${at.x.toFixed(0)},${at.z.toFixed(0)}`);
+    if (!source) return;
+    const panner = new PannerNode(this.ctx!, {
+      panningModel: 'equalpower',
+      distanceModel: 'linear',
+      refDistance: 2,
+      maxDistance: hear,
+      rolloffFactor: 1,
+      positionX: at.x,
+      positionY: at.y,
+      positionZ: at.z,
+    });
+    source.out.connect(panner).connect(this.sfx!);
+  }
+
+  /** Fetches and decodes a shipped file once (after unlock); null when it cannot load. */
+  load(stem: string): Promise<AudioBuffer | null> {
+    return this.ctx ? this.buffer(stem) : Promise.resolve(null);
+  }
+
+  /** Starts a logged, rate-limited, pitch-varied voice of an effect; null when silent, limited or not loaded yet. */
+  private voice(id: SfxId, gain: number, kind: 'sfx' | 'call', where = ''): { out: GainNode } | null {
     const spec = SFX[id];
     const now = performance.now() / 1000;
-    if (now - (this.last.get(id) ?? -Infinity) < spec.gap) return;
+    if (now - (this.last.get(id) ?? -Infinity) < spec.gap) return null;
     this.last.set(id, now);
     const level = spec.gain * gain;
-    this.note('sfx', id, level);
+    this.note(kind, id + where, level);
     const ctx = this.ctx;
-    if (!ctx || !this.sfx || !this.audible) return;
+    if (!ctx || !this.sfx || !this.audible) return null;
     const buffer = this.buffers.get(spec.files[Math.floor(Math.random() * spec.files.length)]!);
-    if (!buffer) return;
+    if (!buffer) return null;
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = 1 + (Math.random() * 2 - 1) * spec.vary;
-    const g = ctx.createGain();
-    g.gain.value = level;
-    source.connect(g).connect(this.sfx);
+    const out = ctx.createGain();
+    out.gain.value = level;
+    source.connect(out);
     source.start();
+    return { out };
   }
 
   /** Logs a decision of another sound part (music, water). */

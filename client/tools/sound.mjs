@@ -44,6 +44,9 @@ try {
     await Promise.all([page.waitForNavigation(), page.click('#loginbtn')]);
     userid = Number(sql('SELECT id FROM {user} WHERE username = ?', username));
     execFileSync(mdb, ['--env', '5.2', '--write', "DELETE FROM {user_preferences} WHERE name = 'local_mooblox_sound' AND userid = ?", String(userid)]);
+    // One found collectible back in the world, so the pickup sound can be checked.
+    const found = sql('SELECT MAX(id) FROM {local_mooblox_found} WHERE userid = ? AND courseid = ?', userid, course);
+    if (found && found !== 'NULL') execFileSync(mdb, ['--env', '5.2', '--write', 'DELETE FROM {local_mooblox_found} WHERE id = ?', found]);
     await page.goto(`${site}/local/mooblox/play.php?id=${course}`);
   }
   await page.waitForFunction(() => window.mooblox?.sound && window.mooblox.streaming.pending === 0, null, { timeout: 90000 });
@@ -76,6 +79,80 @@ try {
   numbers.stepsIn1800ms = steps.length;
   check('walking plays footsteps', steps.length >= 3, `${steps.length} steps: ${[...new Set(steps.map((e) => e.id))].join(',')}`);
   check('a jump plays take-off and landing', events.some((e) => e.id === 'jump') && events.some((e) => e.id === 'land'), events.filter((e) => e.kind === 'sfx' && !e.id.startsWith('step')).map((e) => e.id).join(','));
+
+  // T1385: every action, UI and world sound (events only; nothing is heard).
+  const waitFor = async (from, test, ms) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const hit = (await since(page, from)).find(test);
+      if (hit) return hit;
+      await sleep(250);
+    }
+    return null;
+  };
+  events = await log(page);
+  check('birds sing inland (bed)', events.some((e) => e.kind === 'bed' && e.id === 'bed-birds' && e.gain > 0));
+  t = await now(page);
+  await page.keyboard.press('Digit1');
+  check('an emote pops', !!(await waitFor(t, (e) => e.id === 'emote', 1500)));
+  t = await now(page);
+  await page.evaluate(() => document.exitPointerLock());
+  await page.click('.mooblox-hud-book');
+  const book = await waitFor(t, (e) => e.id === 'book', 2000);
+  check('a HUD button clicks and the Book opens with a book sound', !!book && (await since(page, t)).some((e) => e.id === 'click'));
+  const tabs = await page.$$('.mooblox-book-tab');
+  if (tabs.length > 1) {
+    t = await now(page);
+    await tabs[1].click();
+    check('a Book tab turns a page', !!(await waitFor(t, (e) => e.id === 'page', 1500)));
+  }
+  await page.keyboard.press('Escape');
+  await sleep(600);
+  numbers.picked = await page.evaluate(() => {
+    const c = window.mooblox.rewards?.collectibles;
+    const found = new Set((window.mooblox.rewards?.store.rewards?.collectibles ?? []).filter((x) => x.found).map((x) => x.key));
+    const spot = c?.spots.find((sp) => !found.has(sp.key) && sp.kind === 'gem') ?? c?.spots.find((sp) => !found.has(sp.key));
+    if (!spot) return null;
+    window.mooblox.player.teleport(spot.x, spot.z, 0);
+    return spot.kind;
+  });
+  if (numbers.picked) {
+    t = await now(page) - 400;
+    check(`picking up a ${numbers.picked} plays its sound`, !!(await waitFor(t, (e) => e.id === numbers.picked, 3000)));
+  } else check('a collectible to pick up exists', false, 'none left for this user');
+  const near = await page.evaluate(() => {
+    const p = window.mooblox.layout.zones[0]?.plots[0];
+    if (!p) return false;
+    window.mooblox.player.teleport(p.x + 2.4, p.z, 0);
+    return true;
+  });
+  if (near) {
+    t = await now(page) - 400;
+    check('walking up to an activity chimes the prompt', !!(await waitFor(t, (e) => e.id === 'prompt', 3000)));
+  }
+  const pet = await page.evaluate(() => {
+    const d = window.mooblox.dressing.critters.find((c) => c.kind === 'dog') ?? window.mooblox.dressing.critters.find((c) => c.kind === 'cat');
+    if (!d) return null;
+    window.mooblox.player.teleport(d.x + 3, d.z, 0);
+    return { kind: d.kind, x: Math.round(d.x), z: Math.round(d.z) };
+  });
+  if (pet) {
+    t = await now(page);
+    const call = pet.kind === 'dog' ? 'bark@' : 'meow@';
+    const heard = await waitFor(t, (e) => e.kind === 'call' && e.id.startsWith(call), 36000);
+    check(`a nearby ${pet.kind} calls now and then`, !!heard, `${pet.kind} at ${pet.x},${pet.z}${heard ? `, ${heard.id}` : ''}`);
+  } else check('a dog or cat exists in this course', false);
+  const rim = await page.evaluate(() => {
+    const h = window.mooblox.layout.hubs[0];
+    window.mooblox.player.teleport(h.x + h.radius - 2.5, h.z, 0);
+    return Math.round(h.radius);
+  });
+  t = await now(page);
+  await sleep(1000);
+  const sea = (await log(page)).filter((e) => e.kind === 'bed' && e.id === 'bed-shore').pop();
+  const wave = await waitFor(t, (e) => e.kind === 'call' && e.id.startsWith('wave@'), 14000);
+  const gull = await waitFor(t, (e) => e.kind === 'call' && e.id.startsWith('gull@'), 14000);
+  check('the shore rolls in near the rim (bed + breaking waves + gulls)', sea?.gain > 0.25 && !!wave && !!gull, `hub r ${rim}: bed ${sea?.gain}, ${wave?.id}, ${gull?.id}`);
 
   t = await now(page);
   await page.keyboard.press('KeyM');
@@ -135,8 +212,8 @@ try {
 
   numbers.levels = await page.evaluate(async () => {
     const e = window.mooblox.sound.engine;
-    const ids = { step: 'step-grass-0', stone: 'step-stone-0', wood: 'step-wood-0', jump: 'jump-0', land: 'land-0', open: 'open', xp: 'xp', guide: 'guide', complete: 'complete', levelup: 'levelup', music: 'music-catmint' };
-    const gains = { step: 0.32, stone: 0.22, wood: 0.26, jump: 0.3, land: 0.3, open: 0.3, xp: 0.3, guide: 0.22, complete: 0.4, levelup: 0.36, music: 0.36 };
+    const ids = { step: 'step-grass-0', stone: 'step-stone-0', wood: 'step-wood-0', jump: 'jump-0', land: 'land-0', open: 'open', xp: 'xp', guide: 'guide', complete: 'complete', levelup: 'levelup', music: 'music-catmint', gem: 'gem-0', crystal: 'crystal-0', star: 'star', goal: 'goal', click: 'click-0', page: 'page-0', book: 'book', prompt: 'prompt', equip: 'equip-0', emote: 'emote-0', bump: 'bump-0', bark: 'bark-4', meow: 'meow-1', quack: 'quack-2', gull: 'gull-1', wave: 'wave-1', shore: 'bed-shore', birds: 'bed-birds' };
+    const gains = { step: 0.32, stone: 0.22, wood: 0.26, jump: 0.3, land: 0.3, open: 0.3, xp: 0.3, guide: 0.22, complete: 0.4, levelup: 0.36, music: 0.36, gem: 0.34, crystal: 0.34, star: 0.36, goal: 0.4, click: 0.16, page: 0.22, book: 0.9, prompt: 0.14, equip: 0.3, emote: 0.22, bump: 0.44, bark: 0.32, meow: 0.24, quack: 0.2, gull: 0.18, wave: 0.3, shore: 0.55, birds: 0.3 };
     const master = 0.7 * 0.7;
     const res = {};
     for (const [k, stem] of Object.entries(ids)) {

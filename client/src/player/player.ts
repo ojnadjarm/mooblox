@@ -28,6 +28,8 @@ export class Player {
   readonly body: Body;
   /** Called when the feet kick up dust. */
   onFeet: FeetListener | null = null;
+  /** Called when the player's kid starts an emote (idle act index). */
+  onEmote: ((act: number) => void) | null = null;
   private readonly prev = new Vector3();
   private readonly fixed = new FixedStep(Physics.step);
   private facing = Math.PI;
@@ -118,6 +120,7 @@ export class Player {
       focus.cue = emote;
       focus.cueAge = 0;
       focus.cueId++;
+      this.onEmote?.(emote);
     }
     const alpha = this.fixed.advance(dt, this.tick);
     const root = this.avatar.root;

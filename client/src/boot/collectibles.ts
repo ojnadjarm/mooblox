@@ -32,6 +32,8 @@ export interface CollectiblesRuntime {
   readonly layer: CollectibleLayer;
   /** Every placed spot of the course (found or not). */
   readonly spots: readonly CollectibleSpot[];
+  /** Called the moment the player walks through a collectible. */
+  onPick: ((spot: CollectibleSpot) => void) | null;
 }
 
 /**
@@ -75,6 +77,7 @@ export function startCollectibles(view: WorldView, player: Player, store: Reward
     pending.add(spot.key);
     layer.remove(spot.key);
     view.sparkle(spot.x, 1.1, spot.z);
+    runtime.onPick?.(spot);
     gateway
       .claimCollectible(courseId, spot.key)
       .then((count) => {
@@ -104,10 +107,12 @@ export function startCollectibles(view: WorldView, player: Player, store: Reward
     const hit = layer.touching(p.x, p.z, REACH);
     if (hit && p.y < 2.5) pick(hit);
   });
-  return {
+  const runtime: CollectiblesRuntime = {
     layer,
     get spots() {
       return all;
     },
+    onPick: null,
   };
+  return runtime;
 }

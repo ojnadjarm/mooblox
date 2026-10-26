@@ -502,6 +502,19 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Checks: `node tools/mouselook.mjs <dir> [--pre]` 12/12 (look, Tab, panel, Book walk, walk speed <= 14 m/s, arrival, cancel; videos);
     `tools/guide.mjs` 5/5, `tools/book.mjs` waits for the walk; vitest +2 files. Perf demo vs HEAD in one lock: low 60 fps / 16.8 ms, draws 21 = 21, programs 11 = 11;
     same SwiftShader stress misses on both.
+- T1385, 2026-10-26, version 2026102606 (play-test round 2 item 1, full sound audit; table with play buttons `~/drop/T1385/index.html`):
+  - `audio/ambience.ts` `Ambience` (current island only): looped `bed-shore` panned to the nearest rim point, level `shoreLevel` over the
+    last 26 m; `bed-birds` inland (x0.4 by the sea); `CALLERS` dogs bark / cats meow / ducks quack from their critter spot now and then
+    (pause ranges, hearing radius), gulls over the water and breaking waves near the rim. `AudioEngine.playAt` (linear PannerNode per voice,
+    logged `call` events `bark@x,z`), `load(stem)` (beds load after unlock).
+  - New one-shots (`sounds.ts`): bump (`onFeet` n 2), emote (`Player.onEmote`), click (any button in the canvas host), page (book tabs),
+    equip (wardrobe items), book (panel with the Book), prompt (activity prompt shows), gem/crystal/star (`CollectiblesRuntime.onPick`,
+    the moment of the walk-through), goal (`ClassGoalRuntime.shows` rises). `SoundDeps.collectibles`/`goal` getters (rewards start late).
+  - Assets: Kenney interface/impact/RPG/jingles picks + OpenGameArt CC0 nature (dog barking mono, gulls, meows, waves, Vistula shore,
+    isaiah658 birds) in `.research/assets-raw/audio/oga-nature/`; quacks synthesised by ffmpeg `aevalsrc` in `intake-audio.mjs`; nature
+    peaks to -1 dBFS, beds -20 LUFS with a 2 s crossfaded loop seam. 130 files 3.63 MB (test cap 5 MB).
+  - `tools/sound.mjs` adds birds bed, emote, Book click/open/page, pickup, prompt, dog bark, shore bed + wave + gull, levels of every new file.
+    Gaps left (audit): firework pops, NPC kid voices, pet sounds, door/gate creaks, campfire crackle.
 - T1381, 2026-10-26, version 2026102605 (owner play-test flaw 5, sound; evidence `~/drop/T1381/index.html`):
   - `client/src/audio/`: `sounds.ts` (SFX table, gains, `musicFor`), `engine.ts` (`AudioEngine`: master <- sfx + music buses,
     context made on the first pointerdown/keydown/touchend, decoded SFX with pitch spread and rate limits, `log` ring of 200
