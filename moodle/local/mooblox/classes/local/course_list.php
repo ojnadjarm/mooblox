@@ -36,7 +36,7 @@ class course_list {
     const SUMMARY_LENGTH = 160;
 
     /**
-     * Returns the user's active courses where they may play, in the site's course order.
+     * Returns the user's active courses where they may play, in the site's course order (sort order, then id): a visit never moves one.
      *
      * @param int $userid user id
      * @return array[] rows of id, fullname, summary, image, progress (-1 = not tracked), completed, lastaccess, url and the
@@ -49,6 +49,7 @@ class course_list {
             return [];
         }
         $courses = enrol_get_all_users_courses($userid, true, ['summary', 'summaryformat', 'enablecompletion']);
+        usort($courses, fn($a, $b) => [(int) $a->sortorder, (int) $a->id] <=> [(int) $b->sortorder, (int) $b->id]);
         $lastaccess = $DB->get_records_menu('user_lastaccess', ['userid' => $userid], '', 'courseid, timeaccess');
         $rows = [];
         foreach ($courses as $course) {

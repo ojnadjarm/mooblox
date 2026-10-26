@@ -37,6 +37,33 @@ use PHPUnit\Framework\Attributes\CoversClass;
 #[CoversClass(course_list::class)]
 final class course_list_test extends \advanced_testcase {
     /**
+     * Courses come in the site's course order, and visiting one or enrolling in another moves no other course.
+     */
+    public function test_for_user_keeps_the_course_order(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $student = $generator->create_user();
+        $courses = [];
+        foreach (['Zebras', 'Ants', 'Moons'] as $name) {
+            $courses[] = $course = $generator->create_course(['fullname' => $name]);
+            $generator->enrol_user($student->id, $course->id, 'student');
+        }
+        $ids = fn() => array_column(course_list::for_user($student->id), 'id');
+        [$in, $params] = $DB->get_in_or_equal(array_column($courses, 'id'));
+        $order = array_map('intval', $DB->get_fieldset_sql("SELECT id FROM {course} WHERE id $in ORDER BY sortorder, id", $params));
+        $this->assertSame($order, $ids());
+        $this->assertSame($order, $ids());
+        $DB->insert_record('user_lastaccess', ['userid' => $student->id, 'courseid' => end($courses)->id, 'timeaccess' => time()]);
+        $this->assertSame($order, $ids());
+        $late = $generator->create_course(['fullname' => 'Late']);
+        $generator->enrol_user($student->id, $late->id, 'student');
+        $after = $ids();
+        $this->assertSame($order, array_values(array_diff($after, [(int) $late->id])));
+        $this->assertContains((int) $late->id, $after);
+    }
+
+    /**
      * Playable visible courses come with progress, completion and last access; others are left out.
      */
     public function test_for_user_lists_playable_courses(): void {

@@ -4,7 +4,7 @@ import { isJump, Footfall } from '../audio/cues';
 import { Music } from '../audio/music';
 import { encodeSound, parseSound, SOUND_PREFERENCE } from '../audio/settings';
 import { MUSIC } from '../audio/sounds';
-import { byLastAccess, hubTotals, type CourseListGateway, type HubCourse } from '../hub/courses';
+import { hubTotals, type CourseListGateway, type HubCourse } from '../hub/courses';
 import { HubHud } from '../hub/hub-hud';
 import { archSpots, floorCount, floorCourses, HUB, onLift, padOf, padSpots, portalAt, spawnSpot } from '../hub/hub-layout';
 import { buildHubScene, CELL } from '../hub/hub-scene';
@@ -90,8 +90,7 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
   stage.renderer.shadowMap.enabled = settings.shadows;
   const fog = stage.scene.fog;
   if (fog instanceof Fog) Object.assign(fog, FOG);
-  const [list, avatars] = await Promise.all([deps.gateway.getCourses(), AvatarKit.load(deps.assets)]);
-  const courses = byLastAccess(list);
+  const [courses, avatars] = await Promise.all([deps.gateway.getCourses(), AvatarKit.load(deps.assets)]);
   const floors = floorCount(courses.length);
 
   const scene = buildHubScene(kit, CAMPUS, tier === 'low', tier === 'low' ? 1.5 : 2.5);

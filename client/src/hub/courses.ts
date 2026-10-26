@@ -65,7 +65,7 @@ function pick<T>(row: unknown, fields: Readonly<Record<string, Kind>>, at: strin
   return Object.fromEntries(Object.keys(fields).map((k) => [k, o[k]])) as T;
 }
 
-/** Validates the wire list; throws an Error naming the first bad field. */
+/** Validates the wire list, kept in its order (the site's course order: one pad per course, the same on every visit); throws an Error naming the first bad field. */
 export function toHubCourses(dto: unknown): HubCourse[] {
   if (!Array.isArray(dto)) throw new Error('courses is not a list');
   return dto.map((row: unknown, i) => {
@@ -74,11 +74,6 @@ export function toHubCourses(dto: unknown): HubCourse[] {
     if (!Array.isArray(trophies)) throw new Error(`courses[${i}].trophies must be a list`);
     return { ...course, trophies: trophies.map((t: unknown, k) => pick<HubTrophy>(t, TROPHY, `courses[${i}].trophies[${k}]`)) };
   });
-}
-
-/** Courses for the hub's pads: last visited first, never-visited ones after them by name. */
-export function byLastAccess(courses: readonly HubCourse[]): HubCourse[] {
-  return [...courses].sort((a, b) => b.lastaccess - a.lastaccess || a.fullname.localeCompare(b.fullname) || a.id - b.id);
 }
 
 /** What the show-off area displays: every trophy (oldest first) and the totals over all courses. */

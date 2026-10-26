@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byLastAccess, hubTotals, levelFor, toHubCourses, type HubCourse } from '../../src/hub/courses';
+import { hubTotals, levelFor, toHubCourses, type HubCourse } from '../../src/hub/courses';
 
 const trophy = { badgeid: 7, name: 'Quiz whiz', image: 'https://m/badge.png', timeissued: 50 };
 const row = {
@@ -21,10 +21,13 @@ describe('toHubCourses', () => {
   });
 });
 
-describe('byLastAccess', () => {
-  it('puts the last visited first and never-visited courses last by name', () => {
-    const list = [course(1, 0, { fullname: 'Zoo' }), course(2, 100), course(3, 300), course(4, 0, { fullname: 'Art' })];
-    expect(byLastAccess(list).map((c) => c.id)).toEqual([3, 2, 4, 1]);
+describe('pad order', () => {
+  it('keeps the server course order, so a reload or a visit moves no pad', () => {
+    const wire = (visits: number[]) => [5, 2, 9, 4].map((id, i) => ({ ...row, id, lastaccess: visits[i]! }));
+    const pads = (visits: number[]) => toHubCourses(wire(visits)).map((c) => c.id);
+    expect(pads([0, 0, 0, 0])).toEqual([5, 2, 9, 4]);
+    expect(pads([0, 0, 0, 0])).toEqual(pads([0, 0, 0, 0]));
+    expect(pads([0, 0, 900, 100])).toEqual([5, 2, 9, 4]);
   });
 });
 

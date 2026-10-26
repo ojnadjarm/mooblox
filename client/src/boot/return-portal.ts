@@ -8,6 +8,7 @@ import { WarpBeam } from '../hub/warp-beam';
 import { BvhCollider } from '../player/collider';
 import { CAMPUS } from '../world/look';
 import type { HallSite } from '../world/dressing';
+import { HUB_LINK_CLASS } from '../ui/hub-button';
 import type { WhiteOut } from '../ui/white-out';
 import type { PlayerRig, WorldView } from './app';
 
@@ -30,9 +31,11 @@ export interface ReturnPortalRuntime {
   readonly site: HallSite | null;
   /** Seconds into the warp back, -1 when none. */
   readonly warping: number;
+  /** Warps the kid back to the hub from where they stand (the HUD Hub button), as walking through the portal does. */
+  warp(): void;
 }
 
-/** A hub-style portal on the spawn island: walking through its fluid warps the kid back to the hub (beam, spin, white-out, whoosh). */
+/** A hub-style portal on the spawn island: walking through its fluid, a plain click on the HUD Hub link or `warp()` warps the kid back to the hub (beam, spin, white-out, whoosh). */
 export function startReturnPortal(view: WorldView, player: PlayerRig, deps: ReturnPortalDeps): ReturnPortalRuntime {
   // The low tier keeps its program count: a still swirl in the glow program instead of the animated fluid.
   const still = view.quality.tier === 'low';
@@ -79,18 +82,38 @@ export function startReturnPortal(view: WorldView, player: PlayerRig, deps: Retu
   view.stage.add(group);
   view.onRebuild(build);
 
+  const host = view.stage.canvasHost.closest<HTMLElement>('#mooblox-root');
+  const leave = (): void => {
+    if (!host || host.dataset['navigated']) return;
+    host.dataset['navigated'] = deps.huburl;
+    deps.navigate(deps.huburl);
+  };
+  const begin = (): void => {
+    if (warp >= 0) return;
+    warp = 0;
+    player.freeze.frozen = true;
+    player.guided.cancel();
+    host?.setAttribute('data-warping', '1');
+    deps.engine()?.play('warp');
+    // Leaves even when no frame runs (a paused world).
+    window.setTimeout(leave, (WARP_OUT + 0.8) * 1000);
+  };
+
+  // A plain click on the HUD Hub link warps like the portal; other clicks (new tab) keep the link.
+  host?.querySelector<HTMLAnchorElement>(`a.${HUB_LINK_CLASS}`)?.addEventListener('click', (e) => {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    begin();
+  });
+
   view.onFrame((dt) => {
-    if (!site) return;
-    group.visible = view.sees(site.x, site.z);
+    if (site) group.visible = view.sees(site.x, site.z);
     const b = player.body.position;
     if (warp < 0) {
+      if (!site) return;
       const l = toArch(site.x, site.z, site.face, b.x, b.y, b.z);
       if (!crossing.step(inOpening(l.x, l.y, l.z), true, dt)) return;
-      warp = 0;
-      player.freeze.frozen = true;
-      player.guided.cancel();
-      view.stage.canvasHost.closest('#mooblox-root')?.setAttribute('data-warping', '1');
-      deps.engine()?.play('warp');
+      begin();
     }
     warp += dt;
     const pose = warpOut(warp);
@@ -101,11 +124,7 @@ export function startReturnPortal(view: WorldView, player: PlayerRig, deps: Retu
     root.rotation.y += spin;
     root.scale.setScalar(pose.shrink);
     deps.whiteOut.set(pose.flash);
-    const host = view.stage.canvasHost.closest<HTMLElement>('#mooblox-root');
-    if (warp >= WARP_OUT && host && !host.dataset['navigated']) {
-      host.dataset['navigated'] = deps.huburl;
-      deps.navigate(deps.huburl);
-    }
+    if (warp >= WARP_OUT) leave();
   });
   return {
     get site() {
@@ -114,6 +133,7 @@ export function startReturnPortal(view: WorldView, player: PlayerRig, deps: Retu
     get warping() {
       return warp;
     },
+    warp: begin,
   };
 }
 

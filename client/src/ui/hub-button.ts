@@ -19,11 +19,14 @@ export interface HubButtonStrings {
 
 export const DEFAULT_HUB_BUTTON_STRINGS: HubButtonStrings = { hub_back: 'Hub', hub_back_label: 'Back to the hub of your worlds' };
 
+/** Class of the HUD Hub link (the return portal plays its warp on a plain click). */
+export const HUB_LINK_CLASS = 'mooblox-hud-hub';
+
 /** HUD link from a course world back to the hub, under the avatar button. */
 export function hubButton(host: HTMLElement, href: string, s: HubButtonStrings): HTMLAnchorElement {
   injectStyle('mooblox-hub-button-style', CSS);
   const a = document.createElement('a');
-  a.className = 'mooblox-hud-hub';
+  a.className = HUB_LINK_CLASS;
   a.href = href;
   a.target = '_top';
   a.setAttribute('aria-label', s.hub_back_label);
