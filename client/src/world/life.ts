@@ -25,6 +25,7 @@ import type { AvatarFactory } from '../player/avatar-kit';
 import { SEAT } from '../player/clips';
 import { focus } from '../player/attention';
 import { hash01 } from '../player/motion';
+import { animalGeometry } from './critter-models';
 import { C, CRITTERS, critterState, keepClear, nudge, pace, reactStep, rise } from './critter-react';
 import { paintPlace, type Critter, type Dressing, type Hangout, type LifeSpot, type Sail, type Segment } from './dressing';
 import { INSTANCED_DEPTH } from './depth-materials';
@@ -247,28 +248,6 @@ function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teard
     mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
   };
-}
-
-/** Blocky animals built from boxes, facing +z, standing on y = 0. */
-function animalGeometry(kind: 'duck' | 'cat' | 'dog'): BufferGeometry {
-  const box = (w: number, h: number, d: number, c: number, x: number, y: number, z: number) => paintPlace(new BoxGeometry(w, h, d), c, x, y, z, 0);
-  let parts: BufferGeometry[];
-  if (kind === 'duck') {
-    parts = [box(0.34, 0.22, 0.5, 0xfafafa, 0, 0.11, 0), box(0.2, 0.22, 0.2, 0x2f8f4e, 0, 0.32, 0.2), box(0.12, 0.05, 0.14, 0xf2a33a, 0, 0.3, 0.36), box(0.16, 0.08, 0.1, 0xeeeeee, 0, 0.2, -0.28)];
-  } else {
-    const fur = kind === 'cat' ? 0xf2a33a : 0x9a6a3e;
-    const dark = kind === 'cat' ? 0xd9822b : 0x6e4a2a;
-    parts = [
-      box(0.32, 0.28, 0.62, fur, 0, 0.36, 0),
-      box(0.3, 0.28, 0.28, fur, 0, 0.58, 0.38),
-      box(0.08, 0.1, 0.06, dark, -0.09, 0.76, 0.38),
-      box(0.08, 0.1, 0.06, dark, 0.09, 0.76, 0.38),
-      box(0.14, 0.1, 0.1, kind === 'dog' ? 0x3a2a1e : 0xffc0cb, 0, 0.52, 0.55),
-      box(0.07, 0.07, kind === 'cat' ? 0.4 : 0.22, dark, 0, kind === 'cat' ? 0.62 : 0.5, -0.4),
-    ];
-    for (const x of [-0.1, 0.1]) for (const z of [-0.22, 0.22]) parts.push(box(0.08, 0.24, 0.08, dark, x, 0.12, z));
-  }
-  return sceneryGeometry(mergeGeometries(parts, false)!);
 }
 
 /** One instanced mesh per animal kind; each wanders its circle (ducks paddle, pets pause and trot) and reacts to the player (`critter-react.ts`). */

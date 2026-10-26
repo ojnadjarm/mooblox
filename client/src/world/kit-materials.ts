@@ -62,8 +62,9 @@ const KINDS: readonly { readonly name: RegExp; readonly family: (mat: string, r:
   { name: /bridge|fence|sign|dock|platform|boat|canoe|crate|barrel|cart|bench|stool|plank/, family: (m, r, g, b) => (/^(wood|deck|dirt)/.test(m) || tone(r, g, b).warm ? 'wood' : m === '_defaultMat' ? 'smooth' : 'iron') },
 ];
 
-/** Kit houses: cream walls plaster, plinth and quoins stone, frames and doors timber, green faces roof; window glass and iron smooth. */
+/** Kit houses: cream walls plaster, plinth and quoins stone, frames and doors timber, green faces roof; window glass, rooms behind it and iron smooth. */
 function buildingPart(m: string, r: number, g: number, b: number): Family {
+  if (m === 'interior') return 'smooth';
   if (/cream/.test(m)) return 'plaster';
   if (/stone|plinth/.test(m)) return 'stone';
   if (/timber|door/.test(m)) return 'wood';

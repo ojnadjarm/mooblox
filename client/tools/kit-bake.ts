@@ -4,6 +4,7 @@ import { ALL_EXTENSIONS, type Transform } from '@gltf-transform/extensions';
 import { MeshoptDecoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { Box3, BufferAttribute, BufferGeometry, Color, Matrix4, SRGBColorSpace } from 'three';
+import { furnishHouse } from '../src/world/house-detail';
 import { tagModel, type BakedModel } from '../src/world/model-library';
 
 /** One kit model baked in Node as `ModelLibrary` bakes it in the page, plus the source material name of each vertex. */
@@ -81,9 +82,10 @@ export async function bakeKit(path: string): Promise<Map<string, KitModel>> {
     const box = new Box3().setFromBufferAttribute(geometry.getAttribute('position') as BufferAttribute);
     geometry.translate(0, -box.min.y, 0);
     const id = wrapper.getName().replace('__', '/');
-    const materials = parts.flatMap((p) => Array<string>(p.pos.length / 3).fill(p.mat));
-    tagModel(geometry, id, materials);
-    out.set(id, { model: { geometry, height: box.max.y - box.min.y, width: Math.max(box.max.x - box.min.x, box.max.z - box.min.z) }, materials });
+    const furnished = furnishHouse(id, geometry, parts.flatMap((p) => Array<string>(p.pos.length / 3).fill(p.mat)));
+    const materials = furnished.materials;
+    tagModel(furnished.geometry, id, materials);
+    out.set(id, { model: { geometry: furnished.geometry, height: box.max.y - box.min.y, width: Math.max(box.max.x - box.min.x, box.max.z - box.min.z) }, materials });
   }
   return out;
 }

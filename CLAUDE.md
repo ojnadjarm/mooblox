@@ -540,3 +540,19 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     (`model-library.ts`), banners swing (`flag-cloth.ts` `hangingCloth`, wind weights by depth below the cloth top).
   - Not done (audit): stall awnings, playground swings/seesaw, lily pads, ember/lantern flicker. Gate A/B vs HEAD (other lanes'
     perf runs in parallel): low/medium GPU 60 = 60 fps, draws/programs equal; same SwiftShader stress worst-frame misses.
+- T1388, 2026-10-26, version 2026102607, houses and animals (play-test round 2 items 5, 6, 10; pre/post `~/drop/T1388/index.html`):
+  - `world/house-detail.ts` `furnishHouse` runs on every `suburb/building-*` at bake (`ModelLibrary.load` and Node `tools/kit-bake.ts`,
+    before `tagModel`): a side whose door parts span < 0.7 of the 0.14 doorway is an open doorway (the kit's back doors, a hole
+    through the house): its door, door-seam and doorway seam/glass triangles go, `house-door.ts` `closedDoor` adds a painted leaf
+    (5 paints) with raised panels, a lit four-pane window and a brass knob. Every 2-triangle blue pane becomes a room
+    (`window-room.ts`): an inset box (wallpaper, wood floor, ceiling, side walls, gain 1.35 so it stays warm in the house's
+    shadow), one of 4 furniture sets (floor lamp + books, picture + sofa + table lamp, bookcase + pendant, armchair + sconce +
+    heart) with a lamp at gain 2.2, curtains and valance; attic slits get a pendant glow. Seeded per window. `tri-sink.ts`
+    (`WallFrame`, `TriSink` rect/card/block, `rebuild`). Material `interior` → smooth family (`kit-materials.ts`). No green
+    interior colours: `district-prep` `repaintRoof` would turn them into the roof colour. No new draw, material or program.
+  - `world/critter-models.ts` (out of `life.ts`): duck, cat, dog with the kid face (ink eyes, white highlight, rosy cheeks) and
+    markings (cat: pink-lined ears, cream muzzle, stripes, white paws and tail tip; dog: floppy ears, tan muzzle, nose, tongue,
+    eye patch, back patch, red collar + tag; duck: neck ring, grey wings with a blue flash). Gulls and butterflies unchanged.
+  - Tests: `house-detail.test.ts` (rays through every doorway grid hit within 0.03 of the wall; panes became rooms; no
+    repaint-green), `critter-models.test.ts`. Stills: `node tools/critter-stills.mjs <dir> [--kinds] [--query shape=8x12]`
+    (camera follows the first visible instance). Perf gate GPU all PASS; SwiftShader stress misses as at HEAD (A/B 17/27 vs 12/18 fps).
