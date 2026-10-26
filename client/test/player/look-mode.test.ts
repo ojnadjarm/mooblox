@@ -14,6 +14,22 @@ describe('LookModel', () => {
     expect(run(m, ['click'])).toEqual([null]);
   });
 
+  it('the first key press asks for the lock once; later keys leave it to a click', () => {
+    const m = new LookModel();
+    expect(run(m, ['key', 'key'])).toEqual(['lock', null]);
+    run(m, ['locked', 'unlocked']);
+    expect(run(m, ['key'])).toEqual([null]);
+    expect(run(m, ['click'])).toEqual(['lock']);
+  });
+
+  it('a click first spends the first-key lock; a key while Tab is held or a panel is open waits', () => {
+    const m = new LookModel();
+    run(m, ['click', 'refused']);
+    expect(run(m, ['key'])).toEqual([null]);
+    const held = new LookModel();
+    expect(run(held, ['hold-down', 'key', 'hold-up', 'panel-open', 'key', 'panel-close', 'key'])).toEqual([null, null, null, null, null, null, 'lock']);
+  });
+
   it('holding Tab frees the cursor, releasing it locks again', () => {
     const m = new LookModel();
     run(m, ['click', 'locked']);

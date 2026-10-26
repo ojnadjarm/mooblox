@@ -12,7 +12,7 @@ const valid = {
 
 describe('readConfig', () => {
   it('parses the play.php config and trims the wwwroot slash', () => {
-    expect(readConfig(JSON.stringify(valid))).toEqual({ ...valid, wwwroot: 'https://moodle.example', userid: 0, sound: '', mode: 'play', huburl: '', arrival: false, strings: {} });
+    expect(readConfig(JSON.stringify(valid))).toEqual({ ...valid, wwwroot: 'https://moodle.example', userid: 0, sound: '', mode: 'play', huburl: '', strings: {} });
     expect(readConfig(JSON.stringify({ ...valid, mode: 'hub', huburl: 'https://m/local/mooblox/index.php?from=2' }))).toMatchObject({ mode: 'hub', huburl: 'https://m/local/mooblox/index.php?from=2' });
     expect(readConfig(JSON.stringify({ ...valid, userid: 64 })).userid).toBe(64);
     expect(readConfig(JSON.stringify({ ...valid, sound: 'off40' })).sound).toBe('off40');

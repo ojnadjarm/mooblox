@@ -25,7 +25,6 @@
 require('../../config.php');
 
 $id = required_param('id', PARAM_INT);
-$warp = optional_param('warp', false, PARAM_BOOL);
 $course = get_course($id);
 require_login($course);
 $context = context_course::instance($course->id);
@@ -48,7 +47,6 @@ $config = [
     'sound' => (string) get_user_preferences('local_mooblox_sound', ''),
     'rev' => (int) $rev,
     'huburl' => (new moodle_url('/local/mooblox/index.php', ['from' => $course->id]))->out(false),
-    'arrival' => (bool) $warp,
     'strings' => [
         'guide' => get_string('guide', 'local_mooblox'),
         'greeting' => get_string('guide_greeting', 'local_mooblox', '{name}'),

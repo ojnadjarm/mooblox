@@ -12,7 +12,7 @@ import type { SignEntry } from '../hub/hub-signs';
 import { fill, hubStrings, progressText, type HubStrings } from '../hub/hub-strings';
 import { Portals } from '../hub/portals';
 import { Showcase } from '../hub/showcase';
-import { Dwell, WARP_IN, WARP_OUT, warpIn, warpOut, withWarpFlag } from '../hub/warp';
+import { Dwell, WARP_IN, WARP_OUT, warpIn, warpOut } from '../hub/warp';
 import type { MoodleGateway } from '../moodle/gateway';
 import { pixelRatio, QUALITY } from '../perf/quality';
 import { Outfitter } from '../player/attachments';
@@ -251,7 +251,7 @@ export async function startHub(root: HTMLElement, deps: HubDeps): Promise<HubVie
       hud.flash(pose.flash);
       camera.follow(root3.position, dt);
       if (warp.t >= WARP_OUT && !root.dataset['navigated']) {
-        const url = withWarpFlag(warp.course.url);
+        const url = warp.course.url;
         root.dataset['navigated'] = url;
         deps.navigate(url);
       }

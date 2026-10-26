@@ -7,6 +7,11 @@ import type { PlayerRig, WorldView } from './app';
 /** Where the kid lands beside the return portal, in its frame (front +z): in front of the right column, clear of the fluid. */
 const BESIDE = { x: 1.1, z: 2.3 } as const;
 
+/** Whether this page load enters the course (a course page link, a hub warp, a typed or bookmarked address, back/forward), not a reload. */
+export function entersCourse(nav: { readonly type: string } | undefined = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined): boolean {
+  return nav?.type !== 'reload';
+}
+
 /** The running arrival. */
 export interface ArrivalRuntime {
   /** Seconds into the arrival, -1 once over (or never started). */
@@ -22,7 +27,7 @@ export function arrivalSpot(site: HallSite | null, start: { x: number; z: number
 }
 
 /**
- * The arrival after a hub warp, the hub's warp out played backwards: the kid appears beside the course's return portal, drops
+ * The arrival on entering a course, the hub's warp out played backwards: the kid appears beside the course's return portal, drops
  * spinning out of the beam and grows back while the white-out clears, with the warp whoosh; then the controls come back.
  */
 export function startArrival(view: WorldView, player: PlayerRig, whiteOut: WhiteOut, whoosh: () => void): ArrivalRuntime {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalSpot } from '../../src/boot/arrival';
+import { arrivalSpot, entersCourse } from '../../src/boot/arrival';
 import { inOpening, toArch } from '../../src/hub/portal-arch';
 
 describe('arrivalSpot', () => {
@@ -20,5 +20,13 @@ describe('arrivalSpot', () => {
 
   it('keeps the world start without a portal', () => {
     expect(arrivalSpot(null, start)).toBe(start);
+  });
+});
+
+describe('entersCourse', () => {
+  it('plays the arrival on every way in but a reload', () => {
+    for (const type of ['navigate', 'back_forward', 'prerender']) expect(entersCourse({ type })).toBe(true);
+    expect(entersCourse(undefined)).toBe(true);
+    expect(entersCourse({ type: 'reload' })).toBe(false);
   });
 });

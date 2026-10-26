@@ -98,7 +98,7 @@ try {
       await page.screenshot({ path: join(out, `${prefix}-warp.png`) });
       await page.waitForFunction(() => document.getElementById('mooblox-root').dataset.navigated, null, { timeout: 5000 }).catch(() => undefined);
       const nav = await navigated(page);
-      check('walking through the portal warps into its course', nav.startsWith(url) && nav.includes('warp=1'), nav);
+      check('walking through the portal warps into its course', nav.startsWith(url), nav);
       await page.waitForTimeout(300);
       await ctx.close();
     }
@@ -123,7 +123,10 @@ try {
       check('the lift centre shows the floor number', (await page.evaluate(() => window.mooblox.liftNumber)) === '2');
       await page.waitForTimeout(1200);
       await page.screenshot({ path: join(out, `${prefix}-lift-floor2.png`) });
+      // The first key press took the pointer lock: hold Tab for the cursor, as a kid would.
+      await page.keyboard.down('Tab');
       await page.click('.mooblox-hub-lift button');
+      await page.keyboard.up('Tab');
       await page.waitForFunction(() => window.mooblox.floor === 2, null, { timeout: 4000 }).catch(() => undefined);
       check('the prompt button rides the lift too', (await page.evaluate(() => window.mooblox.floor)) === 2);
       await page.waitForTimeout(800);

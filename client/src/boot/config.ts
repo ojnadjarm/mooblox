@@ -14,8 +14,6 @@ export interface PlayConfig {
   readonly mode: 'play' | 'hub';
   /** The hub page, '' when an older play.php leaves it out. */
   readonly huburl: string;
-  /** The kid came through a hub portal (`play.php?warp=1`): the world opens with the arrival. */
-  readonly arrival: boolean;
   /** Lang strings for the client UI, by key. */
   readonly strings: Readonly<Record<string, string>>;
 }
@@ -51,7 +49,6 @@ export function readConfig(json: string | null | undefined): PlayConfig {
     rev: int(o, 'rev'),
     mode: o['mode'] === 'hub' ? 'hub' : 'play',
     huburl: o['huburl'] === undefined ? '' : str(o, 'huburl'),
-    arrival: o['arrival'] === true,
     strings: strings(o['strings']),
   };
 }

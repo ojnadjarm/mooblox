@@ -694,3 +694,11 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   `HUB_LINK_CLASS`) warps like the return portal: `boot/return-portal.ts` `warp()` (plain left click only; `leave()` navigates
   once, fallback timer `WARP_OUT + 0.8` s). Hub pads keep the site's course order: `course_list.php` sorts by `sortorder`, then
   `id` (`test_for_user_keeps_the_course_order`); the client `byLastAccess` sort is gone.
+- T1402, 2026-10-26, version 2026102624, arrival on every course entry, mouse look on the first key (pre/post `~/drop/T1402/index.html`):
+  - `boot/arrival.ts` `entersCourse()` (PerformanceNavigationTiming type): every load but a reload plays the arrival (course page link,
+    hub warp, typed or bookmarked play.php, back/forward). The `warp=1` flag is gone (play.php `arrival`, config `arrival`, `withWarpFlag`).
+  - `LookModel` event `key`: the page's first key press (not Esc, Tab, Alt/Ctrl/Meta shortcuts) asks for the lock once, unless Tab is
+    held or a panel is open; a click spends it. `MouseLook` focuses the canvas at load (`tabIndex -1`, no outline). A first key press
+    grants pointer lock in Chromium and Firefox (probe: headless both, Xvfb headed both with X focus). Lock never survives a page load.
+  - Check `node tools/entry.mjs <dir> --live <site> --user u --password p [--course 90]` (8: arrival via course link, focus, W walks,
+    first W locks, mouse turns, Tab, reload skips, typed address arrives). `portal.mjs` holds Tab to click Go (the E press locks).

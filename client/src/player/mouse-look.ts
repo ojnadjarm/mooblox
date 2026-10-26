@@ -8,7 +8,7 @@ export interface Turnable {
   turn(dx: number, dy: number): void;
 }
 
-/** PC mouse-look over the Pointer Lock API: a click on the world locks, the mouse turns the camera, Tab held frees the cursor. */
+/** PC mouse-look over the Pointer Lock API: the world has keyboard focus at load, the first key press or a click on the world locks, the mouse turns the camera, Tab held frees the cursor. */
 export class MouseLook {
   private readonly model = new LookModel();
   private readonly listeners: ((mode: LookMode) => void)[] = [];
@@ -19,8 +19,15 @@ export class MouseLook {
     private readonly doc: Document = document,
     win: Window = window,
   ) {
+    canvas.tabIndex = -1;
+    canvas.style.outline = 'none';
+    canvas.focus({ preventScroll: true });
     canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button === 0) this.send('click');
+    });
+    // A key press is a user gesture, so the first one (not Esc, Tab or a shortcut) can take the lock in Chromium and Firefox.
+    win.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' && e.code !== 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) this.send('key');
     });
     // Tab is the cursor key outside panels (the browser's focus move is stopped); inside one it keeps moving focus.
     const tab = (e: KeyboardEvent, down: boolean): void => {

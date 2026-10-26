@@ -122,7 +122,7 @@ try {
       check('a click locks the pointer', numbers.lockedAfterClick);
       check('mouse travel turns the camera', Math.abs(numbers.yawFromMouseTravel) > 0.5, numbers.yawFromMouseTravel.toFixed(2));
       check('a mouse drag does not add a turn of its own', Math.abs(numbers.yawFromDrag) < 0.05, numbers.yawFromDrag.toFixed(3));
-      check('Tab frees the cursor, stops the turning and keeps focus put', !numbers.lockedWithTab && Math.abs(numbers.yawWithTab) < 0.01 && numbers.focusWithTab === 'BODY', `${numbers.tipTab}; focus ${numbers.focusWithTab}`);
+      check('Tab frees the cursor, stops the turning and keeps focus put', !numbers.lockedWithTab && Math.abs(numbers.yawWithTab) < 0.01 && numbers.focusWithTab === 'CANVAS', `${numbers.tipTab}; focus ${numbers.focusWithTab}`);
       check('releasing Tab locks again', numbers.lockedAfterTab);
       check('tips: locked, Tab, after Esc', Boolean(numbers.tipLocked && numbers.tipTab && numbers.tipEscaped), `${numbers.tipLocked} | ${numbers.tipEscaped}`);
     }

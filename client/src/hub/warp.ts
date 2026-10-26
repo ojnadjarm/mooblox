@@ -62,9 +62,6 @@ export function warpIn(t: number): WarpPose {
   return { beam: (1 - ease(k)) * 9, width: 1.2 * (1 - ease(k)), lift: 0, spin: 0, shrink: 1, flash: 1 - ease(clamp(k * 1.6)) };
 }
 
-/** A course url with the flag that tells play.php the kid arrives through a portal. */
-export const withWarpFlag = (url: string): string => `${url}${url.includes('?') ? '&' : '?'}warp=1`;
-
 /** Seconds of the arrival in a course world: as long as the warp out. */
 export const ARRIVE = WARP_OUT;
 

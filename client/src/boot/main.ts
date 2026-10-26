@@ -23,7 +23,7 @@ import { DEFAULT_HUB_BUTTON_STRINGS, hubButton } from '../ui/hub-button';
 import { WhiteOut } from '../ui/white-out';
 import { brandMark } from '../ui/brand-mark';
 import { dismissLoading } from '../ui/loading-screen';
-import { startArrival } from './arrival';
+import { entersCourse, startArrival } from './arrival';
 import { startReturnPortal } from './return-portal';
 import { DEFAULT_GATE_STRINGS } from '../world/gates/gate-layer';
 import { modelIds } from '../world/dressing';
@@ -77,8 +77,8 @@ async function openHub(root: HTMLElement, config: PlayConfig, assets: string): P
 /** Builds the world and its people for the course in `config`. */
 async function play(root: HTMLElement, config: PlayConfig, assets: string, preloaded: Promise<void>, fallback: () => HTMLElement): Promise<void> {
   const gateway = new AjaxGateway(config);
-  const whiteOut = new WhiteOut(root, config.arrival ? 1 : 0);
-  if (config.arrival) history.replaceState(history.state, '', withoutWarpFlag(location.href));
+  const arriving = entersCourse();
+  const whiteOut = new WhiteOut(root, arriving ? 1 : 0);
   const store = new CourseStore();
   keepSessionAlive(gateway, SESSION_TOUCH_MS, (e) => console.error('mooblox: session touch failed', e));
   store.set(await gateway.getWorld(config.courseid));
@@ -111,15 +111,8 @@ async function play(root: HTMLElement, config: PlayConfig, assets: string, prelo
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
   const sound = startSound(view, player, { assets, stored: config.sound, gateway, strings, store, rewards: rewards.store, bubble: guide.bubble, collectibles: () => rewards.collectibles, goal: () => rewards.goal, badges: rewards.badges });
   const portal = config.huburl ? startReturnPortal(view, player, { huburl: config.huburl, navigate: (url) => window.open(url, '_top'), whiteOut, engine: () => sound.engine }) : null;
-  const arrival = config.arrival ? startArrival(view, player, whiteOut, sound.arrive) : null;
+  const arrival = arriving ? startArrival(view, player, whiteOut, sound.arrive) : null;
   Object.assign(window, { mooblox: liveHandle(view, { view, player, interaction, store, guide, picker, rewards, sound, portal, arrival }) });
-}
-
-/** The page address without the portal-arrival flag (a reload is a normal entry). */
-function withoutWarpFlag(href: string): string {
-  const url = new URL(href);
-  url.searchParams.delete('warp');
-  return url.href;
 }
 
 boot().catch((e: unknown) => console.error('mooblox: boot failed', e));
