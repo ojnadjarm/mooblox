@@ -9,6 +9,7 @@ import {
   Frustum,
   InstancedMesh,
   Matrix4,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
   Points,
@@ -17,6 +18,7 @@ import {
   Vector3,
   type Camera,
   type Material,
+  type WebGLRenderer,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { WorldView } from '../boot/app';
@@ -35,6 +37,10 @@ import { CAMPUS } from './look';
 import type { ModelLibrary } from './model-library';
 import { hop, routeAt, strollRoute, walkerRoute, type Route, type RoutePose, type Sight } from './npc-schedule';
 import { seededRandom } from './random';
+import { Campfires } from './campfire';
+import { GpuWarmup } from './gpu-warmup';
+import { QUALITY } from '../perf/quality';
+import { Smoke, type SmokeSource } from './smoke';
 import { sceneryGeometry, singleModel } from './scenery';
 
 type Mover = (t: number, dt: number) => void;
@@ -89,6 +95,8 @@ export async function startLife(view: WorldView, lib: ModelLibrary, avatars: Ava
       const flutter = d.critters.filter((c) => c.kind === 'butterfly');
       if (flutter.length) movers.push(butterflies(view, flutter, teardown));
       if (d.smoke.length) movers.push(smoke(view, d.smoke, teardown));
+      const camps = d.smoke.filter((s) => s.kind === 'campfire');
+      if (camps.length) movers.push(fires(view, camps, teardown));
     }
     movers.push(birds(view, teardown), petals(view, teardown), scatter(view, teardown));
   };
@@ -422,34 +430,36 @@ function butterflies(view: WorldView, list: readonly Critter[], teardown: (() =>
   };
 }
 
-/** Soft smoke puffs rising from chimneys and campfires, one Points cloud for all. */
-function smoke(view: WorldView, sources: readonly { x: number; y: number; z: number }[], teardown: (() => void)[]): Mover {
-  const per = 7;
-  const n = sources.length * per;
-  const pos = new Float32Array(n * 3);
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(pos, 3));
-  const pts = new Points(g, new PointsMaterial({ color: 0xeeeeee, size: 0.7, transparent: true, opacity: 0.45, depthWrite: false }));
-  pts.frustumCulled = false;
-  view.stage.add(pts);
-  teardown.push(() => {
-    pts.removeFromParent();
-    g.dispose();
-  });
-  return (t) => {
-    for (let i = 0; i < sources.length; i++) {
-      const s = sources[i]!;
-      for (let k = 0; k < per; k++) {
-        const life = (t * 0.35 + k / per + i * 0.13) % 1;
-        const o = (i * per + k) * 3;
-        pos[o] = s.x + Math.sin(life * 4 + i) * 0.4 * life + life * 0.8;
-        pos[o + 1] = s.y + life * 3.2;
-        pos[o + 2] = s.z + Math.cos(life * 3 + k) * 0.3 * life;
-      }
-    }
-    g.getAttribute('position').needsUpdate = true;
-  };
+/** Chimney and campfire smoke, one instanced draw (not on low). */
+function smoke(view: WorldView, sources: readonly SmokeSource[], teardown: (() => void)[]): Mover {
+  const puffs = new Smoke(sources, view.quality.tier);
+  view.stage.add(puffs.mesh);
+  precompile(view, puffs.mesh);
+  teardown.push(() => puffs.dispose());
+  return (t) => puffs.update(t, view.stage.camera.position);
 }
+
+/** Campfire flames and embers on the lamp-glow material, plus a ground glow (the low tier draws no campfire models, so none). */
+function fires(view: WorldView, spots: readonly SmokeSource[], teardown: (() => void)[]): Mover {
+  const glow = view.kit.glow as MeshBasicMaterial;
+  const fire = new Campfires(spots, view.quality.tier, glow, glow.color.r);
+  view.stage.add(fire.flames);
+  if (fire.glow) {
+    view.stage.add(fire.glow);
+    precompile(view, fire.glow);
+  }
+  teardown.push(() => fire.dispose());
+  return (t) => fire.update(t, view.stage.camera.position);
+}
+
+/** Links a new effect's shader program now (for the tier's post chain target or the canvas), not in the frame it first shows. */
+function precompile(view: WorldView, mesh: Object3D): void {
+  const r = view.stage.renderer;
+  const warm = WARMUPS.get(r) ?? new GpuWarmup(r);
+  WARMUPS.set(r, warm);
+  warm.compile(mesh, view.stage.camera, view.stage.scene, QUALITY[view.quality.tier].post);
+}
+const WARMUPS = new WeakMap<WebGLRenderer, GpuWarmup>();
 
 /** A flock of low-poly gulls circling above the islands, wings flapping. */
 function birds(view: WorldView, teardown: (() => void)[]): Mover {

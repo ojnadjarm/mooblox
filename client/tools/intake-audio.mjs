@@ -1,10 +1,13 @@
-// CC0 audio intake: node tools/intake-audio.mjs <raw audio dir>  ->  public/assets/audio/*.ogg (Opus) + *.m4a (AAC) + LICENSES.csv rows
+// CC0 audio intake: node tools/intake-audio.mjs <raw audio dir> [stem prefix ...]  ->  public/assets/audio/*.ogg (Opus) + *.m4a (AAC) + LICENSES.csv rows
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const raw = process.argv[2];
+/** Only these stems (by prefix) when given: the other shipped files and their licence rows stay as they are. */
+const only = process.argv.slice(3);
+const wanted = (name) => !only.length || only.some((o) => name.startsWith(o));
 if (!raw) {
   console.error('usage: node tools/intake-audio.mjs <raw dir with impact-sounds/, interface-sounds/, rpg-audio/, music-jingles/, opengameart/>');
   process.exit(2);
@@ -26,7 +29,11 @@ const NATURE = {
   wave: OGA('Water waves', 'transitking', 'water-waves'),
   shore: OGA('Sea and river wave sounds', 'RandomMind', 'sea-and-river-wave-sounds'),
   birds: OGA('Ambient bird sounds', 'isaiah658', 'ambient-bird-sounds'),
+  fire: OGA('Fireplace Sound loop', 'PagDev', 'fireplace-sound-loop'),
+  crackle: OGA('Fire Crackling', 'AntumDeluge', 'fire-crackling'),
 };
+/** Campfire crackle pops cut from the AntumDeluge recording (start, end s). */
+const CRACKLES = [[0, 0.7], [0.7, 1.4], [1.4, 2.1], [2.1, 2.87]];
 const MOOBLOX = { pack: 'MOOBLOX synthesised duck quack (tools/intake-audio.mjs)', author: 'MOOBLOX contributors', source: 'https://github.com/ojnadjarm/mooblox' };
 /** A duck quack made from a gliding buzz through a nasal band: start and end pitch (Hz), length (s). */
 const quack = (f0, f1, len) =>
@@ -81,6 +88,7 @@ const SFX = [
   ['quack-0', null, MOOBLOX, quack(560, 430, 0.16)],
   ['quack-1', null, MOOBLOX, quack(610, 470, 0.13)],
   ['quack-2', null, MOOBLOX, quack(520, 400, 0.19)],
+  ...CRACKLES.map(([a, b], i) => [`crackle-${i}`, 'oga-fire/fire-antum.wav', NATURE.crackle, `atrim=${a}:${b},asetpts=N/SR/TB,afade=t=in:d=0.02,afade=t=out:st=${(b - a - 0.06).toFixed(2)}:d=0.06`]),
 ];
 /** Nature sounds come at any level: peaks are set to -1 dBFS like the Kenney files. */
 const PEAK = -1;
@@ -88,6 +96,7 @@ const PEAK = -1;
 const BEDS = [
   ['bed-shore', 'oga-nature/VistulaShort_0.mp3', NATURE.shore, 40, 22],
   ['bed-birds', 'oga-nature/birds-isaiah658_0.ogg', NATURE.birds, 0, 30.6],
+  ['bed-fire', 'oga-fire/fire-pagdev.wav', NATURE.fire, 4, 12],
 ];
 const XFADE = 2;
 const MUSIC = [
@@ -107,7 +116,7 @@ function loudness(file) {
   return Number([...run.stderr.matchAll(/I:\s+(-?[\d.]+) LUFS/g)].pop()[1]);
 }
 
-rmSync(out, { recursive: true, force: true });
+if (!only.length) rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 const rows = [];
 const ship = (name, origin, encode) => {
@@ -122,22 +131,22 @@ function peak(input, filter) {
   const run = spawnSync('ffmpeg', ['-hide_banner', ...input, '-af', `${filter ? `${filter},` : ''}volumedetect`, '-f', 'null', '-'], { encoding: 'utf8' });
   return Number(run.stderr.match(/max_volume: (-?[\d.]+) dB/)[1]);
 }
-for (const [name, src, origin, filter] of SFX) {
+for (const [name, src, origin, filter] of SFX.filter(([n]) => wanted(n))) {
   const input = src ? ['-i', join(raw, src)] : ['-f', 'lavfi', '-i', filter];
   const af = src ? filter : 'anull';
-  const level = src && !src.startsWith('oga-nature/') ? '' : `volume=${(PEAK - peak(input, af)).toFixed(1)}dB`;
+  const level = src && !src.startsWith('oga-') ? '' : `volume=${(PEAK - peak(input, af)).toFixed(1)}dB`;
   const chain = [af, level].filter(Boolean).join(',');
   ship(name, origin, (ext, file) =>
     ffmpeg(...input, ...(chain ? ['-af', chain] : []), '-ac', '1', '-map_metadata', '-1', ...(ext === 'ogg' ? ['-c:a', 'libopus', '-b:a', '40k'] : ['-c:a', 'aac', '-b:a', '56k', '-movflags', '+faststart']), file),
   );
 }
-for (const [name, src, origin] of MUSIC) {
+for (const [name, src, origin] of MUSIC.filter(([n]) => wanted(n))) {
   const gain = (MUSIC_LUFS - loudness(join(raw, src))).toFixed(1);
   ship(name, origin, (ext, file) =>
     ffmpeg('-i', join(raw, src), '-af', `volume=${gain}dB`, '-ac', ext === 'ogg' ? '2' : '1', '-map_metadata', '-1', ...(ext === 'ogg' ? ['-c:a', 'libopus', '-b:a', '30k'] : ['-c:a', 'aac', '-b:a', '36k', '-movflags', '+faststart']), file),
   );
 }
-for (const [name, src, origin, from, len] of BEDS) {
+for (const [name, src, origin, from, len] of BEDS.filter(([n]) => wanted(n))) {
   const gain = (MUSIC_LUFS - loudness(join(raw, src))).toFixed(1);
   const loop = `[0:a]atrim=${from}:${from + len},asetpts=N/SR/TB,volume=${gain}dB,asplit[a][b];[a]atrim=${XFADE},asetpts=N/SR/TB[body];[b]atrim=0:${XFADE},asetpts=N/SR/TB[head];[body][head]acrossfade=d=${XFADE}:c1=tri:c2=tri`;
   ship(name, origin, (ext, file) =>
@@ -145,6 +154,7 @@ for (const [name, src, origin, from, len] of BEDS) {
   );
 }
 const csv = join(root, 'LICENSES.csv');
-const kept = readFileSync(csv, 'utf8').trim().split('\n').filter((r) => !r.startsWith('"audio/'));
+const fresh = new Set(rows.map((r) => r.split(',')[0]));
+const kept = readFileSync(csv, 'utf8').trim().split('\n').filter((r) => (only.length ? !fresh.has(r.split(',')[0]) : !r.startsWith('"audio/')));
 writeFileSync(csv, [...kept, ...rows].join('\n') + '\n');
 console.log(`${rows.length} audio files`);

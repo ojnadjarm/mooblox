@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Ambience, CALLERS, onIsland, rimPoint, SHORE_HEAR, shoreLevel, toRim, type Caller } from '../../src/audio/ambience';
+import { Ambience, CALLERS, fireLevel, onIsland, rimPoint, SHORE_HEAR, shoreLevel, toRim, type Caller } from '../../src/audio/ambience';
 import type { AudioEngine } from '../../src/audio/engine';
 import { SFX } from '../../src/audio/sounds';
 
@@ -63,6 +63,21 @@ describe('Ambience', () => {
     expect(gulls.length).toBeGreaterThan(1);
     expect(waves.length).toBeGreaterThan(3);
     for (const g of gulls) expect(Math.hypot(g.x, g.z)).toBeGreaterThan(island.radius);
+  });
+  it('crackles from the nearest campfire, with random pops at the fire and none out of earshot', () => {
+    const { engine, calls } = fakeEngine();
+    const a = new Ambience(engine, () => 0.5);
+    a.setCallers([], 0);
+    a.setFires([{ x: 5, y: 0, z: 0 }, { x: -20, y: 0, z: 0 }]);
+    for (let t = 0; t <= 30; t += 0.25) a.update(island, 3, 0, t);
+    const pops = calls.filter((c) => c.id === 'crackle');
+    expect(pops.length).toBeGreaterThan(10);
+    for (const p of pops) expect(p.x).toBe(5);
+    calls.length = 0;
+    for (let t = 30; t <= 60; t += 0.25) a.update(island, 3, CALLERS.fire.hear + 2, t);
+    expect(calls.filter((c) => c.id === 'crackle')).toEqual([]);
+    expect(fireLevel(0)).toBe(1);
+    expect(fireLevel(CALLERS.fire.hear)).toBe(0);
   });
   it('only calls with shipped sounds that vary in pitch', () => {
     for (const tune of Object.values(CALLERS)) {

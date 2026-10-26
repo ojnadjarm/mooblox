@@ -556,3 +556,17 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Tests: `house-detail.test.ts` (rays through every doorway grid hit within 0.03 of the wall; panes became rooms; no
     repaint-green), `critter-models.test.ts`. Stills: `node tools/critter-stills.mjs <dir> [--kinds] [--query shape=8x12]`
     (camera follows the first visible instance). Perf gate GPU all PASS; SwiftShader stress misses as at HEAD (A/B 17/27 vs 12/18 fps).
+- T1387, 2026-10-26, version 2026102608, water glint, smoke, chimneys, campfires (play-test round 2 items 7, 8, 12; pre/post `~/drop/T1387/index.html`):
+  - Water (`water.ts`): the old glint `pow(h.y + noise, 900)` overflowed past 1 and the high tier's bloom made a white blob; now a weak
+    lobe plus small wind-drifting sparkle cells, every water pixel clamped to `WATER_MAX` 1.3 (bloom threshold 1.4).
+  - `world/smoke.ts` `Smoke`: one InstancedMesh of smooth Lambert puffs (per-instance `aFade`, soft silhouette) for every
+    `dressing.smoke` source (`SmokeSource` kind chimney | campfire); grow, rise, drift with `WIND`, fade; 6/9/10 puffs per source, none on low.
+  - `world/chimney.ts`: per kit house type a stack (path colour), cream cap and dark pot on a roof slope (SPOTS from roof raycasts),
+    merged into terrain by `dressing.ts` `building()`; 40 % of houses smoke (same random sequence as before).
+  - `world/campfire.ts` `Campfires`: 4 flickering flame tongues + embers rewritten each frame into one dynamic mesh on `kit.glow`
+    (no new program), additive ground glow (InstancedMesh, off low); fires and smoke live in `life.ts`'s non-low block,
+    `precompile` warms only the tier's post variant.
+  - Crackle: `bed-fire` loop panned to the nearest campfire on the current island + random `crackle-0..3` pops (`ambience.ts`
+    `setFires`, CALLERS.fire); CC0 PagDev fireplace loop + AntumDeluge crackle (`intake-audio.mjs` takes stem prefixes to refresh
+    only those). `tools/sound.mjs` checks it muted (`MOOBLOX_QUERY=shape=8x12`). Perf: low draws/programs equal to HEAD;
+    medium +1-2 draws and programs; GPU 60 fps everywhere.

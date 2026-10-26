@@ -5,6 +5,7 @@ import { gardenRoom, HEDGE_THICK, roomReach, ROOMS, type RoomSize } from './land
 import { frameArcs, planterRun, runFootprint, type FrameArc, type FrameRing } from './landmarks/plaza-frame';
 import { box } from './landmarks/shapes';
 import { dropUndersides, KERB, kerbRun } from './landmarks/kerb';
+import { chimney } from './chimney';
 import { cliffWall, TERRACE_CLIFF, type CliffSize, type CliffToe } from './cliff-wall';
 import { outlinePrism, shelfArcs, shelfCentre, shelfOutline, shelfSamples, shelfSite, type Shelf } from './shelf';
 import { HUB_THEME, pickThemes, THEMES as DISTRICT_THEMES, type Corner, type DistrictTheme } from './landmarks/themes';
@@ -17,6 +18,7 @@ import { SegmentIndex } from './segment-index';
 import { seededRandom } from './random';
 import { recipe, WAYSIDE, type Recipe, type RecipeKind } from './recipes';
 import { pathPoints, SIGHT_IDS, wayStops } from './path-stops';
+import type { SmokeSource } from './smoke';
 
 export const WATER_Y = -3;
 /** Height of the bridge deck's walking surface. */
@@ -162,7 +164,7 @@ export interface Dressing {
   readonly critters: readonly Critter[];
   readonly hangouts: readonly Hangout[];
   /** Chimney and campfire smoke sources. */
-  readonly smoke: readonly { readonly x: number; readonly y: number; readonly z: number }[];
+  readonly smoke: readonly SmokeSource[];
   readonly sails: readonly Sail[];
   /** Every placed hero landmark: its district theme, ground spot and top height. */
   readonly landmarks: readonly { readonly theme: string; readonly x: number; readonly z: number; readonly top: number }[];
@@ -297,7 +299,7 @@ class Designer {
   private readonly occ = new Occupancy();
   private readonly critters: Critter[] = [];
   private readonly hangouts: Hangout[] = [];
-  private readonly smoke: { x: number; y: number; z: number }[] = [];
+  private readonly smoke: SmokeSource[] = [];
   private readonly themes: readonly DistrictTheme[];
   private theme: DistrictTheme = HUB_THEME;
   private readonly entries = new Set<Segment>();
@@ -757,9 +759,11 @@ class Designer {
     if (!this.free(x, z, reach * 2, 1, true)) return;
     const house = id.startsWith('suburb');
     const roof = house ? roofColour : undefined;
-    if (this.model(id, x, 0, z, face + (house ? Math.PI : 0), h, { solid: true, ...(roof !== undefined ? { roof } : {}) }) && house && this.random() < 0.4) {
-      this.smoke.push({ x, y: h * 0.92, z });
-    }
+    const yaw = face + (house ? Math.PI : 0);
+    if (!this.model(id, x, 0, z, yaw, h, { solid: true, ...(roof !== undefined ? { roof } : {}) }) || !house) return;
+    const stack = chimney(id, FOOT[id]!.h, h, x, z, yaw, this.p);
+    if (stack) for (const part of stack.parts) this.terrain(part.geometry, part.color, stack.x, stack.y + part.y, stack.z, yaw, false, false);
+    if (this.random() < 0.4 && stack) this.smoke.push({ ...stack.smoke, kind: 'chimney' });
   }
 
   /** The island's designed cliff (`cliff-wall.ts`) under the grass lip, merged into the district; its toe rocks wait for `shore`. */
@@ -1285,7 +1289,7 @@ class Designer {
     const [fx, fz] = at(0, -2.3);
     this.model('nature/campfire_stones', fx, 0, fz, 0, 0.22, { detail: true });
     this.reserve(fx, fz, 0.8);
-    this.smoke.push({ x: fx, y: 0.3, z: fz });
+    this.smoke.push({ x: fx, y: 0, z: fz, kind: 'campfire' });
     this.hangouts.push({ kind: 'sit', x: at(1.3, -2.3)[0], z: at(1.3, -2.3)[1], face: face - Math.PI / 2 });
     const [lx, lz] = at(-1.5, -2.4);
     this.item('nature/log', lx, lz, face + Math.PI / 2, 0.35, { solid: true, detail: true });

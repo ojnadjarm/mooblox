@@ -14,12 +14,13 @@ export interface CallTune {
   readonly every: readonly [number, number];
 }
 
-export const CALLERS: Readonly<Record<Caller['kind'] | 'gull' | 'wave', CallTune>> = {
+export const CALLERS: Readonly<Record<Caller['kind'] | 'gull' | 'wave' | 'fire', CallTune>> = {
   dog: { call: 'bark', hear: 34, every: [8, 20] },
   cat: { call: 'meow', hear: 16, every: [14, 34] },
   duck: { call: 'quack', hear: 22, every: [5, 13] },
   gull: { call: 'gull', hear: 45, every: [10, 24] },
   wave: { call: 'wave', hear: 30, every: [5, 12] },
+  fire: { call: 'crackle', hear: 14, every: [0.6, 2.4] },
 };
 
 /** Metres from the rim within which the sea is heard. */
@@ -27,6 +28,8 @@ export const SHORE_HEAR = 26;
 /** Bed levels at full volume: the sea right at the rim, the birds inland. */
 const SHORE = 0.55;
 const BIRDS = 0.3;
+/** Campfire bed level right at the fire. */
+const FIRE = 0.5;
 /** Metres past the rim a critter still counts as on the island (beach, pond edge). */
 const RIM_SLACK = 2;
 /** Gulls wheel this far out over the water and this high. */
@@ -112,14 +115,23 @@ class Bed {
   }
 }
 
-/** The current island's sounds: the sea along its rim, birds inland, and its dogs, cats, ducks, gulls and waves calling now and then. */
+/** A campfire bed's level (0..1) at `d` m from the fire: full beside it, gone at the fire's hearing distance. */
+export function fireLevel(d: number): number {
+  const k = Math.min(1, Math.max(0, 1 - d / CALLERS.fire.hear));
+  return k * k;
+}
+
+/** The current island's sounds: the sea along its rim, birds inland, its campfires crackling, and its dogs, cats, ducks, gulls and waves calling now and then. */
 export class Ambience {
   private callers: Caller[] = [];
+  private fires: Point[] = [];
+  private crackleAt = 0;
   private next: number[] = [];
   private gullAt = 0;
   private waveAt = 0;
   private readonly shore: Bed;
   private readonly birds: Bed;
+  private readonly fire: Bed;
 
   constructor(
     private readonly engine: AudioEngine,
@@ -127,6 +139,7 @@ export class Ambience {
   ) {
     this.shore = new Bed(engine, BEDS.shore, true);
     this.birds = new Bed(engine, BEDS.birds, false);
+    this.fire = new Bed(engine, BEDS.fire, true);
   }
 
   /** Swaps in the callers of a newly entered island (their first calls staggered). */
@@ -137,13 +150,20 @@ export class Ambience {
     this.waveAt = t + this.pause(CALLERS.wave) / 2;
   }
 
+  /** Swaps in the campfires of a newly entered island. */
+  setFires(list: readonly Point[]): void {
+    this.fires = [...list];
+  }
+
   /** Follows the player at (x, z) on `island` at time `t` (s): bed levels and any calls now due. */
   update(island: Circle | null, x: number, z: number, t: number): void {
     if (!island) {
       this.shore.set(0);
       this.birds.set(0);
+      this.fire.set(0);
       return;
     }
+    this.crackle(x, z, t);
     const near = shoreLevel(toRim(island, x, z));
     const rim = rimPoint(island, x, z);
     this.shore.set(SHORE * near, { x: rim.x, y: 0, z: rim.z });
@@ -166,6 +186,21 @@ export class Ambience {
       const p = rimPoint(island, x, z, 1);
       this.engine.playAt('wave', { x: p.x, y: 0, z: p.z }, CALLERS.wave.hear);
     }
+  }
+
+  /** The nearest campfire's loop, panned to it, and a random crackle pop from it now and then. */
+  private crackle(x: number, z: number, t: number): void {
+    let near: Point | null = null;
+    let d = Infinity;
+    for (const f of this.fires) {
+      const e = Math.hypot(f.x - x, f.z - z);
+      if (e < d) [near, d] = [f, e];
+    }
+    const level = near ? fireLevel(d) : 0;
+    this.fire.set(FIRE * level, near ? { x: near.x, y: near.y + 0.4, z: near.z } : undefined);
+    if (!near || level <= 0 || t < this.crackleAt) return;
+    this.crackleAt = t + this.pause(CALLERS.fire);
+    this.engine.playAt('crackle', { x: near.x, y: near.y + 0.3, z: near.z }, CALLERS.fire.hear);
   }
 
   private pause(tune: CallTune): number {

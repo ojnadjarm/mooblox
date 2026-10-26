@@ -1,6 +1,6 @@
 // Muted sound check on the live 5.2 site (never plays out loud: --mute-audio, levels from OfflineAudioContext, decisions from the event log).
 // node tools/sound.mjs [outdir] [--dev]   env MOOBLOX_MOODLE (default http://localhost:8052), MOOBLOX_COURSE (90), MOOBLOX_USER (mooblox_e2e_kid2)
-// --dev: the dev page (FakeGateway demo course) from a local vite server instead of the live site.
+// --dev: the dev page (FakeGateway demo course) from a local vite server instead of the live site; env MOOBLOX_QUERY adds a dev page query (e.g. shape=8x12).
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -36,7 +36,7 @@ try {
   page.on('pageerror', (e) => console.error('pageerror:', e.message));
   let userid = 0;
   if (server) {
-    await page.goto(server.resolvedUrls.local[0]);
+    await page.goto(`${server.resolvedUrls.local[0]}?${process.env.MOOBLOX_QUERY ?? ''}`);
   } else {
     await page.goto(`${site}/login/index.php`);
     await page.fill('#username', username);
@@ -142,6 +142,18 @@ try {
     const heard = await waitFor(t, (e) => e.kind === 'call' && e.id.startsWith(call), 36000);
     check(`a nearby ${pet.kind} calls now and then`, !!heard, `${pet.kind} at ${pet.x},${pet.z}${heard ? `, ${heard.id}` : ''}`);
   } else check('a dog or cat exists in this course', false);
+  const fire = await page.evaluate(() => {
+    const f = window.mooblox.dressing.smoke.find((s) => s.kind === 'campfire');
+    if (!f) return null;
+    window.mooblox.player.teleport(f.x + 2.5, f.z, 0);
+    return { x: Math.round(f.x), z: Math.round(f.z) };
+  });
+  if (fire) {
+    t = await now(page);
+    const pop = await waitFor(t, (e) => e.kind === 'call' && e.id.startsWith('crackle@'), 8000);
+    const bed = (await log(page)).filter((e) => e.kind === 'bed' && e.id === 'bed-fire').pop();
+    check('a campfire crackles beside it (loop + random pops at the fire)', bed?.gain > 0.15 && !!pop, `fire at ${fire.x},${fire.z}: bed ${bed?.gain}, ${pop?.id}`);
+  } else console.log('SKIP no campfire in this course');
   const rim = await page.evaluate(() => {
     const h = window.mooblox.layout.hubs[0];
     window.mooblox.player.teleport(h.x + h.radius - 2.5, h.z, 0);
@@ -212,8 +224,8 @@ try {
 
   numbers.levels = await page.evaluate(async () => {
     const e = window.mooblox.sound.engine;
-    const ids = { step: 'step-grass-0', stone: 'step-stone-0', wood: 'step-wood-0', jump: 'jump-0', land: 'land-0', open: 'open', xp: 'xp', guide: 'guide', complete: 'complete', levelup: 'levelup', music: 'music-catmint', gem: 'gem-0', crystal: 'crystal-0', star: 'star', goal: 'goal', click: 'click-0', page: 'page-0', book: 'book', prompt: 'prompt', equip: 'equip-0', emote: 'emote-0', bump: 'bump-0', bark: 'bark-4', meow: 'meow-1', quack: 'quack-2', gull: 'gull-1', wave: 'wave-1', shore: 'bed-shore', birds: 'bed-birds' };
-    const gains = { step: 0.32, stone: 0.22, wood: 0.26, jump: 0.3, land: 0.3, open: 0.3, xp: 0.3, guide: 0.22, complete: 0.4, levelup: 0.36, music: 0.36, gem: 0.34, crystal: 0.34, star: 0.36, goal: 0.4, click: 0.16, page: 0.22, book: 0.9, prompt: 0.14, equip: 0.3, emote: 0.22, bump: 0.44, bark: 0.32, meow: 0.24, quack: 0.2, gull: 0.18, wave: 0.3, shore: 0.55, birds: 0.3 };
+    const ids = { step: 'step-grass-0', stone: 'step-stone-0', wood: 'step-wood-0', jump: 'jump-0', land: 'land-0', open: 'open', xp: 'xp', guide: 'guide', complete: 'complete', levelup: 'levelup', music: 'music-catmint', gem: 'gem-0', crystal: 'crystal-0', star: 'star', goal: 'goal', click: 'click-0', page: 'page-0', book: 'book', prompt: 'prompt', equip: 'equip-0', emote: 'emote-0', bump: 'bump-0', bark: 'bark-4', meow: 'meow-1', quack: 'quack-2', gull: 'gull-1', wave: 'wave-1', shore: 'bed-shore', birds: 'bed-birds', crackle: 'crackle-2', fire: 'bed-fire' };
+    const gains = { step: 0.32, stone: 0.22, wood: 0.26, jump: 0.3, land: 0.3, open: 0.3, xp: 0.3, guide: 0.22, complete: 0.4, levelup: 0.36, music: 0.36, gem: 0.34, crystal: 0.34, star: 0.36, goal: 0.4, click: 0.16, page: 0.22, book: 0.9, prompt: 0.14, equip: 0.3, emote: 0.22, bump: 0.44, bark: 0.32, meow: 0.24, quack: 0.2, gull: 0.18, wave: 0.3, shore: 0.55, birds: 0.3, crackle: 0.2, fire: 0.5 };
     const master = 0.7 * 0.7;
     const res = {};
     for (const [k, stem] of Object.entries(ids)) {

@@ -6,6 +6,8 @@ import type { Look } from './look';
 
 const MAX_ISLANDS = 48;
 const SHORE_PAD = 1.6;
+/** Brightest a water pixel gets: under the high tier's bloom threshold (1.4, post.ts), so a glint never blooms into a cloud. */
+export const WATER_MAX = 1.3;
 
 /** Stylised water: turquoise-to-cerulean shore gradient (three stops), foam band, ripples, drifting cloud shadows, sky fresnel, sun glint, paling with distance. */
 export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMaterial {
@@ -96,13 +98,17 @@ export function waterMaterial(look: Look, islands: readonly Circle[]): ShaderMat
         float fres = pow(1.0 - max(view.y, 0.0), 4.0);
         col = mix(col, uSky, fres * 0.35);
         vec3 h = normalize(view + uSun);
-        float glint = pow(max(h.y + (n - 0.5) * 0.04, 0.0), 900.0) * 1.1;
-        // Sparkles: a few cells twinkle, most of them on the sun's side of the water.
-        vec2 q = p * 1.4;
-        float r = hash(floor(q));
-        float twinkle = step(0.97, r) * pow(max(sin(uTime * 2.6 + r * 60.0), 0.0), 6.0);
-        float spark = twinkle * smoothstep(0.32, 0.05, length(fract(q) - 0.5)) * (0.25 + pow(max(h.y, 0.0), 30.0)) * smoothstep(2.0, 6.0, shore);
-        col += uGlint * (glint + spark * 1.3) * (1.0 - shade);
+        // Sun glint: small sharp sparkles drifting with the wind, dense where the sun reflects, a few elsewhere; never a soft blob.
+        float lobe = pow(clamp(h.y, 0.0, 1.0), 160.0);
+        vec2 q = p * 2.2 + vec2(uTime * 0.35, uTime * 0.12) + (n - 0.5) * 0.6;
+        vec2 cell = floor(q);
+        float r = hash(cell);
+        float on = step(mix(0.97, 0.55, lobe), r);
+        float twinkle = on * pow(max(sin(uTime * 3.1 + r * 60.0), 0.0), 4.0);
+        float dot2 = smoothstep(0.16, 0.03, length(fract(q) - 0.5 + (vec2(hash(cell + 7.1), hash(cell + 3.3)) - 0.5) * 0.5));
+        float spark = twinkle * dot2 * (0.35 + lobe * 1.4) * smoothstep(2.0, 6.0, shore);
+        col += uGlint * (lobe * 0.18 + spark) * (1.0 - shade);
+        col = min(col, vec3(${WATER_MAX.toFixed(2)}));
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

@@ -225,6 +225,7 @@ export function startSound(view: WorldView, player: Player, deps: SoundDeps): So
       if (view.island !== islandAt) {
         islandAt = view.island;
         ambience.setCallers(callers(view, island), t);
+        ambience.setFires(island && view.quality.tier !== 'low' ? onIsland(view.dressing.smoke.filter((s) => s.kind === 'campfire'), island) : []);
       }
       ambience.update(island, at.x, at.z, t);
       const found = deps.collectibles?.() ?? null;

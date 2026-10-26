@@ -20,5 +20,7 @@ Third-party code and assets used by MOOBLOX. Every asset file gets a row in `cli
 | Water waves | transitking (OpenGameArt) | CC0 | Breaking waves (`audio/wave-*`), https://opengameart.org/content/water-waves |
 | Sea and river wave sounds | RandomMind (OpenGameArt) | CC0 | Shore bed loop (`audio/bed-shore`), https://opengameart.org/content/sea-and-river-wave-sounds |
 | Ambient bird sounds | isaiah658 (OpenGameArt) | CC0 | Birdsong bed loop (`audio/bed-birds`), https://opengameart.org/content/ambient-bird-sounds |
+| Fireplace Sound loop | PagDev (OpenGameArt) | CC0 | Campfire bed loop (`audio/bed-fire`), https://opengameart.org/content/fireplace-sound-loop |
+| Fire Crackling | AntumDeluge (OpenGameArt) | CC0 | Campfire crackle pops (`audio/crackle-*`), https://opengameart.org/content/fire-crackling |
 | Duck quacks | MOOBLOX contributors | CC0 | Synthesised by `client/tools/intake-audio.mjs` (`audio/quack-*`) |
 | Fountain water | MOOBLOX contributors | CC0 | Synthesised at run time (filtered noise, `client/src/audio/water.ts`), no file |

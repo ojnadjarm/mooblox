@@ -3,7 +3,7 @@
 export type Surface = 'grass' | 'stone' | 'wood';
 
 /** Calls of the world's animals and the sea, played at a point (`AudioEngine.playAt`). */
-export type CallId = 'bark' | 'meow' | 'quack' | 'gull' | 'wave';
+export type CallId = 'bark' | 'meow' | 'quack' | 'gull' | 'wave' | 'crackle';
 
 export type SfxId =
   | `step-${Surface}`
@@ -69,10 +69,11 @@ export const SFX: Readonly<Record<SfxId, SfxSpec>> = {
   quack: { files: variants('quack', 3), gain: 0.2, vary: 0.12, gap: 0.3 },
   gull: { files: variants('gull', 2), gain: 0.18, vary: 0.1, gap: 2 },
   wave: { files: variants('wave', 2), gain: 0.3, vary: 0.08, gap: 2 },
+  crackle: { files: variants('crackle', 4), gain: 0.2, vary: 0.15, gap: 0.3 },
 };
 
-/** Looped ambient beds (-20 LUFS): the sea along the shore and birds in the trees. */
-export const BEDS = { shore: 'bed-shore', birds: 'bed-birds' } as const;
+/** Looped ambient beds (-20 LUFS): the sea along the shore, birds in the trees and a burning campfire. */
+export const BEDS = { shore: 'bed-shore', birds: 'bed-birds', fire: 'bed-fire' } as const;
 
 /** Calm loops, normalised to -20 LUFS: the plazas get the lullaby, districts take turns with the other two. */
 export const MUSIC = { hub: 'music-hub', districts: ['music-bluebonnet', 'music-catmint'] } as const;
