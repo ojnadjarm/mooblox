@@ -18,6 +18,7 @@ import { fadeBlob, lawnColour, softBlob } from './lawn-colour';
 import { seededRandom } from './random';
 import { recipe, WAYSIDE, type Recipe, type RecipeKind } from './recipes';
 import { centrepieces } from './centrepieces';
+import { lookoutParts, lookoutReach, lookouts, type Lookout } from './lookouts';
 import { pathPoints, SIGHT_IDS, wayStops } from './path-stops';
 import { boxSamples, inBox, makeStair, STAIR, stairBoxes, stairFlight, stairPier, type Stair, type StairBox, type StairColours } from './stair';
 import type { SmokeSource } from './smoke';
@@ -101,6 +102,10 @@ export function attached(a: string, b: string): boolean {
 const PATCH_SHADE = 0.86;
 /** Height step (m) between overlapping walk layers: ring strips, their joint discs, the entry walk, its end disc. */
 const WALK_STEP = 0.005;
+/** Shelf spots nearest a stair head tried per destination kind. */
+const LOOKOUT_TRIES = 80;
+/** Half width (m) of the walk a shelf destination leaves from the stair head to the shelf's landmark. */
+const LOOKOUT_WALK = 1.3;
 /** Clearance kept between a shelf and bridge lines, path centre lines and plot rims. */
 const SHELF_CLEAR = { bridge: 2.2, path: 1.7, plot: 0.8 } as const;
 
@@ -221,6 +226,8 @@ export interface Dressing {
   readonly stairs: readonly Stair[];
   /** Every raised lawn: centre, radius and top height. */
   readonly lawns: readonly { readonly x: number; readonly z: number; readonly r: number; readonly h: number }[];
+  /** The destination at the head of every shelf stair (`kind` null: none fitted), its spot and the stair's foot. */
+  readonly lookouts: readonly { readonly kind: Lookout['kind'] | null; readonly x: number; readonly z: number; readonly y: number; readonly stair: { readonly x: number; readonly z: number } }[];
   /** Every kerb laid along a walk (ground plan). */
   readonly kerbs: readonly KerbPiece[];
   /** The hub landmark the spawn camera frames, or null. */
@@ -326,6 +333,7 @@ export function modelIds(): string[] {
       'nature/sign',
       'nature/lily_large',
       'nature/lily_small',
+      'nature/statue_obelisk',
     ]),
   ];
 }
@@ -378,6 +386,7 @@ class Designer {
   private readonly shelves = new Set<Circle>();
   private readonly stairs: Stair[] = [];
   private readonly lawns: { x: number; z: number; r: number; h: number }[] = [];
+  private readonly lookouts: { kind: Lookout['kind'] | null; x: number; z: number; y: number; stair: { x: number; z: number } }[] = [];
   /** Raised levels (shelves, terraces, raised lawns): their top height and whether a footprint circle lies wholly on them. */
   private readonly levels: { y: number; holds: (x: number, z: number, r: number) => boolean }[] = [];
   /** Upright props placed on the current island (reach circle, height span) and the stamp group that laid them out together (0: none). */
@@ -458,7 +467,7 @@ class Designer {
     const sails = this.sea(districts);
     return {
       districts, life: this.life, paths: this.paths, obstacles: this.obstacles, bridges: this.bridges, spans: this.bridgeParts,
-      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks, stairs: this.stairs, lawns: this.lawns, kerbs: this.kerbPieces,
+      critters: this.critters, hangouts: this.hangouts, smoke: this.smoke, sails, focus: this.focus, landmarks: this.landmarks, stairs: this.stairs, lawns: this.lawns, lookouts: this.lookouts, kerbs: this.kerbPieces,
       start: this.start ?? { x: this.layout.spawn.x, z: this.layout.spawn.z, face: 0 },
       occupancy: this.occ,
       hall: this.hall,
@@ -880,6 +889,9 @@ class Designer {
       this.district.glow.push(paintPlace(new CylinderGeometry(0.17, 0.17, 0.27, 8), 0xffd890, x, h + 2.6 * 0.875, z, 0));
     }
     const taken = [keep, { ...head, r: 2.2 }];
+    const spot = this.lookout(c, s, h, ux, uz, head, keep);
+    this.lookouts.push({ kind: spot?.kind ?? null, x: c.x + (spot?.x ?? head.x), z: c.z + (spot?.z ?? head.z), y: h, stair: { x: st.x, z: st.z } });
+    if (spot) taken.push(spot);
     for (const kind of ['treeClump', 'gardenBed', 'readingNook'] as const) {
       const rec = recipe(kind, this.random);
       const spots = shelfSamples(s, 1, rec.radius + 0.4);
@@ -891,6 +903,50 @@ class Designer {
         break;
       }
     }
+  }
+
+  /**
+   * A seeded destination (`lookouts.ts`) on shelf `s` (island-local) as near straight ahead of the stair `head` (`ux`/`uz` = up the
+   * stair) as it lands (held by the shelf, clear of `keep`, the walk from the head to a landmark in `keep`, other props and the
+   * landing), facing the sea: the first kind that fits; null when none does.
+   */
+  private lookout(c: Circle, s: Shelf, h: number, ux: number, uz: number, head: { x: number; z: number }, keep: { x: number; z: number; r: number }): { kind: Lookout['kind']; x: number; z: number; r: number } | null {
+    for (const l of lookouts(this.random)) {
+      const r = lookoutReach(l);
+      const aim = { x: head.x + ux * (r + 0.9), z: head.z + uz * (r + 0.9) };
+      const walk = { ax: head.x, az: head.z, bx: keep.x, bz: keep.z };
+      const spots = shelfSamples(s, 0.4, r + 0.2)
+        .filter((p) => Math.hypot(p.x - keep.x, p.z - keep.z) >= keep.r + r && (keep.r === 0 || segmentDistance(p.x, p.z, walk) >= r + LOOKOUT_WALK))
+        .sort((a, b) => Math.hypot(a.x - aim.x, a.z - aim.z) - Math.hypot(b.x - aim.x, b.z - aim.z));
+      for (const p of spots.slice(0, LOOKOUT_TRIES)) {
+        if (this.placeLookout(l, c.x + p.x, h, c.z + p.z, Math.atan2(p.x, p.z))) return { kind: l.kind, ...p, r };
+      }
+    }
+    return null;
+  }
+
+  /** Lays destination `l` at (x, y, z) facing `face` when all of it lands; false (nothing laid) when a part would not. */
+  private placeLookout(l: Lookout, x: number, y: number, z: number, face: number): boolean {
+    if ('recipe' in l) {
+      const cs = Math.cos(face);
+      const sn = Math.sin(face);
+      for (const it of l.recipe.items) {
+        if (it.sway) continue;
+        const ix = x + it.dx * cs + it.dz * sn;
+        const iz = z - it.dx * sn + it.dz * cs;
+        if (!this.supported(it.id, ix, y, iz, it.height, it) || this.clashes(it.id, ix, y, iz, it.height, it) || (it.solid && this.blocksLanding(it.id, ix, y, iz, it.height, it))) return false;
+      }
+      this.stamp(l.recipe, x, y, z, face, false);
+      return true;
+    }
+    const top = y + l.top;
+    if (!this.levels.some((v) => Math.abs(v.y - y) < 0.05 && v.holds(x, z, l.reach)) || this.inKeep(x, y, z, l.reach)) return false;
+    if (this.props.some((b) => b.y0 < top && y < b.y1 && Math.hypot(b.x - x, b.z - z) < l.reach + b.r)) return false;
+    const m = new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), face), new Vector3(1, 1, 1));
+    for (const g of lookoutParts(l, this.p, this.theme.accent)) this.district.terrain.push({ geometry: g.applyMatrix4(m), solid: true, detail: l.kind === 'telescope' });
+    this.props.push({ id: `built:${l.kind}`, x, z, r: l.reach, y0: y, y1: top, group: 0 });
+    this.reserve(x, z, l.reach);
+    return true;
   }
 
   /**
@@ -1436,7 +1492,11 @@ class Designer {
   private blocksLanding(id: string, x: number, y: number, z: number, height: number, o: ModelOptions): boolean {
     if (!this.stairKeep.length) return false;
     const f = FOOT[id]!;
-    const r = o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h);
+    return this.inKeep(x, y, z, o.wall ?? (o.width ? (f.r * o.width) / f.w : (f.r * height) / f.h));
+  }
+
+  /** Whether a footprint of radius r at height y reaches into a stair's flight or landing (grown by the kid's radius). */
+  private inKeep(x: number, y: number, z: number, r: number): boolean {
     return this.keepIndex.hits(x, z, r + KID_RADIUS) && this.stairKeep.some((b) => y < b.y + 0.6 && inBox(b, x, z, r + KID_RADIUS));
   }
 

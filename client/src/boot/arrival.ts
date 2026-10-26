@@ -1,14 +1,11 @@
-import { Color, Mesh } from 'three';
-import type { AudioEngine } from '../audio/engine';
-import { bakeStillFluid, openingGeometry, paintOpening, portalFluidMaterial } from '../hub/portal-fluid';
-import { EMERGE, emerge } from '../hub/warp';
+import { arrive, ARRIVE } from '../hub/warp';
 import { WarpBeam } from '../hub/warp-beam';
 import type { WhiteOut } from '../ui/white-out';
+import type { HallSite } from '../world/dressing';
 import type { PlayerRig, WorldView } from './app';
-import { RETURN_COLOURS } from './return-portal';
 
-/** How far behind the kid the arrival portal opens (m). */
-const BEHIND = 1.4;
+/** Where the kid lands beside the return portal, in its frame (front +z): in front of the right column, clear of the fluid. */
+const BESIDE = { x: 1.1, z: 2.3 } as const;
 
 /** The running arrival. */
 export interface ArrivalRuntime {
@@ -16,52 +13,44 @@ export interface ArrivalRuntime {
   readonly t: number;
 }
 
+/** The arrival spot beside a return portal site, facing out sideways (away from the portal, which the camera keeps in view); the world start when there is no portal. */
+export function arrivalSpot(site: HallSite | null, start: { x: number; z: number; face: number }): { x: number; z: number; face: number } {
+  if (!site) return start;
+  const c = Math.cos(site.face);
+  const s = Math.sin(site.face);
+  return { x: site.x + BESIDE.x * c + BESIDE.z * s, z: site.z - BESIDE.x * s + BESIDE.z * c, face: site.face + Math.PI / 2 };
+}
+
 /**
- * The arrival after a hub warp: a portal of the same fluid opens behind the kid at the start, the kid steps out of it growing back
- * to size while the white-out clears and the beam drops (the hub's warp in), then the portal closes and the controls come back.
+ * The arrival after a hub warp, the hub's warp out played backwards: the kid appears beside the course's return portal, drops
+ * spinning out of the beam and grows back while the white-out clears, with the warp whoosh; then the controls come back.
  */
-export function startArrival(view: WorldView, player: PlayerRig, whiteOut: WhiteOut, engine: AudioEngine | null): ArrivalRuntime {
-  const start = view.dressing.start;
-  const fx = Math.sin(start.face);
-  const fz = Math.cos(start.face);
-  const px = start.x - fx * BEHIND;
-  const pz = start.z - fz * BEHIND;
-  const geometry = openingGeometry();
-  paintOpening(geometry, 0, geometry.getAttribute('position').count, new Color(RETURN_COLOURS.fluid), true);
-  const still = view.quality.tier === 'low';
-  if (still) bakeStillFluid(geometry, new Color(RETURN_COLOURS.fluid));
-  const material = still ? view.kit.glow : portalFluidMaterial(view.kit.time);
-  const door = new Mesh(geometry, material);
-  door.name = 'arrival-portal';
-  door.renderOrder = 2;
-  door.position.set(px, -0.3, pz);
-  door.rotation.y = start.face;
-  view.stage.add(door);
+export function startArrival(view: WorldView, player: PlayerRig, whiteOut: WhiteOut, whoosh: () => void): ArrivalRuntime {
+  const spot = arrivalSpot(view.dressing.portal, view.dressing.start);
+  player.teleport(spot.x, spot.z, spot.face);
   const beam = new WarpBeam();
   view.stage.add(beam.mesh);
   player.freeze.frozen = true;
-  engine?.play('warp');
+  whoosh();
   let t = 0;
+  let spin = 0;
   const stop = view.onFrame((dt) => {
     t += dt;
-    const pose = emerge(t);
+    const pose = arrive(t);
     const root = player.avatar.root;
-    const back = (1 - pose.out) * BEHIND;
-    root.position.x -= fx * back;
-    root.position.z -= fz * back;
+    const b = player.body.position;
+    root.position.y += pose.lift;
+    spin += dt * pose.spin;
+    root.rotation.y += spin;
     root.scale.setScalar(pose.shrink);
-    door.scale.set(pose.portal, pose.portal, 1);
-    door.visible = pose.portal > 0.01;
-    beam.set(root.position.x, root.position.y, root.position.z, pose.beam, pose.width);
+    beam.set(b.x, b.y, b.z, pose.beam, pose.width);
     whiteOut.set(pose.flash);
-    if (t < EMERGE) return;
+    if (t < ARRIVE) return;
     t = -1;
     stop();
     whiteOut.set(0);
+    root.scale.setScalar(1);
     player.freeze.frozen = false;
-    door.removeFromParent();
-    geometry.dispose();
-    if (!still) material.dispose();
     beam.mesh.removeFromParent();
     beam.dispose();
   });

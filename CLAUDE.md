@@ -668,3 +668,10 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `centrepiece()` sets it back from the stair so the landing keeps KID_RADIUS clear, first variant whose anchor lands; `blocksLanding`
     shared with `model()`; `stamp` claims ground occupancy only below `LEVEL_MIN` (low lawns lost their solids). `Dressing.lawns`.
     `centrepieces.test.ts`: every lawn dressed on demo, 3,0,5, 8x12, >= 4 kinds on 8x12; placement validator 0/0. Stills `tools/r4-shots.mjs`.
+  - Round 5, version 2026102618: every shelf stair leads to a destination (`world/lookouts.ts`: kit bench pair or picnic spot, built
+    telescope or gazebo; seeded order, first that lands nearest straight ahead of the stair head, facing the sea, off the walk to a
+    shelf landmark; built ones are solid terrain + a `props` span). `Dressing.lookouts` (kind null = none fitted). `modelIds()` gains
+    `nature/statue_obelisk` (round 4 centrepieces threw "not loaded"; `lookouts.test.ts` checks every placed id is loaded).
+    Course arrival after a warp (`boot/arrival.ts`): `arrivalSpot` beside the return portal (local 1.1, 2.3, facing out sideways),
+    `hub/warp.ts` `arrive` = warp-out backwards (beam, spin, shrink, white-out), `SoundRuntime.arrive` plays `warp` at once
+    (`engine.unlock()`; music still starts on the first gesture, `Music.resume` retries a loop blocked before one). Stills `tools/r5-shots.mjs`.

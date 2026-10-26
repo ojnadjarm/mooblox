@@ -103,7 +103,7 @@ async function play(root: HTMLElement, config: PlayConfig, assets: string, prelo
   const guide = await startGuide(view, player, avatars, new ScriptedTutor({ ...DEFAULT_TUTOR_STRINGS, ...strings }), course, { ...DEFAULT_GUIDE_STRINGS, ...strings });
   const sound = startSound(view, player, { assets, stored: config.sound, gateway, strings, store, rewards: rewards.store, bubble: guide.bubble, collectibles: () => rewards.collectibles, goal: () => rewards.goal, badges: rewards.badges });
   const portal = config.huburl ? startReturnPortal(view, player, { huburl: config.huburl, navigate: (url) => window.open(url, '_top'), whiteOut, engine: () => sound.engine }) : null;
-  const arrival = config.arrival ? startArrival(view, player, whiteOut, sound.engine) : null;
+  const arrival = config.arrival ? startArrival(view, player, whiteOut, sound.arrive) : null;
   Object.assign(window, { mooblox: liveHandle(view, { view, player, interaction, store, guide, picker, rewards, sound, portal, arrival }) });
 }
 

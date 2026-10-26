@@ -47,6 +47,12 @@ export class Music {
     if (!this.paused) element.play().catch((e: unknown) => console.warn('mooblox: music blocked', e));
   }
 
+  /** Plays the current loop again inside a gesture: the browser blocks it when it started before one (a portal arrival). */
+  resume(): void {
+    const el = this.deck?.element;
+    if (el && el.paused && !this.paused) el.play().catch((e: unknown) => console.warn('mooblox: music blocked', e));
+  }
+
   /** Stops streaming while nothing can be heard; picks up again after. */
   setPaused(paused: boolean): void {
     if (paused === this.paused) return;

@@ -40,6 +40,8 @@ export interface SoundRuntime {
   readonly engine: AudioEngine;
   readonly music: Music;
   readonly settings: SoundSettings;
+  /** The portal arrival's whoosh: opens the sound at once (heard where the browser lets the hub's gesture carry over); music waits for a gesture. */
+  readonly arrive: () => void;
 }
 
 /** Radii (m) of the paved spawn plaza and of the further plazas, a little past their trim. */
@@ -112,10 +114,12 @@ export function startSound(view: WorldView, player: Player, deps: SoundDeps): So
   const track = () => musicFor(view.island, view.layout.hubs.length);
 
   const unlock = (): void => {
-    if (!engine.unlock()) return;
+    engine.unlock();
+    if (!engine.context) return;
     for (const type of ['pointerdown', 'keydown', 'touchend'] as const) window.removeEventListener(type, unlock, true);
     music.setPaused(!engine.audible);
     music.play(track());
+    music.resume();
   };
   for (const type of ['pointerdown', 'keydown', 'touchend'] as const) window.addEventListener(type, unlock, true);
   document.addEventListener('visibilitychange', () => remix({ hidden: document.hidden }));
@@ -249,6 +253,10 @@ export function startSound(view: WorldView, player: Player, deps: SoundDeps): So
   return {
     engine,
     music,
+    arrive: () => {
+      engine.unlock();
+      void engine.load('warp').then(() => engine.play('warp'));
+    },
     get settings() {
       return settings;
     },

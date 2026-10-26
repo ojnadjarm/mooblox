@@ -96,7 +96,7 @@ async function boot(): Promise<void> {
     const portal = startReturnPortal(view, player, { huburl: 'hub.html', navigate: () => undefined, whiteOut, engine: () => sound.engine });
     const warped = params.has('warp');
     if (warped) history.replaceState(history.state, '', location.href.replace(/[?&]warp=1/, '').replace(/\.html&/, '.html?'));
-    const arrival = warped ? startArrival(view, player, whiteOut, sound.engine) : null;
+    const arrival = warped ? startArrival(view, player, whiteOut, sound.arrive) : null;
     Object.assign(window, { mooblox: liveHandle(view, { probe, player, interaction, store, gateway, guide, picker, sound, portal, arrival }) });
     if (tour) {
       const grid = new WalkGrid(view.layout, view.dressing);

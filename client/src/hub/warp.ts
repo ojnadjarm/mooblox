@@ -65,12 +65,8 @@ export function warpIn(t: number): WarpPose {
 /** A course url with the flag that tells play.php the kid arrives through a portal. */
 export const withWarpFlag = (url: string): string => `${url}${url.includes('?') ? '&' : '?'}warp=1`;
 
-/** Seconds of the arrival out of a portal in a course world. */
-export const EMERGE = 1.2;
+/** Seconds of the arrival in a course world: as long as the warp out. */
+export const ARRIVE = WARP_OUT;
 
-/** The arrival in a course at `t` seconds: the white-out clears and the beam drops (as the hub's warp in) while the kid steps out of the portal, growing back. */
-export function emerge(t: number): WarpPose & { readonly out: number; readonly portal: number } {
-  const k = clamp(t / EMERGE);
-  const pose = warpIn(t * (WARP_IN / EMERGE));
-  return { ...pose, shrink: 0.15 + 0.85 * ease(clamp(k * 1.4)), out: ease(clamp(k * 1.25)), portal: 1 - ease(clamp((k - 0.6) / 0.4)) };
-}
+/** The arrival in a course at `t` seconds: the warp out played backwards (the kid drops spinning out of the beam, growing back, as the white-out clears). */
+export const arrive = (t: number): WarpPose => warpOut(Math.max(0, ARRIVE - t));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Dwell, WARP_IN, WARP_OUT, warpIn, warpOut } from '../../src/hub/warp';
+import { arrive, ARRIVE, Dwell, WARP_IN, WARP_OUT, warpIn, warpOut } from '../../src/hub/warp';
 
 const run = (d: Dwell, inside: boolean, seconds: number, grounded = true) => {
   let fired = 0;
@@ -44,5 +44,17 @@ describe('warp poses', () => {
     expect(warpIn(0).flash).toBe(1);
     expect(warpIn(WARP_IN).flash).toBe(0);
     expect(warpIn(WARP_IN).beam).toBe(0);
+  });
+
+  it('arrives as the warp out backwards: white, small, high and spinning first, then landed at full size', () => {
+    const first = arrive(0);
+    expect(first.flash).toBeCloseTo(1);
+    expect(first.lift).toBeGreaterThan(2);
+    expect(first.shrink).toBeLessThan(0.2);
+    expect(first.spin).toBeGreaterThan(20);
+    const last = arrive(ARRIVE);
+    expect(last).toEqual(warpOut(0));
+    expect(last.lift).toBe(0);
+    expect(last.shrink).toBe(1);
   });
 });
