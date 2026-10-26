@@ -37,6 +37,7 @@ import { CAMPUS } from './look';
 import type { ModelLibrary } from './model-library';
 import { hop, routeAt, strollRoute, walkerRoute, type Route, type RoutePose, type Sight } from './npc-schedule';
 import { seededRandom } from './random';
+import { sailPose, type SailPose } from './sail-path';
 import { Campfires } from './campfire';
 import { GpuWarmup } from './gpu-warmup';
 import { QUALITY } from '../perf/quality';
@@ -228,6 +229,7 @@ const SHIP_REACH = 6;
 function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teardown: (() => void)[]): Mover {
   const geometry = singleModel(lib, 'pirate/ship-small', 7);
   const mesh = new InstancedMesh(geometry, view.kit.sceneryInstanced, sails.length);
+  mesh.name = 'ships';
   mesh.castShadow = false;
   mesh.frustumCulled = false;
   view.stage.add(mesh);
@@ -237,19 +239,16 @@ function ships(view: WorldView, lib: ModelLibrary, sails: readonly Sail[], teard
     geometry.dispose();
   });
   const m = new Object3D();
+  const pose: SailPose = { x: 0, z: 0, yaw: 0 };
   return (t) => {
     let n = 0;
     viewFrustum(view.stage.camera);
     for (let i = 0; i < sails.length; i++) {
-      const s = sails[i]!;
-      const dir = i % 2 ? -1 : 1;
-      const a = dir * t * (5 / s.r) + i * 2.1;
-      const x = s.x + Math.cos(a) * s.r;
-      const z = s.z + Math.sin(a) * s.r;
+      const { x, z, yaw } = sailPose(sails[i]!, i, t, pose);
       // Drawn only past the haze's edge and in view (packed at the front).
       if (!view.sees(x, z) || !inView(x, 0, z, SHIP_REACH)) continue;
       m.position.set(x, -3.4 + Math.sin(t * 0.8 + i) * 0.1, z);
-      m.rotation.set(0, -a + (dir > 0 ? Math.PI : 0), Math.sin(t * 0.7 + i) * 0.05);
+      m.rotation.set(0, yaw, Math.sin(t * 0.7 + i) * 0.05);
       m.updateMatrix();
       mesh.setMatrixAt(n++, m.matrix);
     }

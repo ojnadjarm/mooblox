@@ -1,6 +1,7 @@
 import type { LevelUp } from '../rewards/level-up';
 import { itemName } from '../rewards/item-names';
 import { playChime } from './chime';
+import { confetti } from './confetti';
 import { fill } from './hud-model';
 import { injectStyle, UI_FONT } from './style';
 
@@ -21,7 +22,6 @@ export const DEFAULT_LEVELUP_STRINGS: LevelUpStrings = {
 
 const CONFETTI_MS = 2500;
 const SHOW_MS = 6000;
-const COLOURS = ['#2fa39a', '#f07a5f', '#f6c445', '#5db761', '#2f7fe0', '#8e5ad8', '#ffffff'];
 
 const CSS = `
 .mooblox-levelup { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; padding: 16px; box-sizing: border-box;
@@ -61,7 +61,7 @@ export interface LevelUpOptions {
 export class LevelUpMoment {
   private element: HTMLElement | null = null;
   private timers: number[] = [];
-  private frame = 0;
+  private stopConfetti: (() => void) | null = null;
   private readonly strings: LevelUpStrings & Readonly<Record<string, string>>;
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.key !== 'Tab') this.close();
@@ -116,7 +116,7 @@ export class LevelUpMoment {
     this.host.appendChild(el);
     this.element = el;
     window.addEventListener('keydown', this.onKey, true);
-    if (!calm) this.confetti(el);
+    if (!calm) this.stopConfetti = confetti(el, CONFETTI_MS);
     if (this.options.chime ?? true) playChime();
     this.timers.push(window.setTimeout(() => this.close(), SHOW_MS));
   }
@@ -128,65 +128,10 @@ export class LevelUpMoment {
     }
     this.element.remove();
     this.element = null;
-    cancelAnimationFrame(this.frame);
+    this.stopConfetti?.();
+    this.stopConfetti = null;
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
     window.removeEventListener('keydown', this.onKey, true);
-  }
-
-  /** Flat faceted confetti (squares and triangles in the palette) falling for 2.5 s on a 2D canvas. */
-  private confetti(el: HTMLElement): void {
-    const canvas = document.createElement('canvas');
-    el.prepend(canvas);
-    const w = (canvas.width = el.clientWidth);
-    const h = (canvas.height = el.clientHeight);
-    const g = canvas.getContext('2d');
-    if (!g) return;
-    const count = Math.round(Math.min(160, Math.max(60, (w * h) / 9000)));
-    const bits = Array.from({ length: count }, (_, i) => ({
-      x: w / 2 + (Math.random() - 0.5) * w * 0.3,
-      y: h * 0.42,
-      vx: (Math.random() - 0.5) * w * 1.1,
-      vy: -h * (0.5 + Math.random() * 0.7),
-      r: Math.random() * Math.PI,
-      vr: (Math.random() - 0.5) * 12,
-      size: 7 + Math.random() * 7,
-      tri: i % 3 === 0,
-      colour: COLOURS[i % COLOURS.length]!,
-    }));
-    const start = performance.now();
-    let last = start;
-    const step = (now: number): void => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const t = now - start;
-      g.clearRect(0, 0, w, h);
-      g.globalAlpha = t > CONFETTI_MS - 500 ? Math.max(0, (CONFETTI_MS - t) / 500) : 1;
-      for (const b of bits) {
-        b.vy += h * 1.3 * dt;
-        b.vx *= 0.985;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        b.r += b.vr * dt;
-        g.save();
-        g.translate(b.x, b.y);
-        g.rotate(b.r);
-        g.scale(1, Math.cos(b.r * 1.7));
-        g.fillStyle = b.colour;
-        g.beginPath();
-        if (b.tri) {
-          g.moveTo(0, -b.size * 0.6);
-          g.lineTo(b.size * 0.55, b.size * 0.45);
-          g.lineTo(-b.size * 0.55, b.size * 0.45);
-        } else {
-          g.rect(-b.size / 2, -b.size / 3, b.size, (b.size * 2) / 3);
-        }
-        g.fill();
-        g.restore();
-      }
-      if (t < CONFETTI_MS) this.frame = requestAnimationFrame(step);
-      else canvas.remove();
-    };
-    this.frame = requestAnimationFrame(step);
   }
 }

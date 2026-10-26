@@ -3,7 +3,8 @@ import type { Rewards } from '../domain/rewards';
 import { BvhCollider } from '../player/collider';
 import type { RewardsStore } from '../rewards/rewards-store';
 import { ATLAS_WHITE, TrophyAtlas, atlasCell, type AtlasEntry } from '../world/trophy-atlas';
-import { hallCapacity, hallGeometry, metalOf, type Metal } from '../world/trophy-hall';
+import { hallCapacity, hallGeometry, metalOf, type HallItem } from '../world/trophy-hall';
+import { withShine } from '../world/trophy-shine';
 import type { WorldView } from './app';
 
 /** The running trophy hall. */
@@ -25,10 +26,10 @@ export function hallEntries(trophies: Rewards['trophies'], capacity: number): At
   return entries;
 }
 
-/** Builds the trophy hall on the hub's reserved site from the user's badges and keeps it in step; one draw, one atlas. */
+/** Builds the trophy hall on the hub's reserved site from the user's badges and keeps it in step; one draw, one atlas, polished metal. */
 export function startTrophyHall(view: WorldView, store: RewardsStore): TrophyHallRuntime {
   const atlas = new TrophyAtlas(() => view.gate.invalidate());
-  const material: Material = view.kit.paintedPlastic(atlas.texture);
+  const material: Material = withShine(view.kit.paintedPlastic(atlas.texture), view.kit.time);
   material.customProgramCacheKey = () => 'mooblox-trophy-hall';
   let mesh: Mesh | null = null;
   let unhook: (() => void) | null = null;
@@ -56,9 +57,9 @@ export function startTrophyHall(view: WorldView, store: RewardsStore): TrophyHal
     if (!site || !rewards) return;
     const entries = hallEntries(rewards.trophies, hallCapacity(site.r));
     const ids = [...rewards.trophies].sort((a, b) => a.timeIssued - b.timeIssued || a.badgeId - b.badgeId).map((t) => t.badgeId);
-    const metals: Metal[] = entries.map((e, i) => (e.kind === 'badge' ? metalOf(ids[i]!) : e.kind === 'more' ? 'gold' : 'silver'));
+    const items: HallItem[] = entries.map((e, i) => (e.kind === 'badge' ? { metal: metalOf(ids[i]!), trophy: true } : { metal: e.kind === 'more' ? 'gold' : 'silver', trophy: false }));
     atlas.paint(entries);
-    const { geometry } = hallGeometry(site, metals, entries.map((_, i) => atlasCell(i)), ATLAS_WHITE);
+    const { geometry } = hallGeometry(site, items, entries.map((_, i) => atlasCell(i)), ATLAS_WHITE);
     mesh = new Mesh(geometry, material);
     mesh.name = 'trophy-hall';
     // xhigh already draws it twice (the GTAO normal pass): a shadow too would break the draw budget.

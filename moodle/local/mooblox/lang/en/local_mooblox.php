@@ -25,6 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['avatar'] = 'My avatar';
+$string['badge_earned'] = 'You earned {$a}!';
 $string['book_earned'] = 'Earned {$a}';
 $string['book_found'] = '{$a->found} of {$a->total} found';
 $string['book_hidden'] = 'Still hidden';

@@ -1,5 +1,5 @@
-// Headless checks of the rewards UI on rewards.html: node tools/rewards.mjs <hud|levelup|wardrobe|pet|collect> [outdir]
-import { mkdirSync } from 'node:fs';
+// Headless checks of the rewards UI on rewards.html: node tools/rewards.mjs <hud|levelup|wardrobe|pet|collect|book|hall|goal|earn> [outdir]
+import { mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { loadChromium } from './playwright.mjs';
@@ -131,19 +131,19 @@ const frameSpot = (page, key, dist) => page.evaluate(([k, dd]) => {
 }, [key, dist]);
 
 /** Frames the trophy hall from its open side; the player stands beside the camera. */
-const frameHall = (page) => page.evaluate(() => {
+const frameHall = (page, back = 4.2, height = 3, aim = 0) => page.evaluate(([back, height, aim]) => {
   const v = window.mooblox;
   const s = v.dressing.hall;
   const [dx, dz] = [Math.sin(s.face), Math.cos(s.face)];
-  const [cx, cz] = [s.x + dx * (s.r + 4.2), s.z + dz * (s.r + 4.2)];
+  const [cx, cz] = [s.x + dx * (s.r + back), s.z + dz * (s.r + back)];
   v.player.teleport(s.x + dx * (s.r + 1.4) + dz * 2.6, s.z + dz * (s.r + 1.4) - dx * 2.6, s.face + Math.PI);
   window.__still?.();
   window.__still = v.onFrame(() => {
-    v.stage.camera.position.set(cx, 3, cz);
-    v.stage.camera.lookAt(s.x, 1.2, s.z);
+    v.stage.camera.position.set(cx, height, cz);
+    v.stage.camera.lookAt(s.x - dx * s.r * aim, 1.2, s.z - dz * s.r * aim);
   });
   return s;
-});
+}, [back, height, aim]);
 
 /** Whether a capsule standing on the back column of the hall is pushed out (the hall is solid). */
 const hallSolid = (page) => page.evaluate(() => {
@@ -172,6 +172,70 @@ const frameMonument = (page) => page.evaluate(() => {
 });
 
 const modes = {
+  async earn() {
+    const card = (page) => page.evaluate(() => {
+      const el = document.querySelector('.mooblox-badge-card');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const img = el.querySelector('img');
+      return { left: r.left, right: innerWidth - r.right, top: r.top, bottom: innerHeight - r.bottom, title: el.querySelector('.mooblox-badge-title').textContent,
+        img: img.complete && img.naturalWidth > 0, scroll: document.documentElement.scrollWidth - innerWidth, confetti: !!document.querySelector('.mooblox-badge-moment canvas') };
+    });
+    for (const [w, h] of WIDTHS) {
+      const page = await open(w, h, 'earn');
+      await page.keyboard.press('Shift');
+      await page.waitForSelector('.mooblox-badge-card', { timeout: 8000 });
+      await page.waitForTimeout(700);
+      const c = await card(page);
+      check(c && c.title === 'You earned Island champion!' && c.img, `${w}: "${c?.title}" with the badge image`);
+      check(c && c.left >= 0 && c.right >= 0 && c.top >= 0 && c.bottom >= 0 && Math.abs(c.left - c.right) <= 2 && c.scroll <= 0, `${w}: card inside the screen, margins ${c?.left.toFixed(0)}/${c?.right.toFixed(0)}, top ${c?.top.toFixed(0)}, bottom ${c?.bottom.toFixed(0)}, scroll ${c?.scroll}`);
+      if (w === 1366) {
+        check(c.confetti, '1366: confetti');
+        const s = await page.evaluate(() => ({ fanfare: window.mooblox.sound.engine.log.some((e) => e.id === 'fanfare'), decoded: window.mooblox.sound.engine.buffers.has('fanfare') }));
+        check(s.fanfare && s.decoded, `1366: fanfare played through the audio engine (decoded ${s.decoded}; browser muted)`);
+      }
+      await page.screenshot({ path: join(out, `earn-${w}.png`) });
+      await page.keyboard.press('x');
+      check(!(await page.evaluate(() => !!document.querySelector('.mooblox-badge-moment'))), `${w}: a key goes on`);
+      await page.close();
+    }
+    const fresh = await open(1366, 768, 'fresh&trophies=2');
+    await fresh.waitForTimeout(1500);
+    check(!(await fresh.evaluate(() => !!document.querySelector('.mooblox-badge-moment'))), 'first visit: no card before the first key or tap');
+    await fresh.keyboard.press('Shift');
+    await fresh.waitForSelector('.mooblox-badge-card', { timeout: 3000 }).catch(() => null);
+    const first = await card(fresh);
+    await fresh.waitForTimeout(1100);
+    await fresh.keyboard.press('x');
+    await fresh.waitForTimeout(300);
+    const second = await card(fresh);
+    check(first?.title === 'You earned Bookworm!' && second?.title === 'You earned Quiz champ!', `first visit: recent badges one after another (${first?.title}, ${second?.title})`);
+    await fresh.reload();
+    await fresh.waitForFunction(() => window.mooblox?.probe?.ready, null, { timeout: 60000 });
+    await fresh.keyboard.press('Shift');
+    await fresh.waitForTimeout(1500);
+    check(!(await fresh.evaluate(() => !!document.querySelector('.mooblox-badge-moment'))), 'reload: no card again');
+    await fresh.close();
+    // The video: the hall framed, the badge arrives, the card with fanfare and confetti, then the new trophy in the hall.
+    const vdir = join(out, 'video');
+    mkdirSync(vdir, { recursive: true });
+    const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1, recordVideo: { dir: vdir, size: { width: 1366, height: 768 } } });
+    const vp = await ctx.newPage();
+    await vp.goto(`${base}?nokids&earn&trophies=3&quality=high`);
+    await vp.waitForFunction(() => window.mooblox?.rewards?.hall?.mesh, null, { timeout: 60000 });
+    await frameHall(vp, -1.2, 1.9, 0.6);
+    await vp.keyboard.press('Shift');
+    const before = await vp.evaluate(() => window.mooblox.rewards.hall.shown);
+    await vp.waitForSelector('.mooblox-badge-card', { timeout: 8000 });
+    await vp.waitForTimeout(3800);
+    await vp.keyboard.press('x');
+    await vp.waitForTimeout(2500);
+    const after = await vp.evaluate(() => window.mooblox.rewards.hall.shown);
+    check(after === before + 1, `the hall shows the new trophy (${before} -> ${after})`);
+    await vp.screenshot({ path: join(out, 'earn-hall-1366.png') });
+    await ctx.close();
+    for (const f of readdirSync(vdir)) renameSync(join(vdir, f), join(out, 'earned-moment.webm'));
+  },
   async goal() {
     const page = await open(1366, 768, 'goal=5/6&xp=60&quality=high');
     await page.waitForFunction(() => window.mooblox.rewards.goal?.monument, null, { timeout: 20000 });
@@ -237,7 +301,12 @@ const modes = {
       const b = EXTRA[tier];
       check(e.calls >= 1 && e.calls <= b.calls && e.tris <= b.tris && e.programs <= b.programs, `${tier}: hall adds ${e.calls} draws, ${e.tris} tris, ${e.programs} programs (budget ${b.calls}/${b.tris}/${b.programs})`);
       await p.screenshot({ path: join(out, `hall-${tier}-${w}.png`) });
-      if (tier === 'high') check(await hallSolid(p), 'high: the hall columns block the player');
+      if (tier === 'high') {
+        check(await hallSolid(p), 'high: the hall columns block the player');
+        await frameHall(p, -1.2, 1.9, 0.6);
+        await p.waitForTimeout(800);
+        await p.screenshot({ path: join(out, `hall-close-${tier}-${w}.png`) });
+      }
       await p.close();
     }
     for (const [n, want] of [[0, 0], [14, 8]]) {

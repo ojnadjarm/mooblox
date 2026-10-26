@@ -68,11 +68,11 @@ export class TrophyAtlas {
           if (gen !== this.generation) return;
           ctx.save();
           ctx.beginPath();
-          ctx.arc(x + MEDAL / 2, y + MEDAL / 2, MEDAL / 2 - 12, 0, Math.PI * 2);
+          ctx.arc(x + MEDAL / 2, y + MEDAL / 2, MEDAL / 2 - 2, 0, Math.PI * 2);
           ctx.clip();
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(x, y, MEDAL, MEDAL);
-          ctx.drawImage(img, x + 12, y + 12, MEDAL - 24, MEDAL - 24);
+          ctx.drawImage(img, x + 4, y + 4, MEDAL - 8, MEDAL - 8);
           ctx.restore();
           this.texture.needsUpdate = true;
           this.changed();
@@ -97,11 +97,7 @@ export class TrophyAtlas {
     ctx.fillStyle = '#d49a2a';
     ctx.fillRect(x, y, MEDAL, MEDAL);
     ctx.beginPath();
-    ctx.arc(x + c, y + c, c - 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#f6c445';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + c, y + c, c - 12, 0, Math.PI * 2);
+    ctx.arc(x + c, y + c, c - 2, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
   }

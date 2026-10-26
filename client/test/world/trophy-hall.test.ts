@@ -28,10 +28,14 @@ describe('trophy hall', () => {
 
   it('builds one geometry within the triangle budget, every part coloured and mapped', () => {
     const n = hallCapacity(site.r);
-    const metals = Array.from({ length: n }, (_, i) => metalOf(i));
-    const { geometry } = hallGeometry(site, metals, metals.map((_, i) => atlasCell(i)), ATLAS_WHITE);
+    const items = Array.from({ length: n }, (_, i) => ({ metal: metalOf(i), trophy: i < n - 1 }));
+    const { geometry } = hallGeometry(site, items, items.map((_, i) => atlasCell(i)), ATLAS_WHITE);
     const tris = geometry.getAttribute('position').count / 3;
-    expect(tris).toBeLessThan(3600);
+    expect(tris).toBeLessThan(6000);
+    const shine = geometry.getAttribute('shine');
+    expect(shine.count).toBe(geometry.getAttribute('position').count);
+    const metal = Array.from({ length: shine.count }, (_, i) => shine.getX(i)).filter((v) => v === 1).length;
+    expect(metal / shine.count).toBeGreaterThan(0.3);
     expect(geometry.getAttribute('color').count).toBe(geometry.getAttribute('position').count);
     expect(geometry.getAttribute('uv').count).toBe(geometry.getAttribute('position').count);
     geometry.computeBoundingBox();

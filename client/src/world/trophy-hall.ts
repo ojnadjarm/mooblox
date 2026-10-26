@@ -3,6 +3,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { collectibleGeometry } from './collectible-models';
 import type { HallSite } from './dressing';
 import { alternate, bakeAo, box, facet, prism } from './landmarks/shapes';
+import { METALS, shine, trophyModel, type MedalSpot, type Metal } from './trophy-cup';
+
+export { METALS, type Metal } from './trophy-cup';
 
 /** Art data (art bible section 4): cream trim and walls, terracotta floor, teal hub accent, three pedestal metals. */
 const ART = {
@@ -17,16 +20,9 @@ const ART = {
   ink: 0x2b2f3a,
 } as const;
 
-/** Pedestal metals, lit and shade (catalog trophy styles; colour only, never a rank). */
-export const METALS = {
-  gold: [0xf6c445, 0xd49a2a],
-  silver: [0xdfe4ee, 0xa7b0c2],
-  bronze: [0xe09a6a, 0xa85f3a],
-} as const;
-export type Metal = keyof typeof METALS;
 const METAL_ORDER: readonly Metal[] = ['gold', 'silver', 'bronze'];
 
-/** The pedestal style of a badge (stable per badge). */
+/** The trophy metal of a badge (stable per badge). */
 export const metalOf = (badgeId: number): Metal => METAL_ORDER[Math.abs(badgeId) % 3]!;
 
 const DAIS_H = 0.34;
@@ -77,7 +73,7 @@ export interface HallGeometry {
 const at = (g: BufferGeometry, x: number, y: number, z: number, yaw = 0): BufferGeometry => g.applyMatrix4(new Matrix4().makeRotationY(yaw).setPosition(x, y, z));
 
 /** Gives a geometry one colour or one uv everywhere so the two kinds merge. */
-function fill(g: BufferGeometry, name: 'color' | 'uv', value: readonly number[]): BufferGeometry {
+function fill(g: BufferGeometry, name: 'color' | 'uv' | 'shine', value: readonly number[]): BufferGeometry {
   const n = g.getAttribute('position').count;
   const data = new Float32Array(n * value.length);
   for (let i = 0; i < n; i++) data.set(value, i * value.length);
@@ -115,17 +111,32 @@ function pavilion(r: number): BufferGeometry[] {
   return parts;
 }
 
-/** A faceted octagonal plinth in its metal with a trim base and cap, and the medallion frame on top (local, facing +z). */
-function pedestal(metal: Metal): BufferGeometry[] {
-  const [lit, shade] = METALS[metal];
-  const frame = facet(new CylinderGeometry(MEDAL_R + 0.07, MEDAL_R + 0.07, 0.1, 12).rotateX(Math.PI / 2), lit, 0, DAIS_H + MEDAL_Y, -0.02);
+/** Height of the plinth's top above the dais (where a trophy stands). */
+const PLINTH_TOP = 0.82;
+
+/** A cream octagonal plinth with a trim base, a metal band and cap (local, facing +z). */
+function plinth(metal: Metal): BufferGeometry[] {
+  const [lit] = METALS[metal];
   return [
     prism(0.42, 0.46, 0.12, 8, ART.trim, 0, DAIS_H),
-    alternate(prism(0.27, 0.31, 0.62, 8, lit, 0, DAIS_H + 0.12), shade, 2),
-    prism(0.36, 0.34, 0.09, 8, ART.trimShade, 0, DAIS_H + 0.74),
-    alternate(prism(0.1, 0.16, 0.18, 6, shade, 0, DAIS_H + 0.83), lit, 2),
-    alternate(frame, shade, 2),
+    alternate(prism(0.3, 0.33, 0.57, 8, ART.wall, 0, DAIS_H + 0.12), ART.wallShade, 2),
+    shine(prism(0.315, 0.315, 0.05, 8, lit, 0, DAIS_H + 0.69), 1),
+    prism(0.36, 0.34, 0.08, 8, ART.trimShade, 0, DAIS_H + 0.74),
   ];
+}
+
+/** The "+N" plaque or the empty "?" stand: a short metal post holding a medallion frame. */
+function plaque(metal: Metal): { parts: BufferGeometry[]; medal: MedalSpot } {
+  const [lit, shade] = METALS[metal];
+  const medal = { y: MEDAL_Y - PLINTH_TOP, z: 0.035, r: MEDAL_R };
+  const frame = facet(new CylinderGeometry(MEDAL_R + 0.07, MEDAL_R + 0.07, 0.1, 12).rotateX(Math.PI / 2), lit, 0, medal.y, -0.02);
+  return { parts: [shine(alternate(prism(0.1, 0.16, 0.18, 6, shade, 0, 0.01), lit, 2), 1), shine(alternate(frame, shade, 2), 1)], medal };
+}
+
+/** What stands on one pedestal: a badge's trophy, or a plaque ("+N", "?"). */
+export interface HallItem {
+  readonly metal: Metal;
+  readonly trophy: boolean;
 }
 
 /** A quad of width w and height h facing +z at (0, y, z) whose uvs cover `rect`. */
@@ -140,8 +151,8 @@ function plate(w: number, h: number, y: number, z: number, rect: readonly [numbe
 }
 
 /** A round medallion facing +z whose uvs cover `rect` (the badge image's square). */
-function medal(y: number, z: number, rect: readonly [number, number, number, number]): BufferGeometry {
-  const g = new CircleGeometry(MEDAL_R, 16);
+function medal(r: number, y: number, z: number, rect: readonly [number, number, number, number]): BufferGeometry {
+  const g = new CircleGeometry(r, 16);
   const [u0, v0, u1, v1] = rect;
   const uv = g.getAttribute('uv');
   for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
@@ -149,22 +160,28 @@ function medal(y: number, z: number, rect: readonly [number, number, number, num
 }
 
 /**
- * The trophy hall on its site: the pavilion and one pedestal per trophy (metal per badge) in a horseshoe facing the
- * middle, each with a medallion and a name plate mapped to its atlas cell. `cells[i]` belongs to `metals[i]`; `white` is
- * the uv of a white atlas texel.
+ * The trophy hall on its site: the pavilion and one plinth per item in a horseshoe facing the middle, each topped by its
+ * trophy (gold cup, silver goblet, bronze star statue) or a plaque, with the badge medallion and a name plate mapped to
+ * its atlas cell. `cells[i]` belongs to `items[i]`; `white` is the uv of a white atlas texel. Metal parts carry `shine` 1.
  */
-export function hallGeometry(site: HallSite, metals: readonly Metal[], cells: readonly AtlasCell[], white: readonly [number, number]): HallGeometry {
-  const slots = pedestalSlots(metals.length, site.r);
+export function hallGeometry(site: HallSite, items: readonly HallItem[], cells: readonly AtlasCell[], white: readonly [number, number]): HallGeometry {
+  const slots = pedestalSlots(items.length, site.r);
   const parts: BufferGeometry[] = pavilion(site.r);
   const faces: BufferGeometry[] = [];
   slots.forEach((s, i) => {
-    for (const g of pedestal(metals[i] ?? 'gold')) parts.push(at(g, s.x, 0, s.z, s.yaw));
+    const item = items[i] ?? { metal: 'gold', trophy: false };
+    const top = item.trophy ? trophyModel(item.metal) : plaque(item.metal);
+    const y = DAIS_H + PLINTH_TOP;
+    // A flat face of each octagon fronts the name plate.
+    for (const g of plinth(item.metal)) parts.push(at(g, s.x, 0, s.z, s.yaw + Math.PI / 8));
+    for (const g of top.parts) parts.push(at(g as BufferGeometry, s.x, y, s.z, s.yaw));
     const cell = cells[i]!;
-    faces.push(at(medal(DAIS_H + MEDAL_Y, 0.035, cell.medal), s.x, 0, s.z, s.yaw));
-    faces.push(at(plate(0.5, 0.13, DAIS_H + 0.5, 0.31, cell.name), s.x, 0, s.z, s.yaw));
+    faces.push(at(medal(top.medal.r, top.medal.y + y, top.medal.z, cell.medal), s.x, 0, s.z, s.yaw));
+    faces.push(at(plate(0.42, 0.13, DAIS_H + 0.42, 0.3, cell.name), s.x, 0, s.z, s.yaw));
   });
   const solid = parts.map((g) => fill(g, 'uv', white));
-  const lit = faces.map((g) => fill(g.toNonIndexed(), 'color', [1, 1, 1]));
+  for (const g of solid) if (!g.getAttribute('shine')) fill(g, 'shine', [0]);
+  const lit = faces.map((g) => fill(fill(g.toNonIndexed(), 'color', [1, 1, 1]), 'shine', [0]));
   const place = new Matrix4().makeRotationY(site.face).setPosition(site.x, 0, site.z);
   return { geometry: mergeGeometries([...solid, ...lit])!.applyMatrix4(place), slots };
 }

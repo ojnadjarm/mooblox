@@ -20,6 +20,8 @@ import { preloadAssets } from './asset-preload';
 import { BOOT_MODELS } from './boot-assets';
 import { startActivities, startAvatarPicker, startPlayer, startWorld, type WorldView } from './app';
 import { startRewards } from './rewards';
+import { startSound } from './sound';
+import { celebratedKey } from '../rewards/new-badges';
 
 const ASSETS = '/assets/';
 const FIXTURE_HOST = 'https://moodle.example';
@@ -140,9 +142,21 @@ async function boot(): Promise<void> {
   const keep = (l: AvatarLook) => gateway.savePreference('local_mooblox_avatar', encodeLook(l));
   const picker = startAvatarPicker(view, player, dressed, look, keep, DEFAULT_AVATAR_PICKER_STRINGS);
   const weeks = params.has('weeks') ? Number(params.get('weeks')) : null;
-  const rewardsUi = await startRewards(view, interaction, { gateway, courseId: fixture.courseid, strings: {}, assets: ASSETS, player, outfitter: dressed, picker, ...(weeks === null ? {} : { weeks: () => weeks }) });
+  // The page's badges count as celebrated (`?fresh`: a first visit); `?earn` hands out "Island champion" 2.5 s after the start.
+  if (!params.has('fresh')) localStorage.setItem(celebratedKey(0, fixture.courseid), JSON.stringify(rewards.trophies.map((t) => t.badgeid)));
+  const rewardsUi = await startRewards(view, interaction, { gateway, courseId: fixture.courseid, userId: 0, strings: {}, assets: ASSETS, player, outfitter: dressed, picker, ...(weeks === null ? {} : { weeks: () => weeks }) });
+  const sound = params.has('earn')
+    ? startSound(view, player, { assets: ASSETS, stored: '', gateway, strings: {}, store, rewards: rewardsUi.store, bubble: null, badges: rewardsUi.badges })
+    : null;
+  if (params.has('earn')) {
+    const [badge] = devTrophies(5).slice(4);
+    window.setTimeout(() => {
+      const r = rewardsUi.store.rewards!;
+      rewardsUi.store.set({ ...r, trophies: [...r.trophies, { badgeId: 99, name: 'Island champion', imageUrl: badge!.image, timeIssued: Math.floor(Date.now() / 1000) }] });
+    }, 2500);
+  }
   const probe: Record<string, unknown> = { ready: true };
-  Object.assign(window, { mooblox: { ...view, view, probe, player, interaction, store, gateway, picker, rewards: rewardsUi } });
+  Object.assign(window, { mooblox: { ...view, view, probe, player, interaction, store, gateway, picker, rewards: rewardsUi, sound } });
 }
 
 /** Every hat on a kid, two rows of six on the plaza, framed close (design review). */

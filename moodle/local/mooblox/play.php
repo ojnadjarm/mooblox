@@ -40,6 +40,7 @@ $rev = get_config('local_mooblox', 'version');
 $config = [
     'wwwroot' => $CFG->wwwroot,
     'courseid' => (int) $course->id,
+    'userid' => (int) $USER->id,
     'sesskey' => sesskey(),
     'firstname' => $USER->firstname,
     'avatar' => (string) get_user_preferences('local_mooblox_avatar', ''),
@@ -70,6 +71,7 @@ foreach (array_keys(\local_mooblox\character::catalogue()['fields']) as $field) 
 }
 
 $placeholders = [
+    'badge_earned' => '{badge}',
     'book_earned' => '{date}',
     'book_found' => (object) ['found' => '{found}', 'total' => '{total}'],
     'book_hidden' => null,

@@ -2,6 +2,8 @@
 export interface PlayConfig {
   readonly wwwroot: string;
   readonly courseid: number;
+  /** The Moodle user id (0 when an older play.php leaves it out). */
+  readonly userid: number;
   readonly sesskey: string;
   readonly firstname: string;
   readonly avatar: string;
@@ -35,6 +37,7 @@ export function readConfig(json: string | null | undefined): PlayConfig {
   return {
     wwwroot: str(o, 'wwwroot').replace(/\/+$/, ''),
     courseid: int(o, 'courseid'),
+    userid: o['userid'] === undefined ? 0 : int(o, 'userid'),
     sesskey: str(o, 'sesskey'),
     firstname: str(o, 'firstname'),
     avatar: str(o, 'avatar'),

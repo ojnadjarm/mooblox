@@ -7,10 +7,12 @@ import { PetLibrary } from '../player/pets';
 import type { Player } from '../player/player';
 import { itemName } from '../rewards/item-names';
 import { levelUp } from '../rewards/level-up';
+import { badgesToCelebrate, celebratedKey, parseCelebrated } from '../rewards/new-badges';
 import { RewardsStore } from '../rewards/rewards-store';
 import type { AvatarPicker } from '../ui/avatar-picker';
 import { DEFAULT_HUD_STRINGS, hudView } from '../ui/hud-model';
 import { HudRewards } from '../ui/hud-rewards';
+import { BadgeMoment } from '../ui/badge-moment';
 import { LevelUpMoment } from '../ui/level-up';
 import { WardrobeTab } from '../ui/wardrobe';
 import { DEFAULT_WARDROBE_STRINGS, wardrobeItems } from '../ui/wardrobe-model';
@@ -24,6 +26,8 @@ import { startClassGoal, type ClassGoalRuntime } from './class-goal';
 export interface RewardsDeps {
   readonly gateway: MoodleGateway;
   readonly courseId: number;
+  /** The Moodle user id: celebrated badges are remembered per user and course in this browser. */
+  readonly userId: number;
   readonly strings: Readonly<Record<string, string>>;
   readonly assets: string;
   readonly player: Player;
@@ -38,6 +42,8 @@ export interface RewardsDeps {
 export interface RewardsRuntime {
   readonly store: RewardsStore;
   readonly levelUp: LevelUpMoment;
+  /** "You earned <badge>!" for badges not celebrated yet. */
+  readonly badges: BadgeMoment;
   /** What the player wears now. */
   readonly worn: Look;
   /** The pet walking after the player. */
@@ -50,6 +56,20 @@ export interface RewardsRuntime {
   readonly goal: ClassGoalRuntime | null;
   /** Re-reads the rewards from Moodle. */
   refresh(): Promise<void>;
+}
+
+/** Pause (ms) between the first key or tap and a moment waiting for it. */
+const GESTURE_DELAY_MS = 600;
+
+/** Runs `f` shortly after the player's first key or tap on the page. */
+function afterFirstGesture(f: () => void): void {
+  const go = (): void => {
+    window.removeEventListener('pointerdown', go, true);
+    window.removeEventListener('keydown', go, true);
+    window.setTimeout(f, GESTURE_DELAY_MS);
+  };
+  window.addEventListener('pointerdown', go, true);
+  window.addEventListener('keydown', go, true);
 }
 
 /** Loads the user's rewards: HUD, level-up moment and wardrobe, kept in step after every activity close; nothing while off. */
@@ -65,6 +85,8 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
   let worn: Look = NO_LOOK;
   let dressing: Promise<void> | null = null;
   const moment = new LevelUpMoment(host, { strings: deps.strings, tryOn: () => deps.picker.openTab('wardrobe'), chime: false });
+  const badges = new BadgeMoment(host, { strings: deps.strings });
+  const celebrated = celebratedKey(deps.userId, deps.courseId);
   const pet = new PetFollower(
     () => ({ position: deps.player.avatar.root.position, yaw: deps.player.avatar.root.rotation.y }),
     (o) => view.stage.add(o),
@@ -141,7 +163,14 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
       goal = startClassGoal(view, store, deps.courseId, deps.strings);
     }
     const up = levelUp(previous, next);
-    if (up) moment.play(up);
+    const earned = next.enabled ? badgesToCelebrate(next.trophies, parseCelebrated(localStorage.getItem(celebrated)), Date.now() / 1000) : [];
+    if (next.enabled) localStorage.setItem(celebrated, JSON.stringify(next.trophies.map((t) => t.badgeId)));
+    // The badge comes first: its XP is what lifted the level. One that arrived between visits waits for the first key or
+    // tap, the gesture that lets the fanfare play.
+    const celebrate = (): void => badges.play(earned, up ? () => moment.play(up) : undefined);
+    if (earned.length && previous) celebrate();
+    else if (earned.length) afterFirstGesture(celebrate);
+    else if (up) moment.play(up);
   });
   const refresh = async (): Promise<void> => {
     try {
@@ -156,6 +185,7 @@ export async function startRewards(view: WorldView, interaction: Activities, dep
   return {
     store,
     levelUp: moment,
+    badges,
     get worn() {
       return worn;
     },

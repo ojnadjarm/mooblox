@@ -581,3 +581,15 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     layers (6 mm per scale band, smaller on top) and open sheets whose back shows from above ground get reversed twins
     (not houses or sway foliage; `userData.twins`). Tent see-through rays 209 -> 1 (`model-seal.test.ts`); `coplanar.test.ts`
     covers every placed prop. Perf: GPU 60 fps everywhere, SwiftShader stress misses as at HEAD.
+- T1390, 2026-10-26, version 2026102610, boats bow first, real trophies, earned moment (play-test round 3 items 2, 7; pre/post `~/drop/T1390/index.html`):
+  - `world/sail-path.ts` `sailPose` (pure: position + yaw on the circle, bow = local +z along the velocity); `life.ts` ships use it
+    (they sailed stern first). `sail-path.test.ts` checks heading vs finite-difference velocity both ways; `node tools/ships.mjs <dir>`.
+  - `world/trophy-cup.ts` (art data: gold loving cup, silver lidded goblet, bronze star statue; badge medallion spot per design),
+    `trophy-hall.ts` plinths (cream octagon, metal band) and plaques; every vertex carries `shine` (1 = metal);
+    `world/trophy-shine.ts` `withShine` patches the hall's `paintedPlastic` (sky reflection, sun highlight, rim, time glint):
+    still one draw, one program; full hall 2.3k tris.
+  - Earned moment: `rewards/new-badges.ts` (`localStorage['mooblox-badges-<userid>-<courseid>']`; no record = badges issued in the last
+    7 days), `ui/badge-moment.ts` (queued cards, gold cup with the badge image, rays, confetti from `ui/confetti.ts`), fanfare
+    `fanfare` (Kenney Music Jingles SAX07, CC0) via `BadgeMoment.onShow`; on page load the card waits for the first key or tap.
+    play.php config gains `userid` and string `badge_earned`. Checks `node tools/rewards.mjs earn [dir]` (5 widths, fanfare, first
+    visit, reload), hall `rewards.mjs hall` (close-up still). Dev `rewards.html?earn` (badge arrives after 2.5 s), `?fresh`.

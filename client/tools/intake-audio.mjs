@@ -76,6 +76,7 @@ const SFX = [
   ['equip-0', 'rpg-audio/Audio/cloth1.ogg', RPG],
   ['equip-1', 'rpg-audio/Audio/cloth4.ogg', RPG],
   ['goal', 'music-jingles/Audio/Steel jingles/jingles_STEEL00.ogg', JINGLES],
+  ['fanfare', 'music-jingles/Audio/Sax jingles/jingles_SAX07.ogg', JINGLES],
   ...BARKS.map(([a, b], i) => [`bark-${i}`, 'oga-nature/dog_barking_mono.wav', NATURE.bark, `atrim=${a}:${b},asetpts=N/SR/TB,afade=t=out:st=${(b - a - 0.04).toFixed(2)}:d=0.04`]),
   ['bark-4', 'oga-nature/dog_barking_mono.wav', NATURE.bark, 'atrim=0.5:1.38,asetpts=N/SR/TB,afade=t=out:st=0.84:d=0.04'],
   ['gull-0', 'oga-nature/seagull-hit-1.wav', NATURE.gull],

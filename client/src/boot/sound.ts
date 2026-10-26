@@ -13,6 +13,7 @@ import type { CourseStore } from '../state/course-store';
 import type { Circle } from '../world/layout';
 import type { ClassGoalRuntime } from './class-goal';
 import type { CollectiblesRuntime } from './collectibles';
+import type { BadgeMoment } from '../ui/badge-moment';
 import { DEFAULT_SOUND_STRINGS, SoundControl } from '../ui/sound-control';
 import type { WorldView } from './app';
 
@@ -30,6 +31,8 @@ export interface SoundDeps {
   /** The collectibles and the class goal once rewards are on (they start late). */
   readonly collectibles?: () => CollectiblesRuntime | null;
   readonly goal?: () => ClassGoalRuntime | null;
+  /** The "You earned <badge>!" moment: its fanfare plays as each card shows. */
+  readonly badges?: BadgeMoment | null;
 }
 
 /** The running sound, exposed on `window.mooblox.sound` for the headless checks. */
@@ -178,6 +181,7 @@ export function startSound(view: WorldView, player: Player, deps: SoundDeps): So
     }
     done = next;
   });
+  if (deps.badges) deps.badges.onShow = () => engine.play('fanfare');
   deps.rewards?.subscribe((next, previous) => {
     const cue = rewardCue(previous, next);
     if (cue === 'levelup' || (cue === 'xp' && performance.now() / 1000 - completedAt > XP_AFTER_COMPLETE)) engine.play(cue);

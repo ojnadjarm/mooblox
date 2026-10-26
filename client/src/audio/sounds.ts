@@ -26,6 +26,7 @@ export type SfxId =
   | 'crystal'
   | 'star'
   | 'goal'
+  | 'fanfare'
   | CallId;
 
 export interface SfxSpec {
@@ -64,6 +65,7 @@ export const SFX: Readonly<Record<SfxId, SfxSpec>> = {
   crystal: { files: variants('crystal', 2), gain: 0.34, vary: 0.05, gap: 0.08 },
   star: { files: ['star'], gain: 0.36, vary: 0, gap: 0.3 },
   goal: { files: ['goal'], gain: 0.4, vary: 0, gap: 5 },
+  fanfare: { files: ['fanfare'], gain: 0.42, vary: 0, gap: 1.5 },
   bark: { files: variants('bark', 5), gain: 0.32, vary: 0.1, gap: 0.6 },
   meow: { files: variants('meow', 3), gain: 0.24, vary: 0.1, gap: 1 },
   quack: { files: variants('quack', 3), gain: 0.2, vary: 0.12, gap: 0.3 },
