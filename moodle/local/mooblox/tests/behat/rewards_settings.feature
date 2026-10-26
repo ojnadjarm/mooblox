@@ -20,7 +20,7 @@ Feature: Teachers switch MOOBLOX rewards per course
   Scenario: A teacher switches rewards off and the student's rewards are off
     Given the MOOBLOX rewards of "student1" in "C1" should be on
     And I am on the "C1" "Course" page logged in as "teacher1"
-    And I follow "MOOBLOX rewards"
+    And I follow "Mooblox rewards"
     When I set the field "Rewards in this course" to "0"
     And I press "Save changes"
     Then I should see "Changes saved"
@@ -29,4 +29,4 @@ Feature: Teachers switch MOOBLOX rewards per course
 
   Scenario: A student gets no rewards settings link
     When I am on the "C1" "Course" page logged in as "student1"
-    Then "MOOBLOX rewards" "link" should not exist
+    Then "Mooblox rewards" "link" should not exist

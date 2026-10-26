@@ -17,7 +17,7 @@ Feature: Students open a course as a MOOBLOX world
 
   Scenario: A student opens the world from the course tab
     Given I am on the "C1" "Course" page logged in as "student1"
-    When I click on "MOOBLOX" "link" in the ".secondary-navigation" "css_element"
+    When I click on "Mooblox" "link" in the ".secondary-navigation" "css_element"
     Then "#mooblox-root" "css_element" should exist
     And "#mooblox-config" "css_element" should exist
 
@@ -26,4 +26,4 @@ Feature: Students open a course as a MOOBLOX world
       | capability         | permission | role    | contextlevel | reference |
       | local/mooblox:play | Prohibit   | student | Course       | C1        |
     When I am on the "C1" "Course" page logged in as "student1"
-    Then I should not see "MOOBLOX" in the ".secondary-navigation" "css_element"
+    Then I should not see "Mooblox" in the ".secondary-navigation" "css_element"

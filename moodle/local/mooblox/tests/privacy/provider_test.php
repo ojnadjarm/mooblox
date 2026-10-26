@@ -136,12 +136,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         provider::export_user_data(new approved_contextlist($user, 'local_mooblox', $contextlist->get_contextids()));
         provider::export_user_preferences($user->id);
 
-        $data = writer::with_context($coursecontext)->get_data(['MOOBLOX']);
+        $data = writer::with_context($coursecontext)->get_data(['Mooblox']);
         $this->assertEquals(60, $data->xp->xp);
         $this->assertSame('badge', $data->ledger[0]['source']);
         $this->assertEquals([20261024], $data->days);
         $this->assertSame('gem:1', $data->found[0]['itemkey']);
-        $this->assertSame('hat:cap', writer::with_context($usercontext)->get_data(['MOOBLOX'])->unlocks[0]['itemkey']);
+        $this->assertSame('hat:cap', writer::with_context($usercontext)->get_data(['Mooblox'])->unlocks[0]['itemkey']);
         $prefs = writer::with_context(\context_system::instance())->get_user_preferences('local_mooblox');
         $this->assertSame('hat:cap', $prefs->{provider::LOOK}->value);
     }
