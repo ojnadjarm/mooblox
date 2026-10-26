@@ -8,7 +8,7 @@ export interface Turnable {
   turn(dx: number, dy: number): void;
 }
 
-/** PC mouse-look over the Pointer Lock API: a click on the world locks, the mouse turns the camera, Ctrl held frees the cursor. */
+/** PC mouse-look over the Pointer Lock API: a click on the world locks, the mouse turns the camera, Tab held frees the cursor. */
 export class MouseLook {
   private readonly model = new LookModel();
   private readonly listeners: ((mode: LookMode) => void)[] = [];
@@ -22,9 +22,14 @@ export class MouseLook {
     canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button === 0) this.send('click');
     });
-    const ctrl = (e: KeyboardEvent): boolean => (e.code === 'ControlLeft' || e.code === 'ControlRight') && !e.repeat;
-    win.addEventListener('keydown', (e) => ctrl(e) && this.send('ctrl-down'));
-    win.addEventListener('keyup', (e) => ctrl(e) && this.send('ctrl-up'));
+    // Tab is the cursor key outside panels (the browser's focus move is stopped); inside one it keeps moving focus.
+    const tab = (e: KeyboardEvent, down: boolean): void => {
+      if (e.code !== 'Tab') return;
+      if (this.model.mode !== 'held') e.preventDefault();
+      if (!e.repeat) this.send(down ? 'hold-down' : 'hold-up');
+    };
+    win.addEventListener('keydown', (e) => tab(e, true));
+    win.addEventListener('keyup', (e) => tab(e, false));
     win.addEventListener('blur', () => this.send('blur'));
     doc.addEventListener('pointerlockchange', () => this.send(doc.pointerLockElement === canvas ? 'locked' : 'unlocked'));
     doc.addEventListener('pointerlockerror', () => this.send('refused'));

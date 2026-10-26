@@ -1,34 +1,34 @@
-/** Mouse-look state: `off` waits for a click, `locked` turns the camera, `free` = Ctrl held (cursor out), `held` = a panel is open. */
+/** Mouse-look state: `off` waits for a click, `locked` turns the camera, `free` = Tab held (cursor out), `held` = a panel is open. */
 export type LookMode = 'off' | 'locked' | 'free' | 'held';
 
-/** What happened: a mouse click on the world, Ctrl, the browser's lock answer, a panel, the window losing focus. */
-export type LookEvent = 'click' | 'ctrl-down' | 'ctrl-up' | 'locked' | 'unlocked' | 'refused' | 'panel-open' | 'panel-close' | 'blur';
+/** What happened: a mouse click on the world, the cursor key (Tab), the browser's lock answer, a panel, the window losing focus. */
+export type LookEvent = 'click' | 'hold-down' | 'hold-up' | 'locked' | 'unlocked' | 'refused' | 'panel-open' | 'panel-close' | 'blur';
 
 /** What the adapter must ask the browser for. */
 export type LookAction = 'lock' | 'unlock' | null;
 
-/** Pure pointer-lock policy: hold Ctrl for the cursor, release to look again; panels free the cursor until they close. */
+/** Pure pointer-lock policy: hold Tab for the cursor, release to look again; panels free the cursor until they close. */
 export class LookModel {
   mode: LookMode = 'off';
-  private ctrl = false;
+  private held = false;
   private panel = false;
-  /** Whether mouse-look was on (or only paused by Ctrl) when the panel opened. */
+  /** Whether mouse-look was on (or only paused by Tab) when the panel opened. */
   private wanted = false;
 
   handle(e: LookEvent): LookAction {
     switch (e) {
       case 'click':
-        return this.mode === 'off' && !this.ctrl && !this.panel ? 'lock' : null;
-      case 'ctrl-down':
-        this.ctrl = true;
+        return this.mode === 'off' && !this.held && !this.panel ? 'lock' : null;
+      case 'hold-down':
+        this.held = true;
         if (this.mode !== 'locked') return null;
         this.mode = 'free';
         return 'unlock';
-      case 'ctrl-up':
-        this.ctrl = false;
+      case 'hold-up':
+        this.held = false;
         return this.mode === 'free' ? 'lock' : null;
       case 'locked':
-        if (this.ctrl || this.panel) return 'unlock';
+        if (this.held || this.panel) return 'unlock';
         this.mode = 'locked';
         return null;
       case 'unlocked':
@@ -46,10 +46,10 @@ export class LookModel {
       case 'panel-close':
         if (!this.panel) return null;
         this.panel = false;
-        this.mode = this.wanted && this.ctrl ? 'free' : 'off';
-        return this.wanted && !this.ctrl ? 'lock' : null;
+        this.mode = this.wanted && this.held ? 'free' : 'off';
+        return this.wanted && !this.held ? 'lock' : null;
       case 'blur':
-        this.ctrl = false;
+        this.held = false;
         if (this.mode === 'free') this.mode = 'off';
         return null;
     }

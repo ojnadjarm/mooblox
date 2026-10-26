@@ -12,7 +12,7 @@ const CSS = `
   .mooblox-look-tip:not([hidden]) ~ .mooblox-prompt { --mooblox-prompt-lift: 44px; } }
 `;
 
-/** Tip texts per mouse-look mode; `{ctrl}` becomes the key cap. */
+/** Tip texts per mouse-look mode; `{ctrl}` becomes the cursor key's cap (Tab). */
 export interface LookTipStrings {
   readonly look_click: string;
   readonly look_ctrl: string;
@@ -42,7 +42,7 @@ export class LookTip {
     this.root.hidden = text === '';
     const [before, after] = text.split('{ctrl}');
     const kbd = document.createElement('kbd');
-    kbd.textContent = 'Ctrl';
+    kbd.textContent = 'Tab';
     this.root.replaceChildren(before ?? '', ...(after === undefined ? [] : [kbd, after]));
   }
 }

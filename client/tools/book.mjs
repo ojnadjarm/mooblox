@@ -1,4 +1,4 @@
-// Book e2e on the dev page: node tools/book.mjs [outdir] -> B opens the book (5 widths, no overflow), "Go there" teleports onto the plot
+// Book e2e on the dev page: node tools/book.mjs [outdir] -> B opens the book (5 widths, no overflow), "Go there" walks onto the plot
 import { mkdirSync } from 'node:fs';
 import { createServer } from 'vite';
 import { loadChromium } from './playwright.mjs';
@@ -54,7 +54,8 @@ try {
   await page.keyboard.press('KeyB');
   await page.locator(`.mooblox-book-row[data-cmid="${CM}"] .mooblox-book-go`).click();
   await book.waitFor({ state: 'hidden', timeout: 5000 });
-  await page.waitForTimeout(1200);
+  await page.waitForFunction(() => !window.mooblox.player.guided.active, null, { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(600);
   const at = await page.evaluate((id) => {
     const plot = window.mooblox.layout.zones.flatMap((z) => z.plots).find((p) => p.activityId === id);
     const p = window.mooblox.player.body.position;

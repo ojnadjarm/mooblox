@@ -77,7 +77,7 @@ async function track(page, seconds, from = null) {
 }
 
 try {
-  // 1. Look: a click, plain mouse travel, a drag, Ctrl held and released.
+  // 1. Look: a click, plain mouse travel, a drag, Tab held and released.
   {
     const { page, stop } = await open('look.webm');
     const cx = size.width / 2;
@@ -98,18 +98,19 @@ try {
     await page.mouse.up();
     await page.waitForTimeout(600);
     numbers.yawFromDrag = (await yaw(page)) - y1;
-    await page.keyboard.down('Control');
+    await page.keyboard.down('Tab');
     await page.waitForTimeout(400);
-    numbers.lockedWithCtrl = await locked(page);
-    numbers.tipCtrl = await tip(page);
+    numbers.lockedWithTab = await locked(page);
+    numbers.tipTab = await tip(page);
+    numbers.focusWithTab = await page.evaluate(() => document.activeElement?.tagName);
     const y2 = await yaw(page);
     await nudge(page, 300, 0);
-    numbers.yawWithCtrl = (await yaw(page)) - y2;
+    numbers.yawWithTab = (await yaw(page)) - y2;
     await page.waitForTimeout(600);
-    await page.keyboard.up('Control');
+    await page.keyboard.up('Tab');
     await page.waitForTimeout(500);
-    numbers.lockedAfterCtrl = await locked(page);
-    numbers.modeAfterCtrl = await page.evaluate(() => window.mooblox.player.mouseLook?.mode);
+    numbers.lockedAfterTab = await locked(page);
+    numbers.modeAfterTab = await page.evaluate(() => window.mooblox.player.mouseLook?.mode);
     await nudge(page, -300, 60);
     await page.waitForTimeout(600);
     await page.evaluate(() => document.exitPointerLock());
@@ -121,21 +122,21 @@ try {
       check('a click locks the pointer', numbers.lockedAfterClick);
       check('mouse travel turns the camera', Math.abs(numbers.yawFromMouseTravel) > 0.5, numbers.yawFromMouseTravel.toFixed(2));
       check('a mouse drag does not add a turn of its own', Math.abs(numbers.yawFromDrag) < 0.05, numbers.yawFromDrag.toFixed(3));
-      check('Ctrl frees the cursor and stops the turning', !numbers.lockedWithCtrl && Math.abs(numbers.yawWithCtrl) < 0.01, numbers.tipCtrl);
-      check('releasing Ctrl locks again', numbers.lockedAfterCtrl);
-      check('tips: locked, Ctrl, after Esc', Boolean(numbers.tipLocked && numbers.tipCtrl && numbers.tipEscaped), `${numbers.tipLocked} | ${numbers.tipEscaped}`);
+      check('Tab frees the cursor, stops the turning and keeps focus put', !numbers.lockedWithTab && Math.abs(numbers.yawWithTab) < 0.01 && numbers.focusWithTab === 'BODY', `${numbers.tipTab}; focus ${numbers.focusWithTab}`);
+      check('releasing Tab locks again', numbers.lockedAfterTab);
+      check('tips: locked, Tab, after Esc', Boolean(numbers.tipLocked && numbers.tipTab && numbers.tipEscaped), `${numbers.tipLocked} | ${numbers.tipEscaped}`);
     }
   }
-  // 2. Guide: Show me (Ctrl held on PC), then the trip to the next step.
+  // 2. Guide: Show me (Tab held on PC), then the trip to the next step.
   {
     const { page, stop } = await open('walk.webm');
     await page.mouse.click(size.width / 2, size.height / 2 + 120);
     await page.waitForTimeout(300);
-    await page.keyboard.down('Control');
+    await page.keyboard.down('Tab');
     await page.waitForTimeout(300);
     const from = await page.evaluate(() => ({ x: window.mooblox.player.body.position.x, z: window.mooblox.player.body.position.z }));
     await page.locator('.mooblox-bubble-go').click();
-    await page.keyboard.up('Control');
+    await page.keyboard.up('Tab');
     const trip = await track(page, 14, from);
     const prompt = await page.locator('.mooblox-prompt').innerText().catch(() => '');
     Object.assign(numbers, { fastestMps: trip.jump, walkMetres: trip.metres, walkPrompt: prompt.replace(/\s+/g, ' ') });
@@ -159,7 +160,19 @@ try {
       check('closing the panel locks again', numbers.panelClosed.locked, numbers.panelClosed.tip);
     }
   }
-  // 3. A movement key cancels the walk.
+  // 3. Book: Go there walks too.
+  {
+    const { page, stop } = await open('book.webm');
+    await page.keyboard.press('KeyB');
+    const from = await page.evaluate(() => ({ x: window.mooblox.player.body.position.x, z: window.mooblox.player.body.position.z }));
+    await page.locator('.mooblox-book-row[data-cmid="44"] .mooblox-book-go').click();
+    const trip = await track(page, 14, from);
+    const prompt = (await page.locator('.mooblox-prompt').innerText().catch(() => '')).replace(/\s+/g, ' ');
+    Object.assign(numbers, { bookFastestMps: trip.jump, bookMetres: trip.metres, bookPrompt: prompt });
+    await stop();
+    if (!pre) check('Book Go there walks (never faster than 14 m/s) to the quiz', trip.jump < 14 && trip.metres > 5 && prompt.includes('Volcano quiz'), `fastest ${trip.jump.toFixed(1)} m/s, ${trip.metres.toFixed(1)} m, ${prompt}`);
+  }
+  // 4. A movement key cancels the walk.
   if (!pre) {
     const { page, stop } = await open('cancel.webm');
     await page.locator('.mooblox-bubble-go').click();

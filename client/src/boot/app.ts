@@ -696,7 +696,7 @@ export interface Course {
 export type Activities = ActivityInteraction & { readonly book: BookController };
 
 /** Prompts at each plot, opens activities in the panel, re-reads the course after each close. */
-export function startActivities(view: WorldView, player: Player, openers: OpenerRegistry, course: Course): Activities {
+export function startActivities(view: WorldView, player: PlayerRig, openers: OpenerRegistry, course: Course): Activities {
   const host = view.stage.canvasHost;
   const panel = new Panel(host);
   const prompt = new ActivityPrompt(host, () => void interaction.openCurrent());
@@ -724,7 +724,7 @@ export function startActivities(view: WorldView, player: Player, openers: Opener
     interaction.update(player.body.position.x, player.body.position.z);
     view.props.swing(interaction.nearId, dt);
   });
-  const book = new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => goToPlot(view, player, id));
+  const book = new BookController(host, panel, view.gate, () => course.store.world ?? view.world, (id) => walkToPlot(view, player, id));
   return Object.assign(interaction, { book });
 }
 
