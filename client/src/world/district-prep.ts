@@ -7,6 +7,7 @@ import { aimRipples } from './water-motion';
 import { tagSurface } from './surfaces';
 import { MeshMerge, SolidsMerge, solidsTree, transferables, type MeshArrays, type PartArrays, type SolidsTree } from './district-merge';
 import { weldChunks, type WeldedMesh } from './chunk-weld';
+import { sealedPlacement } from './model-seal';
 
 /** Where placed models come from: the page's `ModelLibrary`, or its copy in the build worker. */
 export interface ModelSource {
@@ -174,7 +175,7 @@ export function floats(a: BufferAttribute | InterleavedBufferAttribute): Float32
 function placeModel(p: Placement, lib: ModelSource): BufferGeometry {
   const m = lib.get(p.id);
   const s = p.width ? p.width / m.width : p.height / m.height;
-  const g = m.geometry.clone();
+  const g = sealedPlacement(p, m).clone();
   if (p.tint !== undefined) tint(g, p.tint);
   if (p.roof !== undefined) repaintRoof(g, p.roof);
   g.applyMatrix4(new Matrix4().compose(new Vector3(p.x, p.y, p.z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), p.yaw), new Vector3(s, s, s)));

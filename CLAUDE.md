@@ -570,3 +570,14 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `setFires`, CALLERS.fire); CC0 PagDev fireplace loop + AntumDeluge crackle (`intake-audio.mjs` takes stem prefixes to refresh
     only those). `tools/sound.mjs` checks it muted (`MOOBLOX_QUERY=shape=8x12`). Perf: low draws/programs equal to HEAD;
     medium +1-2 draws and programs; GPU 60 fps everywhere.
+- T1386, 2026-10-26, version 2026102609, stairs, kerbs, tent, sign, stair and rock collisions (play-test round 2 items 3, 4, 9, 11, 13, 14; pre/post `~/drop/T1386/index.html`):
+  - `world/stair.ts`: a flight is one closed stepped prism (`stairFlight`, sides edge to edge, no z-fight) plus piers; `dressing.ts`
+    lays stairs only from a low walkable cell up to a high one, facing the approach, with 1.5 m clear landings (`stairFits`,
+    `layStair`); `dressing.stairs` feeds the collider (walkable steps, solid sides) and rocks over 0.3 m get colliders.
+    Test `stairs.test.ts`: 7 worlds, 0 wrong-facing, the kid walks every flight up and down, never sinks > 0.1 m into a stair or rock.
+  - Kerbs (`landmarks/kerb.ts`): ring walks paint one `ringBand`; kerbs are `kerbArc` sweeps (pieces <= 0.3 m) that open only at
+    the entry walk; entry kerbs stop at the ring kerbs. `dressing.kerbs` lists every piece; `kerb.test.ts`: 0 gaps, overlaps, crossings.
+  - `world/model-seal.ts` `sealedPlacement` (used by `district-prep` and `surface-audit`): coplanar same-facing faces lift in
+    layers (6 mm per scale band, smaller on top) and open sheets whose back shows from above ground get reversed twins
+    (not houses or sway foliage; `userData.twins`). Tent see-through rays 209 -> 1 (`model-seal.test.ts`); `coplanar.test.ts`
+    covers every placed prop. Perf: GPU 60 fps everywhere, SwiftShader stress misses as at HEAD.

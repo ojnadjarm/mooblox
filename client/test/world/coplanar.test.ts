@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BufferGeometry, Mesh } from 'three';
+import { Vector3, type BufferGeometry, type Mesh } from 'three';
 import fixture from '../fixtures/get_world_demo.json';
 import { parseShape, shapeWorld } from '../../src/domain/course-shape';
 import { toWorld } from '../../src/domain/mapper';
@@ -9,6 +9,8 @@ import { IslandBuilder } from '../../src/world/island-builder';
 import { IslandLayout } from '../../src/world/island-layout';
 import { CAMPUS } from '../../src/world/look';
 import { MaterialKit } from '../../src/world/material-kit';
+import { sealedModel } from '../../src/world/model-seal';
+import { bakeKit } from '../../tools/kit-bake';
 
 /** Flat up-facing triangles closer than this (m) in height z-fight from mid range (24-bit depth, near 0.1 m). */
 const GAP = 0.004;
@@ -154,4 +156,53 @@ describe('coplanar ground', () => {
     const ground = audit(world).filter((f) => f.y < 0.5);
     expect(ground.slice(0, 5)).toEqual([]);
   });
+});
+
+/** Same-facing triangle pairs of a model placed at `scale` that overlap (> 1 cm² and 1 % of the smaller) within GAP of one plane. */
+function propFights(g: BufferGeometry, scale: number): number {
+  const gap = GAP / scale;
+  const pos = g.getAttribute('position');
+  const tris = [];
+  for (let t = 0; t < pos.count / 3; t++) {
+    const v = [0, 1, 2].map((k) => new Vector3().fromBufferAttribute(pos, t * 3 + k));
+    const n = new Vector3().subVectors(v[1]!, v[0]!).cross(new Vector3().subVectors(v[2]!, v[0]!));
+    const area = n.length() / 2;
+    if (area > 1e-12) tris.push({ v, n: n.normalize(), d: n.dot(v[0]!), area });
+  }
+  let count = 0;
+  for (let a = 0; a < tris.length; a++) {
+    for (let b = a + 1; b < tris.length; b++) {
+      // Height of the smaller face's centre over the larger one's plane: where the two overlap.
+      const [ta, tb] = tris[a]!.area >= tris[b]!.area ? [tris[a]!, tris[b]!] : [tris[b]!, tris[a]!];
+      const cb = tb.v[0]!.clone().add(tb.v[1]!).add(tb.v[2]!).divideScalar(3);
+      if (ta.n.dot(tb.n) < 0.999 || Math.abs(ta.n.dot(cb) - ta.d) >= gap) continue;
+      const u = new Vector3(Math.abs(ta.n.x) > 0.9 ? 0 : 1, Math.abs(ta.n.x) > 0.9 ? 1 : 0, 0).cross(ta.n).normalize();
+      const w = new Vector3().crossVectors(ta.n, u);
+      const flat = (t: typeof ta): Flat => ({ y: 0, part: 0, pts: t.v.map((p) => [p.dot(u), p.dot(w)] as const) });
+      const area = overlap(flat(ta), flat(tb)).area;
+      if (area > 0.01 * Math.min(ta.area, tb.area) && area * scale * scale > 1e-4) count++;
+    }
+  }
+  return count;
+}
+
+describe('coplanar props', () => {
+  it('no two same-facing faces of a placed kit model share a plane (4 mm at the model\'s placed size)', async () => {
+    const kit = await bakeKit(new URL('../../public/assets/kit.glb', import.meta.url).pathname);
+    const used = new Map<string, { scale: number; backs: boolean }>();
+    for (const world of [toWorld(fixture), shapeWorld(399, parseShape('8x12'))]) {
+      for (const d of designWorld(new IslandLayout(CAMPUS.size).layout(world), world.courseId, CAMPUS.palette).districts) {
+        for (const p of d.placements) {
+          const m = kit.get(p.id)!.model;
+          used.set(p.id, { scale: Math.max(used.get(p.id)?.scale ?? 0, p.width ? p.width / m.width : p.height / m.height), backs: p.sway !== true && !/building/.test(p.id) });
+        }
+      }
+    }
+    const bad: string[] = [];
+    for (const [id, { scale, backs }] of used) {
+      const n = propFights(sealedModel(kit.get(id)!.model, backs, scale), scale);
+      if (n) bad.push(`${id} ${n}`);
+    }
+    expect(bad).toEqual([]);
+  }, 120_000);
 });

@@ -8,6 +8,9 @@ export interface Collider {
   resolve(start: Vector3, end: Vector3, radius: number): Vector3;
 }
 
+/** Triangles whose normal rises less than this are walls. */
+const WALL_NORMAL_Y = 0.05;
+
 /** Static world collision over a three-mesh-bvh tree (the library's characterMovement approach). */
 export class BvhCollider implements Collider {
   private readonly bvh: MeshBVH;
@@ -16,6 +19,7 @@ export class BvhCollider implements Collider {
   private readonly triPoint = new Vector3();
   private readonly capPoint = new Vector3();
   private readonly dir = new Vector3();
+  private readonly normal = new Vector3();
   private readonly push = new Vector3();
   private radius = 0;
   private readonly tri = new ExtendedTriangle();
@@ -33,7 +37,11 @@ export class BvhCollider implements Collider {
         tri.needsUpdate = true;
         const distance = tri.closestPointToSegment(seg, this.triPoint, this.capPoint);
         if (distance < this.radius) {
-          const dir = this.dir.subVectors(this.capPoint, this.triPoint).normalize();
+          const dir = this.dir.subVectors(this.capPoint, this.triPoint);
+          // Below its top edge a wall pushes sideways only: a parallel capsule gets arbitrary closest-point heights.
+          tri.getNormal(this.normal);
+          if (Math.abs(this.normal.y) < WALL_NORMAL_Y && this.triPoint.y < Math.max(tri.a.y, tri.b.y, tri.c.y) - 1e-3 && Math.abs(dir.x) + Math.abs(dir.z) > 1e-9) dir.y = 0;
+          dir.normalize();
           const depth = this.radius - distance;
           seg.start.addScaledVector(dir, depth);
           seg.end.addScaledVector(dir, depth);

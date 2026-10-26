@@ -25,6 +25,8 @@ export interface CliffSize {
   readonly toe: number;
   readonly toeRadius: readonly [number, number];
   readonly bush: number;
+  /** Block levels below the top sit on a 1 cm grid offset by this (metres): walls with offsets 5 mm apart never z-fight where they meet. */
+  readonly level: number;
 }
 
 /** Sizes of the designed island cliff (art bible §3: banded, not a straight wall; concepts: stacked stone, moss, rocky toe). */
@@ -54,6 +56,7 @@ export const CLIFF: CliffSize = {
   toe: 0.45,
   toeRadius: [0.6, 1.3],
   bush: 0.3,
+  level: 0,
 };
 
 /** The same cliff at terrace scale (0.8-2.6 m raised lawns and landmark terraces): smaller blocks, shallower strata. */
@@ -114,6 +117,7 @@ export interface CliffToe {
 }
 
 const lerp = (range: readonly [number, number], t: number) => range[0] + (range[1] - range[0]) * t;
+const snap = (y: number, level: number) => Math.round((y - level) / 0.01) * 0.01 + level;
 
 /**
  * The columns round a rim of `radius` from `base` up to `top`: widths fill the circle (less any `gap`) exactly, seeded by `random`;
@@ -134,13 +138,13 @@ export function cliffColumns(
   let a = gap ? gap.at + gap.half : random() * 2 * Math.PI;
   for (const w of widths) {
     const a1 = a + (w * scale) / radius;
-    const y1 = top - (random() < size.notch ? lerp(size.notchDrop, random()) : 0);
-    const upperH = Math.min(lerp(size.upper, random()), (y1 - base) * size.upperShare);
+    const y1 = random() < size.notch ? snap(top - lerp(size.notchDrop, random()), size.level) : top;
+    const upperH = y1 - snap(y1 - Math.min(lerp(size.upper, random()), (y1 - base) * size.upperShare), size.level);
     let out = lerp(size.upperOut, random());
     const face = () => ({ shade: random() * 2 - 1, bulge: lerp(size.bulge, random()), ridge: (random() - 0.5) * 0.8 });
     const slabs: CliffSlab[] = [{ y0: y1 - upperH, y1, out, upper: true, ...face() }];
     const lowTop = y1 - upperH;
-    const strata = random() < size.split ? [lowTop, lowTop - (lowTop - base) * (0.4 + random() * 0.25), base] : [lowTop, base];
+    const strata = random() < size.split ? [lowTop, snap(lowTop - (lowTop - base) * (0.4 + random() * 0.25), size.level), base] : [lowTop, base];
     for (let k = 1; k < strata.length; k++) {
       out += lerp(size.step, random());
       slabs.push({ y0: strata[k]!, y1: strata[k - 1]!, out, upper: false, ...face() });

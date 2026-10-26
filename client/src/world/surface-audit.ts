@@ -2,6 +2,7 @@ import { Color } from 'three';
 import { familyOf, fits, type Family } from './kit-materials';
 import type { Placement } from './dressing';
 import { prepDistrict, runPrep, type ModelSource } from './district-prep';
+import { sealedPlacement } from './model-seal';
 import type { BakedModel } from './model-library';
 import { drawnLayer, type SurfaceId } from './surfaces';
 
@@ -77,5 +78,6 @@ export function auditPlacement(p: Placement, lib: ModelSource, families: readonl
   const mesh = prepped.meshes.find((m) => m !== null);
   if (!mesh) return [];
   if (mesh.chunks.length !== 4) throw new Error(`mooblox: ${p.id} spans ${mesh.chunks.length / 4} chunks`);
-  return auditMesh(families, mesh);
+  const twins: readonly number[] = sealedPlacement(p, lib.get(p.id)).userData.twins ?? [];
+  return auditMesh([...families, ...twins.map((t) => families[t]!)], mesh);
 }

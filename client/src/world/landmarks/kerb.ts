@@ -52,6 +52,76 @@ export function kerbRun(len: number, colour: number, seed: number): BufferGeomet
   return bakeAo(g, 0, h, 0.3);
 }
 
+/** Longest straight piece of a curved kerb (metres): turns stay under 3 degrees on the smallest plot ring. */
+const ARC_STEP = 0.3;
+
+/**
+ * Kerb blocks as `kerbRun` swept round a circle of radius `r` about the origin from angle `a0` to `a1` (x = r cos a, z = r sin a,
+ * a1 > a0): a smooth curve with no joints to gape or overlap, a cap at each end unless the arc closes the ring.
+ */
+export function kerbArc(r: number, a0: number, a1: number, colour: number, seed: number): BufferGeometry {
+  const { w, h, chamfer: c, block } = KERB;
+  const closed = a1 - a0 >= 2 * Math.PI - 1e-9;
+  const n = Math.max(1, Math.round((r * (a1 - a0)) / block));
+  const sub = Math.max(1, Math.ceil((r * (a1 - a0)) / n / ARC_STEP));
+  const p: [number, number][] = [[-w / 2, 0], [-w / 2, h - c], [-w / 2 + c, h], [w / 2 - c, h], [w / 2, h - c], [w / 2, 0]];
+  const pos: number[] = [];
+  const col: number[] = [];
+  const base = new Color(colour);
+  const tone = new Color();
+  const random = seededRandom(seed);
+  const v = (i: number, a: number) => pos.push((r + p[i]![0]) * Math.cos(a), p[i]![1], (r + p[i]![0]) * Math.sin(a));
+  const paint = (verts: number) => {
+    for (let i = 0; i < verts; i++) col.push(tone.r, tone.g, tone.b);
+  };
+  for (let b = 0; b < n; b++) {
+    const k = (b % 2 || (closed && b === n - 1 && n % 2) ? 0.9 : 1.03) + (random() - 0.5) * 0.06;
+    tone.setRGB(base.r * k, base.g * k, base.b * (k - 0.02 + random() * 0.04));
+    for (let j = 0; j < sub; j++) {
+      const s0 = a0 + ((a1 - a0) * (b * sub + j)) / (n * sub);
+      const s1 = a0 + ((a1 - a0) * (b * sub + j + 1)) / (n * sub);
+      for (let i = 0; i < p.length - 1; i++) {
+        v(i, s0), v(i + 1, s1), v(i + 1, s0);
+        v(i, s0), v(i, s1), v(i + 1, s1);
+      }
+      paint(30);
+    }
+  }
+  if (!closed) {
+    tone.copy(base);
+    for (let i = 1; i < p.length - 1; i++) v(0, a0), v(i, a0), v(i + 1, a0);
+    for (let i = 1; i < p.length - 1; i++) v(0, a1), v(i + 1, a1), v(i, a1);
+    paint(24);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
+  g.computeVertexNormals();
+  return bakeAo(g, 0, h, 0.3);
+}
+
+/** A flat ring band from radius `r0` to `r1` about the origin, `h` thick on y = 0: top and both side walls, flat normals. */
+export function ringBand(r0: number, r1: number, h: number): BufferGeometry {
+  const n = Math.max(48, Math.ceil((2 * Math.PI * r1) / ARC_STEP));
+  const pos: number[] = [];
+  const nor: number[] = [];
+  const at = (r: number, i: number, y: number) => [r * Math.cos((i / n) * 2 * Math.PI), y, r * Math.sin((i / n) * 2 * Math.PI)] as const;
+  const quad = (q: readonly (readonly [number, number, number])[], normal: (k: number) => readonly [number, number, number]) => {
+    for (const k of [0, 1, 2, 0, 2, 3]) pos.push(...q[k]!), nor.push(...normal(k));
+  };
+  const out = (i: number, s: number) => [s * Math.cos((i / n) * 2 * Math.PI), 0, s * Math.sin((i / n) * 2 * Math.PI)] as const;
+  for (let i = 0; i < n; i++) {
+    const j = i + 1;
+    quad([at(r0, i, h), at(r0, j, h), at(r1, j, h), at(r1, i, h)], () => [0, 1, 0]);
+    quad([at(r1, i, 0), at(r1, i, h), at(r1, j, h), at(r1, j, 0)], (k) => out(k === 0 || k === 1 ? i : j, 1));
+    quad([at(r0, j, 0), at(r0, j, h), at(r0, i, h), at(r0, i, 0)], (k) => out(k === 0 || k === 1 ? j : i, -1));
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(nor), 3));
+  return g;
+}
+
 /** `g` without its faces turned straight down (the hidden undersides of walks laid on the lawn). */
 export function dropUndersides(g: BufferGeometry): BufferGeometry {
   const flat = g.index ? g.toNonIndexed() : g;

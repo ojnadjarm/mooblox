@@ -79,9 +79,9 @@ export function recipe(kind: RecipeKind, random: () => number): Recipe {
   if (kind === 'rockGroup') {
     return {
       items: [
-        { id: pick(['nature/rock_tallA', 'nature/rock_tallB', 'nature/rock_largeB']), dx: 0, dz: 0, height: 1.3 + random() * 0.6, detail: true, tint: ROCK },
-        { id: pick(['nature/rock_largeA', 'nature/rock_largeC']), dx: 1.2, dz: 0.5, height: 0.6 + random() * 0.3, detail: true, tint: ROCK },
-        { id: 'nature/rock_smallA', dx: -0.9, dz: 0.9, height: 0.35, detail: true, tint: ROCK },
+        { id: pick(['nature/rock_tallA', 'nature/rock_tallB', 'nature/rock_largeB']), dx: 0, dz: 0, height: 1.3 + random() * 0.6, solid: true, detail: true, tint: ROCK },
+        { id: pick(['nature/rock_largeA', 'nature/rock_largeC']), dx: 1.2, dz: 0.5, height: 0.6 + random() * 0.3, solid: true, detail: true, tint: ROCK },
+        { id: 'nature/rock_smallA', dx: -0.9, dz: 0.9, height: 0.35, solid: true, detail: true, tint: ROCK },
         { id: 'nature/grass_leafsLarge', dx: 0.4, dz: -1, height: 0.5, sway: true, detail: true, minor: true, tint: LEAF },
       ],
       radius: 1.9,
