@@ -188,6 +188,7 @@ export const SHOTS = [
     setup: `() => {
       const m = window.mooblox, b = ${BADGES}, st = m.view.dressing.start;
       ${placeKid('st.x', 'st.z', 'st.x + Math.sin(st.face)', 'st.z + Math.cos(st.face)')}
+      window.__trailerClock.holdTimers();
       m.rewards.badges.play([{ ...b[2], name: 'Rock star' }, { ...b[3], name: 'Island explorer' }]);
       window.__s = { fx: Math.sin(st.face), fz: Math.cos(st.face) };
     }`,

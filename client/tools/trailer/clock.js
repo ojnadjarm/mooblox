@@ -25,10 +25,28 @@
       a.currentTime = age;
     }
   };
+  const timers = new Set();
+  const runTimers = () => {
+    for (const t of [...timers].sort((a, b) => a.at - b.at)) {
+      if (t.at > now) break;
+      timers.delete(t);
+      t.fn(...t.args);
+    }
+  };
   window.__trailerClock = {
-    /** Advances `ms` and runs the frame callbacks queued so far. */
+    /** From now on setTimeout runs on the virtual clock too (page timers created before keep real time). */
+    holdTimers() {
+      window.setTimeout = (fn, ms = 0, ...args) => {
+        const t = { at: now + ms, fn: typeof fn === 'function' ? fn : () => (0, eval)(fn), args };
+        timers.add(t);
+        return t;
+      };
+      window.clearTimeout = (t) => void timers.delete(t);
+    },
+    /** Advances `ms` and runs the timers and frame callbacks due by then. */
     step(ms) {
       now += ms;
+      runTimers();
       this.before?.(now);
       const due = [...queue.values()];
       queue.clear();
