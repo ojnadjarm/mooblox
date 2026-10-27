@@ -203,8 +203,8 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     `public/assets/kit.glb` (628 KB, meshopt, tangents dropped); `ModelLibrary` loads it once (MeshoptDecoder, quantized
     attributes back to Float32). `tools/footprints.mjs` and `bevel-kit.py` read `kit-src/`.
   - Perf gate: `node tools/perf.mjs [outdir] [--shapes ..] [--tiers low,medium] [--load] [--stills] [--gate]` builds the dev
-    page, walks to the farthest plot (`?walk=far`), asserts low (T1367: Iris Xe 400x800 DPR 1, 4x CPU: 58 fps, 40 draws, 80k tris,
-    10 programs, no post; plus the SwiftShader 6x stress floor) and medium (Iris Xe 1366: 58 fps, 60 draws) plus all-tier heap 150 MB, GPU estimate 200 MB, worst
+    page, walks to the farthest plot (`?walk=far`), asserts low (Iris Xe 400x800 DPR 1, unthrottled since T1414: 58 fps, 40 draws, 80k tris,
+    11 programs, no post) and medium (Iris Xe 1366: 58 fps, 60 draws) plus all-tier heap 150 MB, GPU estimate 200 MB, worst
     frame 50 ms, Fast 4G load 3 s / 3 MB, 20x30 within 1.5x demo. `npm run test:perf`; `npm run test:all` = vitest + gate.
     `npm test` stays vitest only while the gate is red (it would fail every parallel agent's unit run).
 - T1367, 2026-10-24, optimisation round 2 (PROFILE.md "Round 2", compare `~/drop/T1366/index.html#round2`):
@@ -461,7 +461,7 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   preview context made at boot and kept (first wardrobe open 50 -> 16.8 ms); `QualityManager(stage, tier, remember, software, work, timer, budget)`:
   frameWork CPU-bound detection (R4), `perf/gpu-timer.ts` GPU-timed dynamic resolution (R5), hysteresis (30-window raise hold, 2 resizes/min cap) (R6),
   whole-tier step-down at the GPU floor, asked tiers too (R7), `pixelBudget`/`startScale` + localStorage `mooblox-pixels` (R8: high-1920 first-5 s
-  worst 416 -> 33 ms), `scaleFloor` 0.5 for big canvases + `Stage.warmScreen` (R9); `tools/pacing-probe.mjs`, `tools/stress-start.mjs`; perf.mjs
+  worst 416 -> 33 ms), `scaleFloor` 0.5 for big canvases + `Stage.warmScreen` (R9); `tools/pacing-probe.mjs`, `tools/stress-start.mjs` (removed T1414); perf.mjs
   cold first-visit run (not gated, R12) and stress worst gated on the median of 3 runs (R14; gate 5.5 -> 12.6 min). Last gate 74/2 (stress demo
   133.3, 1x2 150 ms, budget 100). Open (owner decision): soft-rig worst-frame budget vs SwiftShader first-visit and random 83-200 ms frames.
 - T1374 rounds 1-21, 2026-10-24/25 (asset detail; log `~/agent-work/research/2026-10-24/T1374/ROUNDS.md`, stills `~/drop/T1374/`):
@@ -723,3 +723,8 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
   - Pitfalls: the haze follows the kid's island (teleport the kid near any far subject); props draw only on the kid's live island;
     gates exist only for sections closed at page load; framed activities stay blank ~1.4 s of virtual time while the iframe loads.
     The Guide trails the kid (hide `m.guide.avatar.root.visible` in kid close-ups); a kid on a bridge deck reads blue from the haze, not a fade.
+- T1414, 2026-10-27, perf gate without low-end or software-GL testing (owner: the experience is smooth; stop testing every device):
+  `tools/perf.mjs` runs every tier on the real GPU, unthrottled (low keeps 400x800 touch DPR 1 and its draws/tris/programs/shadow/post
+  budgets); the SwiftShader stress rig, its cold first-visit run, `--no-stress`, `--browser` and the low 4x CPU / 20 ms budget are gone
+  (all tiers: worst frame 50 ms, memory 800 MB, crossings 34 ms / 0 pops / 0 inline). `--throttle N` stays for diagnosis.
+  `tools/crossing.mjs` rigs low (unthrottled), medium, high; `tools/stress-start.mjs` deleted. Add no new device tests.

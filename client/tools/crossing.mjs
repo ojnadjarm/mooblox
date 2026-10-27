@@ -1,5 +1,5 @@
-// Frame times of one autopilot walk over the bridges: node tools/crossing.mjs <out.json> [--shapes demo,8x12,3-0-5 (dashes for commas)] [--rigs low,stress,medium,high] [--query k=v] [--walk far|tour|bridge|<cmid>] [--profile dir] [--video dir --label pre|post]
-// Per shape x rig (the perf gate's rigs: low = Iris Xe 400x800 4x CPU, stress = SwiftShader 6x, medium/high = Iris Xe 1366) the
+// Frame times of one autopilot walk over the bridges: node tools/crossing.mjs <out.json> [--shapes demo,8x12,3-0-5 (dashes for commas)] [--rigs low,medium,high] [--query k=v] [--walk far|tour|bridge|<cmid>] [--profile dir] [--video dir --label pre|post]
+// Per shape x rig (the perf gate's rigs: low = Iris Xe 400x800, medium/high = Iris Xe 1366) the
 // player walks from the spawn to the farthest plot (demo, 1x2) or on a tour over 5-6 bridges (bigger shapes, `?walk=tour`: two
 // near districts and back, then the farthest within ~150 m; `bridge` = the plot just across the spawn hub's straightest bridge); every frame's time, island and time in pump/render/resize/player/collider/whole frame/off-screen renders are kept. A crossing window is 2 s either side of
 // each island change. Writes { rows: [{ shape, rig, frames: [[t, dt, island, pump, render, resize, player, solids, frame, offscreen, links, bufMb, tex, calls, geometries, textures, captures, pipes]], crossings: [t], worst, crossingWorst }] }.
@@ -21,14 +21,13 @@ const opt = (name, fallback) => {
   return i >= 0 ? args[i + 1] : fallback;
 };
 const shapes = opt('shapes', 'demo,1x2,8x12,20x30').split(',');
-const rigs = opt('rigs', 'low,stress,medium,high').split(',');
+const rigs = opt('rigs', 'low,medium,high').split(',');
 const more = opt('query', '');
 const profile = opt('profile', null);
 const video = opt('video', null);
 const MAX_WALK_MS = 70000;
 const RIG = {
-  low: { tier: 'low', browser: 'gpu', w: 400, h: 800, throttle: 4, touch: true },
-  stress: { tier: 'low', browser: 'soft', w: 400, h: 800, throttle: 6, touch: true },
+  low: { tier: 'low', browser: 'gpu', w: 400, h: 800, throttle: 1, touch: true },
   medium: { tier: 'medium', browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
   high: { tier: 'high', browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
 };
@@ -69,15 +68,12 @@ const chromium = await loadChromium();
 const common = ['--mute-audio', '--enable-precise-memory-info'];
 const browsers = {
   gpu: await chromium.launch({ headless: true, args: [...common, '--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] }),
-  soft: await chromium.launch({ headless: true, args: [...common, '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }),
 };
 const rows = [];
 try {
   for (const shape of shapes) {
     for (const name of rigs) {
       const rig = RIG[name];
-      // SwiftShader after back-to-back runs hits the host's power limit (200 ms stalls): the stress rig starts after 45 s idle, as in the perf gate.
-      if (rig.browser === 'soft') await new Promise((r) => setTimeout(r, 45000));
       const context = await browsers[rig.browser].newContext({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch, ...(video ? { recordVideo: { dir: join(video, 'tmp'), size: { width: rig.w, height: rig.h } } } : {}) });
       const page = await context.newPage();
       page.on('pageerror', (e) => console.error('pageerror:', e.message));

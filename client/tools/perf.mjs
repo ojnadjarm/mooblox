@@ -1,12 +1,10 @@
 // Perf gate + stills: node tools/perf.mjs [outdir] [--shapes demo,1x2,8x12,20x30] [--tiers low,medium] [--gate] [--stills] [--load]
 // Builds the dev page, serves the build, then per shape x tier walks the player to the farthest plot and reads frame times,
-// draw calls, triangles, programs, JS heap and a GPU memory estimate. Low runs on the real GPU at DPR 1, 400x800 under 4x CPU
-// throttle (the realistic low-end proxy: no frame > 20 ms over the walk and its bridge crossing), then again on SwiftShader under
-// 6x as a stress floor (30 fps on the first run, median worst frame of 3 runs <= 100 ms), after one cold first visit of the demo route on that browser (reported, not gated:
-// a fresh SwiftShader GPU process stalls once, T1373 R11); memory = heap + GPU estimate <= 800 MB per page;
-// the others on the real GPU (ANGLE Vulkan) at 1366x768. Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
-// --browser gpu|soft and --throttle N override the rig (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
-// Each GPU rig also walks over the bridges (CROSSING: no crossing frame over 33 ms, no pops, no inline builds).
+// draw calls, triangles, programs, JS heap and a GPU memory estimate, all on the real GPU (ANGLE Vulkan), unthrottled: low at DPR 1
+// 400x800 touch, the others at 1366x768; memory = heap + GPU estimate <= 800 MB per page. No low-end device or software-GL rig (owner, T1414).
+// Reasoning: ~/agent-work/research/2026-10-24/T1366/PROFILE.md. --load adds first-playable time and bytes on Fast 4G,
+// --throttle N sets a CPU throttle (diagnosis), --query k=v appends to every page query (e.g. far=fog), --stills the overview and play stills at 1366 and 400, --gate asserts BUDGETS (exit 1 on any miss).
+// Each rig also walks over the bridges (CROSSING: no crossing frame over 33 ms, no pops, no inline builds).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,16 +19,12 @@ const BUDGETS = {
 };
 /** Memory = JS heap + GPU estimate per page (owner, T1369: 800 MB, hard ceiling 1 GB; spend it on smoothness). */
 const ALL = { loadMb: 3, loadS: 3, memoryMb: 800, frameMs: 50, bigCourse: 1.5 };
-/** The realistic low-end proxy (Iris Xe DPR 1, 4x CPU) walks over a bridge without a dropped frame. */
-const LOW_FRAME_MS = 20;
-/** Software GL (SwiftShader) under 6x CPU, a floor; each page waits `coolMs` idle first (back-to-back runs hit the host's power limit: 200 ms stalls); worst frame gates on the median of `runs` (one random 83-200 ms SwiftShader frame per run, T1373 R13). */
 /**
  * Bridge crossings on the GPU rigs (T1394): an autopilot walk over the bridges keeps every frame within WINDOW_MS of an island change
  * at or under `frameMs` (33 ms at 60 Hz: at most one missed vsync, 33.3 ms measured, rounding slack), builds every island in the
  * background (no safety-net build inline) and switches no island's content on in view (pops).
  */
 const CROSSING = { frameMs: 34, maxWalkMs: 70000 };
-const STRESS = { fps: 30, frameMs: 100, coolMs: 45000, runs: 3 };
 const FAST_4G = { offline: false, latency: 165, downloadThroughput: (9e6 * 0.9) / 8, uploadThroughput: (1.5e6 * 0.9) / 8 };
 
 const args = process.argv.slice(2);
@@ -51,22 +45,19 @@ const server = await preview({ logLevel: 'error', build: { outDir: dist }, previ
 const url = server.resolvedUrls.local[0];
 const chromium = await loadChromium();
 const common = ['--mute-audio', '--enable-precise-memory-info'];
-const browsers = {
-  gpu: await chromium.launch({ headless: true, args: [...common, '--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] }),
-  soft: await chromium.launch({ headless: true, args: [...common, '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }),
-};
+const browser = await chromium.launch({ headless: true, args: [...common, '--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const RIG = {
-  low: { browser: 'gpu', w: 400, h: 800, throttle: 4, touch: true },
-  medium: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
-  high: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
-  xhigh: { browser: 'gpu', w: 1366, h: 768, throttle: 1, touch: false },
+  low: { w: 400, h: 800, throttle: 1, touch: true },
+  medium: { w: 1366, h: 768, throttle: 1, touch: false },
+  high: { w: 1366, h: 768, throttle: 1, touch: false },
+  xhigh: { w: 1366, h: 768, throttle: 1, touch: false },
 };
 
 const more = opt('query', [''])[0];
 const query = (shape, tier, extra) => `${shape === 'demo' ? '' : `shape=${shape}&course=${shape.length * 97 + 11}&`}quality=${tier}&${extra}${more ? `&${more}` : ''}`;
 
 async function open(rig, q, network) {
-  const page = await browsers[rig.browser].newPage({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch });
+  const page = await browser.newPage({ viewport: { width: rig.w, height: rig.h }, deviceScaleFactor: 1, hasTouch: rig.touch });
   page.on('pageerror', (e) => console.error('pageerror:', e.message));
   page.on('console', (m) => m.type() === 'error' && console.error('page:', m.text().slice(0, 300)));
   const cdp = await page.context().newCDPSession(page);
@@ -146,7 +137,6 @@ function sample(ms) {
 
 const results = [];
 const fails = [];
-let cold = null;
 const check = (ok, line) => {
   if (!ok) fails.push(line);
   if (gate) console.log(`${ok ? 'PASS' : 'FAIL'} ${line}`);
@@ -155,51 +145,21 @@ const check = (ok, line) => {
 try {
   for (const shape of shapes) {
     for (const tier of tiers) {
-      const rig = { ...RIG[tier], ...(opt('browser') ? { browser: opt('browser')[0] } : {}), ...(opt('throttle') ? { throttle: Number(opt('throttle')[0]) } : {}) };
+      const rig = { ...RIG[tier], ...(opt('throttle') ? { throttle: Number(opt('throttle')[0]) } : {}) };
       const { page } = await open(rig, query(shape, tier, 'walk=far'));
       await page.waitForTimeout(1500);
       const m = await page.evaluate(sample, 5000);
       await page.close();
-      const row = { shape, tier, w: rig.w, h: rig.h, gpu: rig.browser, throttle: rig.throttle, ...m };
+      const row = { shape, tier, w: rig.w, h: rig.h, throttle: rig.throttle, ...m };
       if (flag('load')) {
-        const l = await open({ ...RIG[tier], browser: 'gpu', throttle: 1 }, query(shape, tier, ''), true);
+        const l = await open({ ...RIG[tier], throttle: 1 }, query(shape, tier, ''), true);
         Object.assign(row, { loadS: +l.loadS.toFixed(2), loadMb: +(l.bytes() / 1048576).toFixed(2) });
         await l.page.close();
       }
       results.push(row);
       console.log(JSON.stringify(row));
-      if (tier === 'low' && !flag('no-stress')) {
-        const stress = { ...rig, browser: 'soft', throttle: 6 };
-        await new Promise((r) => setTimeout(r, STRESS.coolMs));
-        if (!cold) {
-          const c = await open(stress, query('demo', tier, 'walk=far'));
-          cold = await c.page.evaluate(sample, 5000);
-          await c.page.close();
-          results.push({ shape: 'demo', tier, rig: 'cold', w: stress.w, h: stress.h, gpu: 'soft', throttle: 6, ...cold });
-          console.log(`cold first-visit worst (demo low stress, first 5 s, not gated): ${cold.maxFrame} ms, fps ${cold.fps}`);
-          await new Promise((r) => setTimeout(r, STRESS.coolMs));
-        }
-        const worsts = [];
-        let sm;
-        for (let run = 0; run < STRESS.runs; run++) {
-          if (run) await new Promise((r) => setTimeout(r, STRESS.coolMs));
-          const st = await open(stress, query(shape, tier, 'walk=far'));
-          await st.page.waitForTimeout(1500);
-          const s = await st.page.evaluate(sample, 5000);
-          await st.page.close();
-          sm ??= s;
-          worsts.push(s.maxFrame);
-        }
-        const median = [...worsts].sort((a, b) => a - b)[worsts.length >> 1];
-        const srow = { shape, tier, rig: 'stress', w: stress.w, h: stress.h, gpu: 'soft', throttle: 6, ...sm, worsts, worstMedian: median };
-        results.push(srow);
-        console.log(JSON.stringify(srow));
-        const sid = `${shape} low stress 400x800 6x cpu soft`;
-        check(sm.fps >= STRESS.fps, `${sid}: fps ${sm.fps} >= ${STRESS.fps}`);
-        check(median <= STRESS.frameMs, `${sid}: worst frame median ${median} ms (runs ${worsts.join(' / ')}) <= ${STRESS.frameMs}`);
-      }
       const b = BUDGETS[tier];
-      const id = `${shape} ${tier} ${rig.w}x${rig.h}${rig.throttle > 1 ? ` ${rig.throttle}x cpu` : ''} ${rig.browser}`;
+      const id = `${shape} ${tier} ${rig.w}x${rig.h}${rig.throttle > 1 ? ` ${rig.throttle}x cpu` : ''}`;
       if (b) {
         check(m.fps >= b.fps, `${id}: fps ${m.fps} >= ${b.fps}`);
         check(m.calls <= b.calls, `${id}: draws ${m.calls} <= ${b.calls}`);
@@ -208,29 +168,26 @@ try {
         check(m.shadow <= b.shadow, `${id}: shadow map ${m.shadow} <= ${b.shadow}`);
         check(b.post || !m.post, `${id}: post ${m.post} allowed ${b.post}`);
       }
-      const frameMs = tier === 'low' ? LOW_FRAME_MS : ALL.frameMs;
-      check(m.maxFrame <= frameMs, `${id}: worst frame ${m.maxFrame} ms <= ${frameMs}`);
+      check(m.maxFrame <= ALL.frameMs, `${id}: worst frame ${m.maxFrame} ms <= ${ALL.frameMs}`);
       const memory = +(m.heapMb + m.gpuMb).toFixed(1);
       check(memory <= ALL.memoryMb, `${id}: memory heap ${m.heapMb} + gpu ${m.gpuMb} = ${memory} MB <= ${ALL.memoryMb}`);
       if (row.loadS !== undefined) {
         check(row.loadS <= ALL.loadS, `${id}: first playable ${row.loadS} s <= ${ALL.loadS} on Fast 4G`);
         check(row.loadMb <= ALL.loadMb, `${id}: transferred ${row.loadMb} MB <= ${ALL.loadMb}`);
       }
-      if (rig.browser === 'gpu') {
-        const w = await open(rig, query(shape, tier, `walk=${walkFor(shape)}`));
-        const walk = await w.page.evaluate(walkFrames, CROSSING.maxWalkMs);
-        await w.page.close();
-        const { crossings, crossingWorst } = crossingStats(walk.frames);
-        const crow = { shape, tier, rig: 'crossing', reached: walk.reached, crossings: crossings.length, crossingWorst, ...walk.hallway };
-        results.push(crow);
-        console.log(JSON.stringify(crow));
-        check(crossings.length > 0 && crossingWorst <= CROSSING.frameMs, `${id}: ${crossings.length} bridge crossings, worst frame within ${WINDOW_MS / 1000} s of one ${crossingWorst} ms <= ${CROSSING.frameMs}`);
-        check(walk.hallway.inline === 0 && walk.hallway.pops === 0, `${id}: crossing pops ${walk.hallway.pops}, inline builds ${walk.hallway.inline} = 0`);
-      }
+      const w = await open(rig, query(shape, tier, `walk=${walkFor(shape)}`));
+      const walk = await w.page.evaluate(walkFrames, CROSSING.maxWalkMs);
+      await w.page.close();
+      const { crossings, crossingWorst } = crossingStats(walk.frames);
+      const crow = { shape, tier, rig: 'crossing', reached: walk.reached, crossings: crossings.length, crossingWorst, ...walk.hallway };
+      results.push(crow);
+      console.log(JSON.stringify(crow));
+      check(crossings.length > 0 && crossingWorst <= CROSSING.frameMs, `${id}: ${crossings.length} bridge crossings, worst frame within ${WINDOW_MS / 1000} s of one ${crossingWorst} ms <= ${CROSSING.frameMs}`);
+      check(walk.hallway.inline === 0 && walk.hallway.pops === 0, `${id}: crossing pops ${walk.hallway.pops}, inline builds ${walk.hallway.inline} = 0`);
       if (flag('stills') && out) {
         for (const [w, h] of [[1366, 768], [400, 800]]) {
           for (const view of ['overview', 'play']) {
-            const s = await open({ ...rig, browser: 'gpu', throttle: 1, w, h, touch: w < 800 }, query(shape, tier, view === 'overview' ? 'scene=overview' : ''));
+            const s = await open({ ...rig, throttle: 1, w, h, touch: w < 800 }, query(shape, tier, view === 'overview' ? 'scene=overview' : ''));
             await s.page.waitForFunction(() => window.mooblox.streaming.pending === 0, null, { timeout: 60000, polling: 100 });
             await s.page.waitForTimeout(1200);
             await s.page.screenshot({ path: join(out, `${shape}-${tier}-${view}-${w}.png`) });
@@ -249,7 +206,7 @@ try {
     }
   }
 } finally {
-  await Promise.all(Object.values(browsers).map((b) => b.close()));
+  await browser.close();
   await new Promise((res) => server.httpServer.close(res));
   rmSync(dist, { recursive: true, force: true });
 }
@@ -260,5 +217,5 @@ if (out) {
   const kept = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).filter((r) => r.shape && !fresh.has(key(r)) && r.view === undefined) : [];
   writeFileSync(file, `${JSON.stringify([...kept, ...results], null, 1)}\n`);
 }
-if (gate) console.log(`${fails.length ? `perf gate: ${fails.length} over budget` : 'perf gate: all budgets met'}${cold ? `; cold first-visit worst ${cold.maxFrame} ms (not gated)` : ''}`);
+if (gate) console.log(fails.length ? `perf gate: ${fails.length} over budget` : 'perf gate: all budgets met');
 process.exit(gate && fails.length ? 1 : 0);
