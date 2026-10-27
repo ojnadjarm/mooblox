@@ -702,3 +702,13 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     grants pointer lock in Chromium and Firefox (probe: headless both, Xvfb headed both with X focus). Lock never survives a page load.
   - Check `node tools/entry.mjs <dir> --live <site> --user u --password p [--course 90]` (8: arrival via course link, focus, W walks,
     first W locks, mouse turns, Tab, reload skips, typed address arrives). `portal.mjs` holds Tab to click Go (the E press locks).
+- T1403, 2026-10-27, v2026102700 (50eff50): hub hint placement in `hub/hub-hud.ts`: on mouse screens 140 px from the bottom, above the lift prompt; on touch screens centred between the joystick and the jump button. Check `tools/hint-shots.mjs` (0 overlaps at 400-2560).
+- T1404, 2026-10-27, trailer footage tool (dev only, no game code; trailer `~/drop/T1404/index.html`):
+  - `node tools/trailer/capture.mjs <outdir> --site <url> --user <u> --password <p> [--only a,b] [--stills] [--size 1920x1080]`
+    renders each shot of `tools/trailer/shots.mjs` (15: course page, arrival, hub, warp, spin, bridge, hop, gem, trophy, badge,
+    Guide, dog, shortcut, arena, rise) frame by frame into `<shot>.mp4` (x264 CRF 12, 60 fps); `--stills` = first/mid/last PNGs.
+  - `clock.js` (init script): virtual rAF + `performance.now`, CSS/Web Animations paused at their virtual age; the page moves only on
+    `__trailerClock.step(ms)` (no dropped frames). `hooks.js` `window.__trailer`: `install()` pins the tier's scale to 1, `rig(src)`
+    places the camera before each frame's work (culling and streaming see it) and no-ops the follow camera, `clean(on)` hides the HUD
+    except `.trailer-keep`. `session.mjs`: no writes to the site (claim, set_look, view_activity, preferences, manual completion are
+    answered locally); hub warps are blocked with a 204. Fixture: e2e kid `mooblox_e2e_kid2`, course 90 (E2E M1), `?quality=xhigh`.
