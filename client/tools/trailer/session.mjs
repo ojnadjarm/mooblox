@@ -13,11 +13,29 @@ const WRITES = {
   core_completion_update_activity_completion_status_manually: { status: true, warnings: [] },
 };
 
+/** `text` as PHP's json_encode writes it (non-ASCII as \uXXXX), for JSON nested in a string. */
+const escaped = (text) => text.replace(/[\u0080-\uffff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+
+/** Replaces each `from` of `rename` with its `to` in every string of `value` (parsed JSON). */
+const renamed = (value, rename) => {
+  if (typeof value === 'string') return Object.entries(rename).reduce((s, [from, to]) => s.replaceAll(from, to).replaceAll(escaped(from), escaped(to)), value);
+  if (Array.isArray(value)) return value.map((v) => renamed(v, rename));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, renamed(v, rename)]));
+  return value;
+};
+
+/** A fetched reply's headers minus the encoding and length of the body it no longer has. */
+const plain = (reply) => Object.fromEntries(Object.entries(reply.headers()).filter(([k]) => !['content-encoding', 'content-length'].includes(k)));
+
 export class Session {
-  constructor(site, size) {
+  /** `rename` = display names swapped in pages and ajax replies (fixture names to friendly ones), never on the site. */
+  constructor(site, size, rename = {}) {
     this.site = site;
     this.size = size;
+    this.rename = rename;
     this.found = 0;
+    /** Write calls let through to the site for the current shot. */
+    this.pass = new Set();
   }
 
   async start(user, password) {
@@ -25,6 +43,7 @@ export class Session {
     this.context = await this.browser.newContext({ viewport: this.size });
     await this.context.addInitScript({ path: `${here}clock.js` });
     await this.context.addInitScript({ path: `${here}hooks.js` });
+    if (Object.keys(this.rename).length) await this.context.route('**/*.php*', (route) => this.page(route));
     await this.context.route('**/lib/ajax/service.php*', (route) => this.ajax(route));
     const page = await this.context.newPage();
     await page.goto(`${this.site}/login/index.php`);
@@ -34,9 +53,20 @@ export class Session {
     await page.close();
   }
 
+  async page(route) {
+    if (route.request().resourceType() !== 'document') return route.fallback();
+    const reply = await route.fetch();
+    const body = Object.entries(this.rename).reduce((s, [from, to]) => s.replaceAll(from, to), await reply.text());
+    return route.fulfill({ response: reply, headers: plain(reply), body });
+  }
+
   async ajax(route) {
     const calls = JSON.parse(route.request().postData() ?? '[]');
-    if (!calls.some((c) => c.methodname in WRITES)) return route.continue();
+    if (!calls.some((c) => c.methodname in WRITES && !this.pass.has(c.methodname))) {
+      if (!Object.keys(this.rename).length) return route.continue();
+      const reply = await route.fetch();
+      return route.fulfill({ response: reply, headers: plain(reply), json: renamed(await reply.json(), this.rename) });
+    }
     const data = calls.map((c) => {
       const fake = WRITES[c.methodname];
       return { error: false, data: typeof fake === 'function' ? fake(++this.found) : fake };

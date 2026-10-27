@@ -712,3 +712,14 @@ world client in `client/`. Design: `ARCHITECTURE.md`. Plan and tickets:
     places the camera before each frame's work (culling and streaming see it) and no-ops the follow camera, `clean(on)` hides the HUD
     except `.trailer-keep`. `session.mjs`: no writes to the site (claim, set_look, view_activity, preferences, manual completion are
     answered locally); hub warps are blocked with a 204. Fixture: e2e kid `mooblox_e2e_kid2`, course 90 (E2E M1), `?quality=xhigh`.
+- T1408, 2026-10-27, gameplay showcase for teachers (dev-only tool change; video `~/drop/T1408/index.html`, edit `~/agent-work/motion/T1408/build.sh`,
+  guide `guide game-capture-video`):
+  - `capture.mjs --shots <file>` picks the shot list (default `shots.mjs`); a list may export `RENAME` {from: to}, swapped by `session.mjs`
+    in every page and ajax reply (also PHP's `\uXXXX` form inside nested JSON), never on the site. Shot fields `writes` (ajax methods let
+    through for that shot) and `teardown` (page function after recording).
+  - `tools/trailer/gameplay.mjs`: 17 kid shots (hub, aerial, props, page, cinema, quiz, forum, gate, unlock, book + 7 reused trailer shots)
+    on courses 90 (Rocks) and 92 (Grow a plant) as `mooblox_e2e_kid2`, plus 3 Moodle stills (`moodle-*`, `--stills --size 1920x2400`,
+    teacher, zoom 1.4, course index hidden by CSS). `unlock` ticks cm 965's manual completion for real and its teardown unticks it.
+  - Pitfalls: the haze follows the kid's island (teleport the kid near any far subject); props draw only on the kid's live island;
+    gates exist only for sections closed at page load; framed activities stay blank ~1.4 s of virtual time while the iframe loads.
+    The Guide trails the kid (hide `m.guide.avatar.root.visible` in kid close-ups); a kid on a bridge deck reads blue from the haze, not a fade.
